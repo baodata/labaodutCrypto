@@ -1,0 +1,716 @@
+H-MARL-GNN — MASTER TICKET PLAN CHO NHÓM 2 NGƯỜI
+
+Mục tiêu tài liệu
+
+Tài liệu này là roadmap tổng thể để 2 thành viên phát triển đồ án
+H-MARL-GNN theo đúng dependency. Mỗi ticket có owner chính, reviewer,
+dependency và deliverable. Hai thành viên có thể đổi vai cho nhau, nhưng
+nên giữ ownership module ổn định trong từng sprint.
+
+Quy ước: - A = Data / Environment / Evaluation Lead - B = Graph / Model
+/ RL Lead - P0 = bắt buộc - P1 = quan trọng - P2 = nâng cao - PASS = đạt
+acceptance criteria - NEED CHANGES = chưa được merge/chuyển dependency
+
+Ownership: A: src/data/ src/features/ src/env/ src/evaluation/
+
+B: src/graph/ src/models/ src/agents/ src/training/
+
+Shared: configs/ src/utils/ tests/integration/ scripts/ README.md
+
+Nguyên tắc: 1. Không code trực tiếp lên main. 2. Mỗi ticket có branch
+riêng. 3. Người viết ticket không tự approve PR của mình. 4. A code -> B
+review; B code -> A review. 5. Không chuyển sang kiến trúc phức tạp
+trước khi baseline đơn giản chạy đúng. 6. Financial split phải theo thời
+gian; tránh look-ahead/data leakage. 7. Experiment phải lưu config, seed
+và kết quả để tái lập.
+
+======================================================================
+PHASE 0 — PROJECT FOUNDATION
+======================================================================
+
+[01] SETUP-001 — Khởi tạo repository Owner: A Reviewer: B Priority: P0
+Dependency: None
+
+Công việc: - Tạo Python project. - Tạo virtual environment. - Tạo cấu
+trúc: configs/ data/raw/ data/interim/ data/processed/ src/data/
+src/features/ src/graph/ src/env/ src/models/ src/agents/ src/training/
+src/evaluation/ src/utils/ tests/ scripts/ experiments/ notebooks/ -
+requirements/pyproject. - pytest. - .gitignore. - README.
+
+Deliverable: Repository skeleton chạy được.
+
+DoD: python -m pytest chạy thành công.
+
+[02] CONFIG-001 — Hệ thống configuration Owner: B Reviewer: A Priority:
+P0 Dependency: SETUP-001
+
+Công việc: - assets.yaml - data.yaml - features.yaml -
+environment.yaml - model.yaml - experiment.yaml - config loader. -
+validation config.
+
+Deliverable: Code không phụ thuộc vào các magic constant quan trọng.
+
+[03] TEST-001 — Test infrastructure + CI Owner: B Reviewer: A Priority:
+P0 Dependency: SETUP-001
+
+Công việc: - pytest structure. - unit/integration test convention. - CI
+chạy lint/test. - fixture directory. - synthetic market-data fixture.
+
+Deliverable: Mỗi PR có thể tự động chạy test.
+
+[04] CONTRACT-001 — Định nghĩa interface giữa các module Owner: A + B
+Priority: P0 Dependency: SETUP-001
+
+Phải thống nhất: Dataset: [time, assets, features]
+
+Graph: node_features edge_index edge_weight/type
+
+Observation: market/graph state portfolio weights cash
+
+Action: portfolio weights
+
+Model interface ví dụ: predict(observation) -> weights
+
+DoD: Hai bên có một contract document/test fixture chung.
+
+======================================================================
+PHASE 1 — MARKET DATA FOUNDATION
+======================================================================
+
+[05] DATA-001 — Chọn asset universe Owner: A Reviewer: B Priority: P0
+Dependency: CONFIG-001
+
+Công việc: - Chọn 20–30 US stocks. - >= 4 sectors. - Lưu ticker + sector
+vào assets.yaml. - Ghi rõ nguyên tắc chọn universe.
+
+Deliverable: configs/assets.yaml
+
+[06] DATA-002 — OHLCV Downloader Owner: A Reviewer: B Priority: P0
+Dependency: DATA-001
+
+Công việc: - Download Open/High/Low/Close/Volume. - Configurable
+start/end. - Retry/error handling. - Empty ticker handling. - Save
+Parquet. - Không commit raw dataset lớn.
+
+Deliverable: data/raw/.parquet src/data/downloader.py
+scripts/download_data.py
+
+[07] DATA-003 — Raw Data Validator Owner: A Reviewer: B Priority: P0
+Dependency: DATA-002
+
+Check: - price > 0 - volume >= 0 - high >= open/close - low <=
+open/close - duplicate timestamp - NaN/Inf - sorted dates
+
+Deliverable: validator + validation report + tests.
+
+[08] DATA-004 — Trading Calendar Alignment Owner: A Reviewer: B
+Priority: P0 Dependency: DATA-003
+
+Công việc: - Xác định common dates. - Xử lý missing observations có chủ
+đích. - Đồng bộ asset index. - Không tùy tiện forward-fill price qua
+khoảng bất hợp lý.
+
+Deliverable: Aligned OHLCV dataset.
+
+[09] DATA-005 — Dataset Metadata / Provenance Owner: A Reviewer: B
+Priority: P1 Dependency: DATA-002
+
+Lưu: - source - download time - period - ticker universe - row count -
+preprocessing version
+
+Mục tiêu: Reproducibility cho paper/report.
+
+======================================================================
+PHASE 2 — FEATURE ENGINEERING
+======================================================================
+
+[10] FEAT-001 — Daily Return Owner: A Reviewer: B Priority: P0
+Dependency: DATA-004
+
+Formula: r_t = (P_t - P_(t-1)) / P_(t-1)
+
+Có unit tests.
+
+[11] FEAT-002 — Rolling Volatility Owner: A Reviewer: B Priority: P0
+Dependency: FEAT-001
+
+V1: Rolling daily volatility, ví dụ 20 phiên.
+
+Window lấy từ config.
+
+[12] FEAT-003 — RSI-14 Owner: A Reviewer: B Priority: P1 Dependency:
+DATA-004
+
+Implement Wilder RSI. Tests: - monotonic up -> gần 100 - monotonic down
+-> gần 0 - không NaN bất thường sau warmup
+
+[13] FEAT-004 — MACD Owner: A Reviewer: B Priority: P1 Dependency:
+DATA-004
+
+Output: - MACD - signal - histogram
+
+[14] FEAT-005 — Volume Features Owner: A Reviewer: B Priority: P1
+Dependency: DATA-004
+
+Ví dụ: - log1p(volume) - relative/rolling volume
+
+Không fit normalization bằng test data.
+
+[15] FEAT-006 — Feature Pipeline Owner: A Reviewer: B Priority: P0
+Dependency: FEAT-001..005
+
+Output thống nhất: Date/Ticker hoặc tensor-ready representation với: -
+Return - Volatility - RSI - MACD - MACD signal/hist - Volume feature
+
+Deliverable: Processed feature dataset.
+
+======================================================================
+PHASE 3 — TEMPORAL SPLIT & PREPROCESSING SAFETY
+======================================================================
+
+[16] SPLIT-001 — Time-based Train/Validation/Test Owner: A Reviewer: B
+Priority: P0 Dependency: FEAT-006
+
+Ví dụ: Train 2015–2021 Validation 2022–2023 Test 2024–2025
+
+Không shuffle timeline.
+
+[17] SPLIT-002 — Train-only Normalization Owner: A Reviewer: B Priority:
+P0 Dependency: SPLIT-001
+
+fit(train) transform(train) transform(validation) transform(test)
+
+Persist scaler parameters.
+
+[18] LEAK-001 — Data Leakage Tests Owner: B Reviewer: A Priority: P0
+Dependency: SPLIT-002
+
+Kiểm tra: - feature(t) không dùng t+1. - rolling windows chỉ dùng quá
+khứ/hiện tại. - scaler chỉ fit train. - graph(t) không dùng future
+return. - action timing nhất quán với price dùng để execution.
+
+Deliverable: Automated leakage/sanity tests.
+
+======================================================================
+PHASE 4 — PORTFOLIO ENVIRONMENT & BACKTESTER
+======================================================================
+
+[19] ENV-001 — Portfolio State Owner: A Reviewer: B Priority: P0
+Dependency: SPLIT-002
+
+State: - cash - portfolio value - current weights - peak value -
+optional risk state
+
+[20] ENV-002 — Portfolio Return Engine Owner: A Reviewer: B Priority: P0
+Dependency: ENV-001
+
+Tính portfolio return từ weights và next-period asset returns. Có
+deterministic unit tests.
+
+[21] ENV-003 — Rebalancing & Constraints Owner: A Reviewer: B Priority:
+P0 Dependency: ENV-002
+
+V1: - long-only - weights >= 0 - sum(asset weights + cash) = 1 - invalid
+action projection/validation
+
+Deliverable: Rebalance engine.
+
+[22] ENV-004 — Transaction Cost Owner: A Reviewer: B Priority: P0
+Dependency: ENV-003
+
+Tính turnover và transaction cost. Rate lấy từ config.
+
+[23] ENV-005 — Drawdown Tracker Owner: A Reviewer: B Priority: P0
+Dependency: ENV-002
+
+Tính: - running peak - drawdown - max drawdown
+
+[24] ENV-006 — Risk Calculator Owner: A Reviewer: B Priority: P1
+Dependency: ENV-002
+
+V1: rolling portfolio volatility.
+
+V2: covariance-based portfolio risk.
+
+[25] ENV-007 — Reward Function V1 Owner: A Reviewer: B Priority: P0
+Dependency: ENV-002..006
+
+Bắt đầu: reward = portfolio_return - transaction_cost_penalty
+
+Sau đó mới thử: - risk penalty - drawdown penalty
+
+[26] ENV-008 — Gym-style Trading Environment Owner: A Reviewer: B
+Priority: P0 Dependency: ENV-007 + CONTRACT-001
+
+Implement: reset() step(action) observation_space action_space
+
+Deliverable: Environment dùng được cho RL.
+
+[27] BACKTEST-001 — Deterministic Backtester Owner: A Reviewer: B
+Priority: P0 Dependency: ENV-008
+
+Phải backtest được strategy không dùng AI. Log: - daily value -
+returns - weights - turnover - costs - drawdown
+
+======================================================================
+PHASE 5 — NON-AI & SINGLE-AGENT BASELINES
+======================================================================
+
+[28] BASE-001 — Cash Baseline Owner: A Reviewer: B Priority: P0
+Dependency: BACKTEST-001
+
+[29] BASE-002 — Equal Weight Baseline Owner: A Reviewer: B Priority: P0
+Dependency: BACKTEST-001
+
+[30] BASE-003 — Buy & Hold Baseline Owner: A Reviewer: B Priority: P0
+Dependency: BACKTEST-001
+
+[31] MODEL-001 — Single-Agent Observation/Action Adapter Owner: B
+Reviewer: A Priority: P0 Dependency: ENV-008 + CONTRACT-001
+
+Biến environment state thành model observation. Biến model action thành
+valid portfolio weights.
+
+[32] BASE-004 — Single-Agent PPO Owner: B Reviewer: A Priority: P0
+Dependency: MODEL-001
+
+Không GNN. Không MARL.
+
+Mục tiêu: Chứng minh RL pipeline train/evaluate end-to-end.
+
+[33] TRAIN-001 — Training Logger & Checkpoint Owner: B Reviewer: A
+Priority: P0 Dependency: BASE-004
+
+Lưu: - seed - config - checkpoints - training reward - validation
+metrics
+
+======================================================================
+PHASE 6 — FINANCIAL GRAPH
+======================================================================
+
+[34] GRAPH-001 — Rolling Correlation Matrix Owner: B Reviewer: A
+Priority: P0 Dependency: FEAT-001 + SPLIT-001
+
+Ví dụ: 60-day rolling correlation.
+
+Không dùng future data.
+
+[35] GRAPH-002 — Correlation Graph Builder Owner: B Reviewer: A
+Priority: P0 Dependency: GRAPH-001
+
+Output: - edge_index - edge_weight
+
+Threshold configurable.
+
+[36] GRAPH-003 — Sector Graph Owner: B Reviewer: A Priority: P1
+Dependency: DATA-001
+
+Tạo same-sector relations.
+
+[37] GRAPH-004 — Dynamic Graph Builder Owner: B Reviewer: A Priority: P0
+Dependency: GRAPH-002
+
+Graph(t) chỉ được xây từ thông tin <= t.
+
+[38] GRAPH-005 — Heterogeneous Graph V1 Owner: B Reviewer: A Priority:
+P1 Dependency: GRAPH-003 + GRAPH-004
+
+Edge types V1: - correlation - same_sector
+
+Supply-chain/ownership để extension sau.
+
+======================================================================
+PHASE 7 — GNN/GAT
+======================================================================
+
+[39] GNN-001 — GCN Encoder Owner: B Reviewer: A Priority: P0 Dependency:
+GRAPH-002 + FEAT-006
+
+Input: [N assets, F features]
+
+Output: [N assets, embedding_dim]
+
+[40] GNN-002 — GCN Integration Tests Owner: A Reviewer: B Priority: P0
+Dependency: GNN-001
+
+Test: - tensor shape - finite values - graph with no/sparse edges -
+deterministic forward where appropriate
+
+[41] GNN-003 — GAT Encoder Owner: B Reviewer: A Priority: P1 Dependency:
+GNN-001
+
+So sánh GCN vs GAT.
+
+[42] GNN-004 — Temporal/Dynamic Graph Integration Owner: B Reviewer: A
+Priority: P1 Dependency: GRAPH-004 + GNN-003
+
+Mỗi timestep dùng graph tương ứng.
+
+======================================================================
+PHASE 8 — MULTI-AGENT RL
+======================================================================
+
+[43] MARL-001 — Agent Boundary Design Owner: A + B Priority: P0
+Dependency: BASE-004
+
+V1: Agent theo sector.
+
+Ví dụ: - Technology - Finance - Healthcare - Energy -
+Consumer/Industrial
+
+[44] MARL-002 — Low-Level Observation Owner: B Reviewer: A Priority: P0
+Dependency: MARL-001 + GNN-001
+
+Observation gồm: - asset embeddings trong sector - sector budget -
+portfolio state
+
+[45] MARL-003 — Low-Level Action Space Owner: B Reviewer: A Priority: P0
+Dependency: MARL-002
+
+Output: weights nội bộ sector.
+
+Constraints: - >= 0 - sum = 1
+
+[46] MARL-004 — Multi-Agent Environment Owner: B Reviewer: A Priority:
+P0 Dependency: MARL-003 + ENV-008
+
+Kết hợp nhiều sector actions thành global portfolio.
+
+[47] MARL-005 — MARL Training Loop Owner: B Reviewer: A Priority: P0
+Dependency: MARL-004
+
+Có: - seed - checkpoint - evaluation - logging
+
+[48] MARL-006 — MARL Baseline Evaluation Owner: A Reviewer: B Priority:
+P0 Dependency: MARL-005
+
+So sánh với: - Equal Weight - Buy & Hold - Single-Agent PPO
+
+======================================================================
+PHASE 9 — HIERARCHICAL MARL
+======================================================================
+
+[49] HMARL-001 — High-Level State Owner: B Reviewer: A Priority: P0
+Dependency: MARL-005
+
+State: - graph/market representation - sector summary - portfolio
+state - optional risk state
+
+[50] HMARL-002 — High-Level Action Owner: B Reviewer: A Priority: P0
+Dependency: HMARL-001
+
+Output: sector budgets + cash allocation.
+
+[51] HMARL-003 — Hierarchical Allocation Combiner Owner: A Reviewer: B
+Priority: P0 Dependency: HMARL-002 + MARL-003
+
+Final asset weight = sector budget * within-sector asset weight.
+
+Validate global constraints.
+
+[52] HMARL-004 — Hierarchical Training Loop Owner: B Reviewer: A
+Priority: P0 Dependency: HMARL-003
+
+[53] HMARL-005 — Cross-Agent Graph Communication Owner: B Reviewer: A
+Priority: P1 Dependency: HMARL-004 + GNN-003
+
+Sử dụng GAT/graph representation cho communication.
+
+Đây là contribution nghiên cứu quan trọng, nhưng chỉ làm sau khi H-MARL
+cơ bản chạy đúng.
+
+======================================================================
+PHASE 10 — EVALUATION & EXPERIMENTS
+======================================================================
+
+[54] EXP-001 — Evaluation Metrics Owner: A Reviewer: B Priority: P0
+Dependency: BACKTEST-001
+
+Implement: - cumulative return - annualized return - annualized
+volatility - Sharpe - maximum drawdown - Calmar - turnover - transaction
+costs
+
+[55] EXP-002 — Experiment Runner Owner: B Reviewer: A Priority: P0
+Dependency: TRAIN-001
+
+CLI/config-driven experiment runner.
+
+[56] EXP-003 — Reproducibility / Multiple Seeds Owner: B Reviewer: A
+Priority: P0 Dependency: EXP-002
+
+Ví dụ seeds: 42, 123, 456, 789, 2026
+
+Report: mean ± std.
+
+[57] EXP-004 — Main Model Comparison Owner: A + B Priority: P0
+Dependency: HMARL-004 + EXP-001..003
+
+So sánh: - Cash - Equal Weight - Buy & Hold - Single-Agent PPO - MARL -
+H-MARL - H-MARL + GCN - H-MARL + GAT
+
+[58] EXP-005 — Graph Ablation Owner: B Reviewer: A Priority: P0
+Dependency: EXP-004
+
+No Graph vs Static Graph vs Dynamic Graph
+
+[59] EXP-006 — Feature Ablation Owner: A Reviewer: B Priority: P1
+Dependency: EXP-004
+
+Ví dụ: Return + Volume vs Return + Volume + RSI + MACD + Volatility
+
+[60] EXP-007 — Hierarchy Ablation Owner: B Reviewer: A Priority: P0
+Dependency: EXP-004
+
+Single-Agent vs MARL vs H-MARL
+
+[61] EXP-008 — GCN vs GAT Owner: B Reviewer: A Priority: P1 Dependency:
+GNN-003 + EXP-004
+
+[62] EXP-009 — Transaction Cost Sensitivity Owner: A Reviewer: B
+Priority: P1 Dependency: EXP-004
+
+Thử nhiều cost assumptions.
+
+[63] EXP-010 — Market Regime Analysis Owner: A + B Priority: P1
+Dependency: EXP-004
+
+Đánh giá trên các regime: - bull - bear - high volatility - sideways
+
+Phải định nghĩa regime bằng rule rõ ràng.
+
+[64] EXP-011 — Statistical Result Summary Owner: A Reviewer: B Priority:
+P1 Dependency: EXP-003..010
+
+Tổng hợp: - mean - std - confidence/statistical comparison nếu phù hợp -
+tables - plots
+
+======================================================================
+PHASE 11 — RESEARCH QUALITY & FINALIZATION
+======================================================================
+
+[65] RESEARCH-001 — Baseline Reproduction Audit Owner: A + B Priority:
+P0 Dependency: EXP-004
+
+Kiểm tra baseline có được cấu hình công bằng không.
+
+[66] RESEARCH-002 — Bias & Leakage Audit Owner: A Reviewer: B Priority:
+P0 Dependency: EXP-010
+
+Audit: - look-ahead bias - survivorship bias - data leakage - execution
+timing - transaction assumptions
+
+[67] RESEARCH-003 — Experiment Registry Owner: B Reviewer: A Priority:
+P1 Dependency: EXP-002
+
+Mỗi experiment có: - ID - commit hash - config - seed - dataset
+version - metrics - checkpoint/result path
+
+[68] DOC-001 — Architecture Documentation Owner: A Reviewer: B Priority:
+P1 Dependency: HMARL-005
+
+Mô tả: Data -> Features -> Graph -> GNN -> H-MARL -> Environment ->
+Backtest.
+
+[69] DOC-002 — Methodology Owner: B Reviewer: A Priority: P0 Dependency:
+EXP-004
+
+Viết: - problem formulation - graph construction - model - reward -
+training procedure
+
+[70] DOC-003 — Experimental Setup & Results Owner: A Reviewer: B
+Priority: P0 Dependency: EXP-011
+
+[71] DOC-004 — Limitations & Threats to Validity Owner: A + B Priority:
+P0 Dependency: RESEARCH-002
+
+[72] FINAL-001 — Reproduce From Clean Environment Owner: A + B Priority:
+P0 Dependency: DOC-001..004
+
+Từ clean environment phải: 1. install dependencies 2. download/prepare
+data 3. build features 4. train hoặc load reproducible checkpoints 5.
+backtest 6. tạo metrics/results
+
+Đây là Definition of Done kỹ thuật cuối cùng.
+
+======================================================================
+PHÂN CHIA THEO SPRINT
+======================================================================
+
+SPRINT 1 — Foundation + Raw Data A: - SETUP-001 - DATA-001 - DATA-002
+
+B: - CONFIG-001 - TEST-001
+
+Cùng: - CONTRACT-001
+
+Milestone: Có repo, config, CI và tải được raw OHLCV.
+
+SPRINT 2 — Clean Data + Features + Graph Prototype A: - DATA-003 -
+DATA-004 - DATA-005 - FEAT-001 - FEAT-002 - FEAT-003
+
+B: - GRAPH-001 prototype bằng synthetic/available returns - GRAPH-002
+prototype - hỗ trợ leakage test design
+
+Milestone: Raw -> validated/aligned -> basic features.
+
+SPRINT 3 — Feature Pipeline + Safe Dataset + Dynamic Graph A: -
+FEAT-004 - FEAT-005 - FEAT-006 - SPLIT-001 - SPLIT-002
+
+B: - LEAK-001 - GRAPH-003 - GRAPH-004 - GRAPH-005
+
+Milestone: Có dataset train/validation/test an toàn và graph(t).
+
+SPRINT 4 — Environment + GNN A: - ENV-001..ENV-007
+
+B: - GNN-001 - GNN-003
+
+Cùng: - GNN-002 integration tests
+
+Milestone: Portfolio calculations chạy đúng và GNN nhận real dataset.
+
+SPRINT 5 — End-to-End Backtester + Single-Agent RL A: - ENV-008 -
+BACKTEST-001 - BASE-001 - BASE-002 - BASE-003
+
+B: - MODEL-001 - BASE-004 - TRAIN-001
+
+Milestone: Market Data -> Environment -> PPO -> Portfolio -> Backtest
+chạy end-to-end.
+
+SPRINT 6 — Dynamic GNN + MARL A: - EXP-001 - MARL evaluation support
+
+B: - GNN-004 - MARL-001..MARL-005
+
+Cùng: - MARL-006
+
+Milestone: Multi-agent sector architecture chạy được.
+
+SPRINT 7 — Hierarchical MARL A: - HMARL-003 - environment/risk
+validation
+
+B: - HMARL-001 - HMARL-002 - HMARL-004 - HMARL-005
+
+Milestone: Graph/GAT -> H-MARL -> final portfolio weights -> backtester.
+
+SPRINT 8 — Main Experiments A: - EXP-001 support - EXP-006 - EXP-009
+
+B: - EXP-002 - EXP-003 - EXP-005 - EXP-007 - EXP-008
+
+Cùng: - EXP-004
+
+Milestone: Có bảng comparison chính.
+
+SPRINT 9 — Robustness & Research Validation A: - EXP-011 - RESEARCH-002
+
+B: - RESEARCH-003
+
+Cùng: - EXP-010 - RESEARCH-001
+
+Milestone: Có kết quả đủ mạnh để phân tích nghiên cứu.
+
+SPRINT 10 — Report + Reproducibility A: - DOC-001 - DOC-003
+
+B: - DOC-002
+
+Cùng: - DOC-004 - FINAL-001
+
+Milestone: Code, experiment và báo cáo có thể reproduce.
+
+======================================================================
+CRITICAL PATH
+======================================================================
+
+SETUP-001 -> DATA-001 -> DATA-002 -> DATA-003 -> DATA-004 ->
+FEAT-001..006 -> SPLIT-001 -> SPLIT-002 -> ENV-001..008 -> BACKTEST-001
+-> BASE-004 -> GRAPH-001..004 -> GNN-001 -> MARL-001..005 ->
+HMARL-001..004 -> EXP-004 -> EXP-011 -> FINAL-001
+
+Không nên bỏ qua: - BACKTEST-001 trước RL phức tạp. - BASE-004 trước
+MARL. - MARL trước H-MARL. - H-MARL cơ bản trước cross-agent GAT
+communication. - leakage audit trước khi tin vào kết quả.
+
+====================================================================== 4
+INTERFACE HAI NGƯỜI PHẢI THỐNG NHẤT TỪ ĐẦU
+======================================================================
+
+1.  Dataset output features: [T, N, F]
+
+2.  Graph representation node_features: [N, F] edge_index: [2, E]
+    edge_weight / edge_type
+
+3.  Environment observation market/graph representation current
+    portfolio weights cash optional risk state
+
+4.  Model action final portfolio weights long-only V1: weight_i >= 0
+    sum(asset weights + cash) = 1
+
+======================================================================
+GIT WORKFLOW
+======================================================================
+
+Branches:
+
+main ↑ develop ↑ feature/-
+
+Ví dụ: feature/DATA-002-downloader feature/FEAT-003-rsi
+feature/GRAPH-004-dynamic-graph feature/GNN-001-gcn
+feature/MARL-004-environment
+
+Quy trình: 1. Pull develop. 2. Tạo branch ticket. 3. Implement. 4. Unit
+tests. 5. Push. 6. Pull Request. 7. Người còn lại review. 8. PASS ->
+merge develop. 9. NEED CHANGES -> sửa trước khi merge.
+
+Các milestone lớn mới merge develop -> main.
+
+======================================================================
+TỔNG QUAN 72 TICKETS
+======================================================================
+
+Foundation: 01 SETUP-001 02 CONFIG-001 03 TEST-001 04 CONTRACT-001
+
+Data: 05 DATA-001 06 DATA-002 07 DATA-003 08 DATA-004 09 DATA-005
+
+Features: 10 FEAT-001 11 FEAT-002 12 FEAT-003 13 FEAT-004 14 FEAT-005 15
+FEAT-006
+
+Dataset Safety: 16 SPLIT-001 17 SPLIT-002 18 LEAK-001
+
+Environment: 19 ENV-001 20 ENV-002 21 ENV-003 22 ENV-004 23 ENV-005 24
+ENV-006 25 ENV-007 26 ENV-008 27 BACKTEST-001
+
+Baselines: 28 BASE-001 29 BASE-002 30 BASE-003 31 MODEL-001 32 BASE-004
+33 TRAIN-001
+
+Graph: 34 GRAPH-001 35 GRAPH-002 36 GRAPH-003 37 GRAPH-004 38 GRAPH-005
+
+GNN: 39 GNN-001 40 GNN-002 41 GNN-003 42 GNN-004
+
+MARL: 43 MARL-001 44 MARL-002 45 MARL-003 46 MARL-004 47 MARL-005 48
+MARL-006
+
+Hierarchical MARL: 49 HMARL-001 50 HMARL-002 51 HMARL-003 52 HMARL-004
+53 HMARL-005
+
+Experiments: 54 EXP-001 55 EXP-002 56 EXP-003 57 EXP-004 58 EXP-005 59
+EXP-006 60 EXP-007 61 EXP-008 62 EXP-009 63 EXP-010 64 EXP-011
+
+Research/Documentation: 65 RESEARCH-001 66 RESEARCH-002 67 RESEARCH-003
+68 DOC-001 69 DOC-002 70 DOC-003 71 DOC-004 72 FINAL-001
+
+======================================================================
+MỤC TIÊU CUỐI CÙNG
+======================================================================
+
+Khi hoàn thành roadmap:
+
+Raw OHLCV ↓ Validation + Alignment ↓ Feature Engineering ↓ Temporal
+Split / Normalization ↓ Dynamic Financial Graph ↓ GCN / GAT ↓
+Single-Agent Baseline ↓ Sector MARL ↓ Hierarchical MARL ↓ Cross-Agent
+Graph Communication ↓ Portfolio Weights ↓ Trading Environment ↓
+Backtesting ↓ Return / Sharpe / MDD / Calmar / Turnover ↓ Baselines +
+Ablation + Multiple Seeds + Regime Analysis ↓ Research Report
+
+Nguyên tắc leader: “Không tối ưu mô hình phức tạp trước khi chứng minh
+từng tầng bên dưới chạy đúng.”
+
+Ticket bắt đầu: SETUP-001 + CONFIG-001 + TEST-001 có thể triển khai song
+song. Sau đó hai thành viên cùng chốt CONTRACT-001 trước khi pipeline
+bắt đầu phân nhánh.

@@ -1,0 +1,739 @@
+ĐỀ ÁN 2 H-MARL-GNN: HIERARCHICAL MULTI-AGENT REINFORCEMENT LEARNING WITH
+HETEROGENEOUS DYNAMIC GRAPH NEURAL NETWORKS FOR ALGORITHMIC TRADING
+
+============================================================ 1. TỔNG
+QUAN ĐỀ TÀI ============================================================
+
+Tên đề tài: H-MARL-GNN: Hierarchical Multi-Agent Reinforcement Learning
+with Heterogeneous Dynamic Graph Neural Networks for Algorithmic
+Trading.
+
+Lĩnh vực: - Financial AI - Algorithmic Trading - Reinforcement Learning
+(RL) - Multi-Agent Reinforcement Learning (MARL) - Graph Neural Networks
+(GNN) - Portfolio Management
+
+Mục tiêu tổng quát: Xây dựng và đánh giá một hệ thống AI giao dịch/quản
+lý danh mục có khả năng: 1. Học trạng thái của từng tài sản từ dữ liệu
+thị trường. 2. Học mối quan hệ giữa nhiều tài sản bằng Graph Neural
+Network. 3. Cho nhiều agent phối hợp ra quyết định. 4. Phân cấp quyết
+định giữa quản lý danh mục/rủi ro và giao dịch từng nhóm tài sản. 5.
+Thích nghi tốt hơn với sự thay đổi của thị trường. 6. Tối ưu lợi nhuận
+có xét đến rủi ro và chi phí giao dịch.
+
+Đề tài không chỉ đặt câu hỏi “cổ phiếu ngày mai tăng hay giảm?”. Bài
+toán chính là:
+
+“Với trạng thái hiện tại của toàn thị trường và danh mục đang nắm giữ,
+nên phân bổ vốn vào các tài sản như thế nào để tối ưu hiệu quả đầu tư
+sau khi xét lợi nhuận, rủi ro và transaction cost?”
+
+============================================================ 2. BÀI TOÁN
+NGHIÊN CỨU ============================================================
+
+Các hệ thống RL trading thông thường có một số hạn chế:
+
+-   Một agent duy nhất phải xử lý toàn bộ thị trường.
+-   Nhiều phương pháp xem từng cổ phiếu tương đối độc lập.
+-   Không khai thác đầy đủ quan hệ giữa các công ty/tài sản.
+-   Thị trường thay đổi theo thời gian (non-stationarity).
+-   Tối đa hóa return có thể dẫn tới chiến lược rủi ro quá cao.
+-   Giao dịch quá thường xuyên có thể tạo transaction cost lớn.
+
+Ví dụ:
+
+AAPL, MSFT, NVDA, AMD và TSM không hoàn toàn độc lập.
+
+Chúng có thể liên quan thông qua: - cùng sector; - correlation của
+return; - chuỗi cung ứng; - quan hệ kinh doanh; - dòng tiền thị
+trường; - các yếu tố vĩ mô chung.
+
+Vì vậy đề tài biểu diễn thị trường thành graph và sử dụng GNN/GAT để học
+các quan hệ này trước khi MARL ra quyết định.
+
+============================================================ 3. CÂU HỎI
+NGHIÊN CỨU ============================================================
+
+Research Question chính:
+
+Liệu việc kết hợp Hierarchical Multi-Agent Reinforcement Learning với
+Dynamic/Heterogeneous Graph Neural Networks có cải thiện hiệu quả quản
+lý danh mục có điều chỉnh theo rủi ro so với các phương pháp RL trading
+truyền thống hay không?
+
+Các câu hỏi phụ:
+
+RQ1: GNN có giúp hệ thống tốt hơn khi khai thác quan hệ giữa các tài sản
+so với việc coi các asset độc lập hay không?
+
+RQ2: Multi-Agent RL có tốt hơn Single-Agent RL trong bài toán quản lý
+nhiều tài sản hay không?
+
+RQ3: Hierarchical MARL có giúp việc phân bổ vốn và quản lý rủi ro tốt
+hơn MARL không phân cấp hay không?
+
+RQ4: Dynamic Graph có tốt hơn Static Graph khi quan hệ giữa các tài sản
+thay đổi theo thời gian hay không?
+
+RQ5: Graph Attention có giúp các agent chọn lọc thông tin quan trọng từ
+các asset liên quan hay không?
+
+RQ6: Mô hình có duy trì hiệu quả khi chuyển giữa các market regime khác
+nhau như bull market, bear market và high-volatility market hay không?
+
+============================================================ 4. INPUT
+CỦA HỆ THỐNG
+============================================================
+
+Input được chia thành ba nhóm chính.
+
+  ------------------
+  4.1. Market Data
+  ------------------
+
+Với mỗi cổ phiếu tại thời điểm t:
+
+-   Open
+-   High
+-   Low
+-   Close
+-   Volume
+
+Ví dụ:
+
+AAPL Open = 220 High = 225 Low = 218 Close = 223 Volume = 52,000,000
+
+OHLCV là dữ liệu gốc lấy từ market-data provider.
+
+Nguồn prototype có thể sử dụng: - Yahoo Finance/yfinance cho dữ liệu
+historical daily. - Các nguồn market data khác nếu nghiên cứu yêu cầu dữ
+liệu chính xác, intraday, tick hoặc order book hơn.
+
+  -----------------------
+  4.2. Derived Features
+  -----------------------
+
+Từ OHLCV, hệ thống tính thêm:
+
+Return: Return_t = (Close_t - Close_(t-1)) / Close_(t-1)
+
+Volatility: Độ lệch chuẩn của return trong một rolling window, ví dụ 20
+ngày.
+
+RSI: Relative Strength Index, biểu diễn momentum gần đây trên thang
+0-100.
+
+MACD: Chỉ báo momentum/trend được xây dựng từ exponential moving
+averages.
+
+Moving Average: Ví dụ MA20, MA50.
+
+Correlation: Tương quan return giữa hai tài sản trong một rolling
+window.
+
+Các feature này không nhất thiết phải tải trực tiếp. Phần lớn được tính
+trong data preprocessing pipeline.
+
+  ----------------------
+  4.3. Portfolio State
+  ----------------------
+
+Model cần biết trạng thái danh mục hiện tại.
+
+Ví dụ:
+
+Portfolio Value = 100,000 USD
+
+AAPL = 20% MSFT = 15% NVDA = 10% AMD = 5% Cash = 50%
+
+Có thể bổ sung: - current cash; - current position; - previous portfolio
+weights; - current drawdown; - portfolio volatility; - turnover.
+
+============================================================ 5. GRAPH
+REPRESENTATION
+============================================================
+
+Mỗi tài sản được biểu diễn thành một node.
+
+Ví dụ:
+
+AAPL MSFT NVDA AMD TSM JPM XOM …
+
+Node features có thể gồm:
+
+[return, volatility, RSI, MACD, normalized volume, moving averages, …]
+
+Edge biểu diễn quan hệ giữa hai tài sản.
+
+Phiên bản V1: - correlation edge; - same-sector edge.
+
+Ví dụ:
+
+AAPL —- MSFT NVDA —- AMD NVDA —- TSM
+
+Nếu rolling correlation giữa asset i và j vượt threshold, có thể tạo một
+edge.
+
+Ví dụ:
+
+corr(AAPL, MSFT) = 0.82 -> edge corr(AAPL, XOM) = 0.15 -> có thể không
+tạo edge
+
+Phiên bản nâng cao có thể có nhiều loại edge:
+
+-   correlation;
+-   same sector;
+-   supply chain;
+-   ownership;
+-   business relationship.
+
+Khi có nhiều loại node/edge, graph trở thành heterogeneous graph.
+
+Khi edge hoặc trọng số edge thay đổi theo thời gian, graph trở thành
+dynamic graph.
+
+============================================================ 6. GRAPH
+NEURAL NETWORK
+============================================================
+
+GNN không nhất thiết trực tiếp quyết định BUY/SELL.
+
+Vai trò chính của GNN là encoder.
+
+Input: - node features; - graph edges; - edge features/weights nếu có.
+
+Output: - embedding cho từng asset.
+
+Ví dụ:
+
+AAPL -> [0.21, -0.52, 0.81, …] NVDA -> [0.72, 0.11, 0.32, …] AMD ->
+[0.65, 0.08, 0.41, …]
+
+Embedding của AAPL không chỉ chứa thông tin về AAPL mà còn có thể chứa
+thông tin tổng hợp từ các node liên quan.
+
+Graph Attention Network (GAT) cho phép mô hình học rằng một số neighbor
+quan trọng hơn neighbor khác.
+
+Ví dụ đối với NVDA:
+
+TSM có thể được attention cao hơn một asset ít liên quan.
+
+Pipeline:
+
+Market Features + Financial Graph | v GNN/GAT | v Asset Embeddings
+
+============================================================ 7.
+HIERARCHICAL MULTI-AGENT RL
+============================================================
+
+Kiến trúc có hai cấp.
+
+  -----------------------
+  7.1. High-Level Agent
+  -----------------------
+
+Nhiệm vụ: - quản lý allocation tổng thể; - kiểm soát exposure; - quản lý
+risk; - phân bổ vốn cho từng sector hoặc nhóm agent.
+
+Ví dụ output:
+
+Technology = 40% Finance = 25% Energy = 15% Cash = 20%
+
+  -----------------------
+  7.2. Low-Level Agents
+  -----------------------
+
+Mỗi agent có thể phụ trách: - một sector; - một nhóm tài sản; - hoặc một
+asset tùy thiết kế thực nghiệm.
+
+Ví dụ Technology Agent nhận 40% vốn và quyết định:
+
+AAPL = 12% MSFT = 10% NVDA = 10% AMD = 5% GOOGL = 3%
+
+Tổng = 40%.
+
+Cách chia theo sector thường khả thi hơn việc tạo hàng trăm agent cho
+phiên bản đầu.
+
+============================================================ 8. OUTPUT
+CỦA HỆ THỐNG
+============================================================
+
+Có hai lựa chọn.
+
+  ------------------------------
+  8.1. Discrete Trading Action
+  ------------------------------
+
+AAPL -> BUY MSFT -> HOLD NVDA -> SELL
+
+Hoặc:
+
+SELL = -1 HOLD = 0 BUY = +1
+
+  -------------------------------------------------
+  8.2. Portfolio Weights - Khuyến nghị cho đề tài
+  -------------------------------------------------
+
+Model output:
+
+AAPL = 0.20 MSFT = 0.15 NVDA = 0.10 AMD = 0.05 … Cash = 0.10
+
+Với long-only portfolio:
+
+sum(weights) = 1 weights >= 0
+
+Nếu portfolio = 100,000 USD:
+
+AAPL 20% -> 20,000 USD MSFT 15% -> 15,000 USD NVDA 10% -> 10,000 USD …
+
+Output này phù hợp trực tiếp với portfolio management.
+
+============================================================ 9. TRADING
+ENVIRONMENT ============================================================
+
+Trading Environment mô phỏng chuyện gì xảy ra sau khi model đưa ra
+portfolio weights.
+
+Ví dụ:
+
+Portfolio Value(t) = 100,000 USD
+
+Model: AAPL = 40% MSFT = 40% Cash = 20%
+
+Thị trường chuyển từ t sang t+1.
+
+Environment tính:
+
+-   portfolio return;
+-   portfolio value mới;
+-   transaction cost;
+-   risk;
+-   drawdown;
+-   reward.
+
+  -----------------------
+  9.1. Transaction Cost
+  -----------------------
+
+Transaction cost được mô phỏng dựa trên turnover và giả định phí.
+
+Ví dụ:
+
+TransactionCost_t = cost_rate * traded_value
+
+Hoặc theo weight:
+
+TC_t = c * V_t * SUM_i |w_(i,t) - w_(i,t-1)|
+
+Có thể mở rộng: - commission; - bid-ask spread; - slippage.
+
+  -----------
+  9.2. Risk
+  -----------
+
+Phiên bản đơn giản có thể sử dụng rolling portfolio volatility.
+
+Asset return được tính từ Close.
+
+Portfolio volatility có thể tính bằng:
+
+sigma_p = sqrt(w^T * Sigma * w)
+
+Trong đó: - w: portfolio weights; - Sigma: covariance matrix của asset
+returns.
+
+  ---------------
+  9.3. Drawdown
+  ---------------
+
+Peak_t = giá trị portfolio cao nhất từ đầu backtest đến t.
+
+Drawdown_t = (PortfolioValue_t - Peak_t) / Peak_t
+
+Ví dụ:
+
+Peak = 105,000 USD Current = 98,000 USD
+
+Drawdown = -6.67%
+
+Maximum Drawdown là drawdown tệ nhất trong toàn bộ giai đoạn.
+
+============================================================ 10. REWARD
+FUNCTION ============================================================
+
+Reward là tín hiệu dùng để RL học policy.
+
+Reward đơn giản:
+
+Reward_t = PortfolioReturn_t - lambda * Risk_t - beta *
+TransactionCost_t
+
+Trong đó: - lambda: mức phạt risk; - beta: mức phạt transaction cost.
+
+Có thể bổ sung drawdown penalty.
+
+Mục tiêu là tránh trường hợp model chỉ tối đa hóa lợi nhuận bằng cách
+chấp nhận rủi ro cực lớn hoặc giao dịch quá nhiều.
+
+Reward function cần được xem là một thành phần nghiên cứu và phải thực
+nghiệm cẩn thận, không được chọn chỉ để làm kết quả đẹp.
+
+============================================================ 11. DATA
+PIPELINE ============================================================
+
+Pipeline V1:
+
+Market Data Provider | v OHLCV | v Data Cleaning | v Feature Engineering
+| +–> Return +–> RSI +–> MACD +–> Volatility +–> Moving Average | v
+Rolling Correlation | v Dynamic Graph Builder | v Dataset for GNN + RL
+
+============================================================ 12. DATASET
+V1 ĐỀ XUẤT ============================================================
+
+Không nên bắt đầu ngay với toàn bộ S&P 500.
+
+V1: Khoảng 20-30 stocks thuộc nhiều sector.
+
+Ví dụ:
+
+Technology: AAPL, MSFT, NVDA, AMD, GOOGL, META
+
+Finance: JPM, BAC, GS, MS
+
+Healthcare: JNJ, PFE, UNH
+
+Energy: XOM, CVX
+
+Có thể bổ sung các sector khác để đạt 20-30 asset.
+
+Timeframe: Daily OHLCV.
+
+Ví dụ giai đoạn: 2015-2025.
+
+Một cách chia:
+
+Train: 2015-2021
+
+Validation: 2022-2023
+
+Test: 2024-2025
+
+Việc chia phải theo thời gian, tuyệt đối tránh random shuffle các ngày
+giữa train/test vì có thể gây data leakage.
+
+============================================================ 13.
+BACKTESTING ============================================================
+
+Backtester chạy model trên dữ liệu chưa thấy trong training.
+
+Ví dụ:
+
+Ngày t: State(t) | v H-MARL-GNN | v Portfolio Weights | v Rebalance | v
+Market t -> t+1 | v Portfolio Value(t+1)
+
+Lặp lại cho toàn bộ test period.
+
+Backtesting cần tránh: - look-ahead bias; - data leakage; - sử dụng
+future information; - bỏ qua transaction cost một cách phi thực tế.
+
+============================================================ 14.
+EVALUATION METRICS
+============================================================
+
+14.1. Cumulative Return
+
+Đo tổng mức tăng/giảm portfolio trong giai đoạn backtest.
+
+14.2. Sharpe Ratio
+
+Đánh giá return có điều chỉnh theo volatility/risk.
+
+Không chỉ hỏi: “Kiếm được bao nhiêu?”
+
+Mà hỏi: “Return đạt được so với mức biến động/risk như thế nào?”
+
+14.3. Maximum Drawdown (MDD)
+
+Đo mức sụt giảm lớn nhất từ một peak xuống đáy sau đó.
+
+14.4. Calmar Ratio
+
+So sánh annualized return với maximum drawdown.
+
+14.5. Turnover
+
+Đo mức độ thay đổi portfolio.
+
+Turnover quá cao có thể khiến strategy kém thực tế do transaction cost.
+
+============================================================ 15.
+BASELINES ============================================================
+
+Cần so sánh với các phương pháp đơn giản và mạnh.
+
+Nhóm traditional: - Buy and Hold; - Equal Weight Portfolio; -
+Mean-Variance Portfolio nếu phù hợp.
+
+Nhóm RL: - PPO; - DDPG; - SAC hoặc các RL portfolio baselines phù hợp.
+
+Nhóm financial RL framework: - các baseline có thể triển khai từ FinRL.
+
+Nhóm nâng cao: - Portfolio Transformer hoặc phương pháp sequence-based
+phù hợp nếu có implementation/reproduction đáng tin cậy.
+
+Không nên chỉ so sánh với một baseline yếu.
+
+============================================================ 16.
+ABLATION STUDY
+============================================================
+
+Đây là phần quan trọng để chứng minh contribution.
+
+Có thể so sánh:
+
+Model A: Single-Agent RL
+
+Model B: MARL
+
+Model C: Hierarchical MARL
+
+Model D: H-MARL + Static GNN
+
+Model E: H-MARL + Dynamic GNN
+
+Model F: H-MARL + Dynamic GAT
+
+Ngoài ra:
+
+OHLCV vs OHLCV + technical indicators
+
+Correlation-only graph vs Correlation + sector graph
+
+Without transaction-cost penalty vs With transaction-cost penalty
+
+Mục tiêu là xác định thành phần nào thực sự tạo improvement.
+
+============================================================ 17. KIẾN
+TRÚC TOÀN HỆ THỐNG
+============================================================
+
+INPUT | +– OHLCV +– Portfolio State +– Asset Metadata | v FEATURE
+ENGINEERING | +– Return +– RSI +– MACD +– Volatility +– Moving Average |
+v DYNAMIC GRAPH BUILDER | +– Nodes = Assets +– Edges = Correlation /
+Sector / … | v GNN / GAT | v ASSET EMBEDDINGS | v HIERARCHICAL MARL | +–
+High-Level Agent | | | +–> Portfolio/Risk/Sector Allocation | +–
+Low-Level Agents | +–> Asset Allocation | v PORTFOLIO WEIGHTS | v
+TRADING ENVIRONMENT | +– Return +– Transaction Cost +– Risk +– Drawdown
+| v REWARD | v TRAINING
+
+Sau training:
+
+Test Market Data | v Trained H-MARL-GNN | v Portfolio Weights | v
+Backtesting | v Sharpe / MDD / Calmar / Return / Turnover
+
+============================================================ 18. PHẠM VI
+PHIÊN BẢN V1
+============================================================
+
+Để đề tài khả thi, V1 nên giới hạn:
+
+Assets: 20-30 US stocks.
+
+Frequency: Daily.
+
+Raw data: OHLCV.
+
+Features: - Return; - Volatility; - RSI; - MACD; - normalized volume.
+
+Graph: - rolling correlation; - sector relationship.
+
+Agents: - 1 high-level agent; - một số low-level sector agents.
+
+Output: Long-only portfolio weights + cash.
+
+Environment: - transaction cost; - portfolio volatility; - drawdown.
+
+Evaluation: - cumulative return; - Sharpe; - MDD; - Calmar; - turnover.
+
+V1 chưa cần: - full S&P 500; - Level-2 Limit Order Book; -
+high-frequency trading; - live-money execution; - hàng trăm agent; -
+full supply-chain knowledge graph.
+
+============================================================ 19. CÁC
+PHIÊN BẢN PHÁT TRIỂN
+============================================================
+
+V1 - Proof of Concept - OHLCV; - 20-30 assets; - static/correlation
+graph; - GNN; - basic RL portfolio environment.
+
+V2 - Multi-Agent - sector agents; - communication; - MARL; -
+transaction-cost-aware reward.
+
+V3 - Hierarchical MARL - high-level allocation; - low-level
+execution/allocation; - risk constraints.
+
+V4 - Dynamic/Heterogeneous Graph - rolling dynamic edges; - multiple
+edge types; - GAT/heterogeneous GNN.
+
+V5 - Robust Research System - multiple market regimes; - extensive
+baselines; - ablation; - hyperparameter sensitivity; - statistical
+evaluation.
+
+V6 - Advanced Extension Có thể nghiên cứu: - intraday data; - LOB; -
+market impact; - regime detection; - transformer temporal encoder; -
+richer financial knowledge graph.
+
+============================================================ 20. SẢN
+PHẨM CUỐI CÙNG
+============================================================
+
+Sản phẩm cuối không nhất thiết là bot tự giao dịch tiền thật.
+
+Đầu ra nghiên cứu nên gồm:
+
+1.  Data preprocessing pipeline.
+2.  Dynamic financial graph builder.
+3.  GNN/GAT encoder.
+4.  Hierarchical MARL training environment.
+5.  Portfolio allocation model.
+6.  Backtesting engine.
+7.  Baseline implementations.
+8.  Evaluation pipeline.
+9.  Experiment results.
+10. Ablation studies.
+11. Visualization/dashboard kết quả nếu cần.
+12. Báo cáo nghiên cứu.
+
+Ví dụ output của model:
+
+Date: 2025-01-10
+
+Portfolio: AAPL = 15% MSFT = 12% NVDA = 8% JPM = 10% XOM = 7% … Cash =
+10%
+
+Sau backtest:
+
+Cumulative Return = … Sharpe Ratio = … Maximum Drawdown = … Calmar Ratio
+= … Turnover = …
+
+Các con số thực tế chỉ được báo cáo sau khi chạy experiment.
+
+============================================================ 21. ĐÓNG
+GÓP KỲ VỌNG ============================================================
+
+Contribution 1: Biểu diễn thị trường bằng graph thay vì coi asset độc
+lập.
+
+Contribution 2: Sử dụng dynamic graph để phản ánh quan hệ thay đổi theo
+thời gian.
+
+Contribution 3: Kết hợp GNN/GAT với Hierarchical Multi-Agent RL.
+
+Contribution 4: Phân tách quyết định portfolio/risk cấp cao và asset
+allocation cấp thấp.
+
+Contribution 5: Đánh giá robustness qua nhiều market regime.
+
+Contribution 6: Thực hiện ablation để chứng minh giá trị của từng thành
+phần.
+
+============================================================ 22. RỦI RO
+NGHIÊN CỨU ============================================================
+
+1.  Overfitting: Model có thể học thuộc historical period.
+
+2.  Data leakage: Feature tại thời điểm t vô tình sử dụng dữ liệu tương
+    lai.
+
+3.  Survivorship bias: Chỉ dùng các công ty hiện còn tồn tại có thể làm
+    dataset thiên lệch.
+
+4.  Look-ahead bias: Backtester sử dụng giá/thông tin chưa tồn tại tại
+    thời điểm quyết định.
+
+5.  Unrealistic transaction assumptions: Không tính spread/slippage/cost
+    có thể làm kết quả quá đẹp.
+
+6.  Excessive complexity: GNN + Dynamic Graph + MARL + Hierarchical RL
+    cùng lúc có thể khó train.
+
+7.  Non-stationarity: Quan hệ học trong train period có thể không còn
+    đúng trong test period.
+
+8.  Reproducibility: RL có variance lớn nên cần chạy nhiều random seeds.
+
+============================================================ 23. STACK
+KỸ THUẬT ĐỀ XUẤT
+============================================================
+
+Language: Python.
+
+Data: - pandas; - numpy; - yfinance cho prototype data acquisition.
+
+Machine Learning: - PyTorch.
+
+Graph: - PyTorch Geometric hoặc DGL.
+
+RL: - Gymnasium-compatible custom environment; - Stable-Baselines3 có
+thể dùng cho một số single-agent baseline; - MARL/hierarchical component
+có thể cần custom implementation hoặc framework phù hợp với thiết kế.
+
+Experiment: - TensorBoard hoặc Weights & Biases; - configuration
+files; - random seed management.
+
+Storage: - CSV/Parquet cho V1; - không cần database phức tạp ở giai đoạn
+đầu.
+
+============================================================ 24. CẤU
+TRÚC SOURCE CODE GỢI Ý
+============================================================
+
+h-marl-gnn/ | +– data/ | +– raw/ | +– processed/ | +– configs/ | +– src/
+| +– data/ | | +– downloader.py | | +– preprocessing.py | | +–
+features.py | | | +– graph/ | | +– builder.py | | +– dynamic_graph.py |
+| | +– models/ | | +– gnn.py | | +– gat.py | | | +– agents/ | | +–
+high_level.py | | +– low_level.py | | | +– env/ | | +– portfolio_env.py
+| | +– transaction_cost.py | | +– risk.py | | | +– training/ | | +–
+trainer.py | | | +– evaluation/ | +– backtest.py | +– metrics.py | +–
+experiments/ +– tests/ +– notebooks/ +– requirements.txt +– README.md
+
+============================================================ 25. LỘ
+TRÌNH TRIỂN KHAI KHUYẾN NGHỊ
+============================================================
+
+PHASE 1 - DATA - chọn 20-30 stocks; - tải OHLCV; - clean missing
+values; - tính features; - split train/validation/test.
+
+PHASE 2 - BASELINE ENVIRONMENT - xây portfolio environment; -
+transaction cost; - portfolio value; - reward; - backtester; - Equal
+Weight/Buy-and-Hold baseline.
+
+PHASE 3 - SINGLE-AGENT RL - xây single-agent portfolio model; - xác minh
+RL pipeline hoạt động.
+
+PHASE 4 - GRAPH - correlation graph; - GNN/GAT encoder; - kiểm tra
+embedding.
+
+PHASE 5 - MARL - chia low-level agents; - xây communication mechanism.
+
+PHASE 6 - HIERARCHICAL MARL - high-level agent; - low-level agents; -
+allocation constraints.
+
+PHASE 7 - DYNAMIC/HETEROGENEOUS GRAPH - dynamic correlation; - sector
+edges; - heterogeneous relationships nếu dữ liệu cho phép.
+
+PHASE 8 - EXPERIMENT - baselines; - ablation; - multiple seeds; - market
+regimes; - statistical analysis.
+
+PHASE 9 - REPORT - methodology; - experiment setup; - results; -
+limitations; - conclusions.
+
+============================================================ 26. TÓM TẮT
+MỘT CÂU ============================================================
+
+H-MARL-GNN là hệ thống sử dụng GNN để học “các tài sản đang liên hệ với
+nhau như thế nào”, sau đó sử dụng Hierarchical Multi-Agent Reinforcement
+Learning để học “nên phân bổ vốn như thế nào”, và cuối cùng dùng trading
+environment/backtesting để đánh giá liệu quyết định đó có tạo ra
+portfolio tốt hơn về return, risk và drawdown hay không.

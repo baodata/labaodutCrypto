@@ -1,0 +1,181 @@
+# ==============================================================================
+# H-MARL-GNN: ASSET UNIVERSE CONFIGURATION (V1)
+# ==============================================================================
+# Ticket: DATA-001 (P0)
+# Khoảng thời gian: 2015-01-01 đến 2025-12-31
+# Tiêu chí lựa chọn:
+#   1. Cổ phiếu vốn hóa lớn (Large Cap) niêm yết trên sàn Mỹ (NASDAQ / NYSE).
+#   2. Thanh khoản cao, khối lượng giao dịch dồi dào để hạn chế trượt giá.
+#   3. Có lịch sử giao dịch liên tục trọn vẹn từ trước năm 2015 đến nay (tránh rủi ro thiếu dữ liệu/IPO muộn).
+#   4. Phân bổ cân bằng trên 5 nhóm ngành (Sectors) phục vụ cho Multi-Agent RL.
+# Tổng số tài sản: 24 cổ phiếu thuộc 5 nhóm ngành + Chỉ số tham chiếu Benchmark (SPY).
+# ==============================================================================
+
+version: "1.0"
+
+benchmark:
+  ticker: "SPY"
+  name: "SPDR S&P 500 ETF Trust"
+  sector: "index"
+
+date_range:
+  start_date: "2015-01-01"
+  end_date: "2025-12-31"
+
+cash:
+  symbol: "CASH"
+  risk_free_rate_annual: 0.02  # Lãi suất phi rủi ro 2%/năm phục vụ tính Sharpe Ratio
+
+sectors:
+  technology:
+    name: "Technology"
+    description: "Phần mềm, phần cứng, bán dẫn và nền tảng số"
+  financials:
+    name: "Financials"
+    description: "Ngân hàng thương mại, ngân hàng đầu tư và dịch vụ tài chính"
+  healthcare:
+    name: "Healthcare"
+    description: "Dược phẩm, công nghệ sinh học và dịch vụ y tế"
+  energy:
+    name: "Energy"
+    description: "Khai thác, lọc hóa dầu và năng lượng truyền thống"
+  consumer:
+    name: "Consumer"
+    description: "Hàng tiêu dùng thiết yếu và hàng tiêu dùng không thiết yếu"
+
+assets:
+  # ----------------------------------------------------------------------------
+  # 1. TECHNOLOGY (6 cổ phiếu)
+  # ----------------------------------------------------------------------------
+  - ticker: "AAPL"
+    name: "Apple Inc."
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  - ticker: "MSFT"
+    name: "Microsoft Corporation"
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  - ticker: "NVDA"
+    name: "NVIDIA Corporation"
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  - ticker: "AMD"
+    name: "Advanced Micro Devices, Inc."
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  - ticker: "GOOGL"
+    name: "Alphabet Inc. (Class A)"
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  - ticker: "META"
+    name: "Meta Platforms, Inc."
+    sector: "technology"
+    exchange: "NASDAQ"
+
+  # ----------------------------------------------------------------------------
+  # 2. FINANCIALS (5 cổ phiếu)
+  # ----------------------------------------------------------------------------
+  - ticker: "JPM"
+    name: "JPMorgan Chase & Co."
+    sector: "financials"
+    exchange: "NYSE"
+
+  - ticker: "BAC"
+    name: "Bank of America Corporation"
+    sector: "financials"
+    exchange: "NYSE"
+
+  - ticker: "GS"
+    name: "The Goldman Sachs Group, Inc."
+    sector: "financials"
+    exchange: "NYSE"
+
+  - ticker: "MS"
+    name: "Morgan Stanley"
+    sector: "financials"
+    exchange: "NYSE"
+
+  - ticker: "WFC"
+    name: "Wells Fargo & Company"
+    sector: "financials"
+    exchange: "NYSE"
+
+  # ----------------------------------------------------------------------------
+  # 3. HEALTHCARE (5 cổ phiếu)
+  # ----------------------------------------------------------------------------
+  - ticker: "JNJ"
+    name: "Johnson & Johnson"
+    sector: "healthcare"
+    exchange: "NYSE"
+
+  - ticker: "PFE"
+    name: "Pfizer Inc."
+    sector: "healthcare"
+    exchange: "NYSE"
+
+  - ticker: "UNH"
+    name: "UnitedHealth Group Incorporated"
+    sector: "healthcare"
+    exchange: "NYSE"
+
+  - ticker: "ABBV"
+    name: "AbbVie Inc."
+    sector: "healthcare"
+    exchange: "NYSE"
+
+  - ticker: "LLY"
+    name: "Eli Lilly and Company"
+    sector: "healthcare"
+    exchange: "NYSE"
+
+  # ----------------------------------------------------------------------------
+  # 4. ENERGY (3 cổ phiếu)
+  # ----------------------------------------------------------------------------
+  - ticker: "XOM"
+    name: "Exxon Mobil Corporation"
+    sector: "energy"
+    exchange: "NYSE"
+
+  - ticker: "CVX"
+    name: "Chevron Corporation"
+    sector: "energy"
+    exchange: "NYSE"
+
+  - ticker: "COP"
+    name: "ConocoPhillips"
+    sector: "energy"
+    exchange: "NYSE"
+
+  # ----------------------------------------------------------------------------
+  # 5. CONSUMER (5 cổ phiếu)
+  # ----------------------------------------------------------------------------
+  - ticker: "AMZN"
+    name: "Amazon.com, Inc."
+    sector: "consumer"
+    exchange: "NASDAQ"
+
+  - ticker: "TSLA"
+    name: "Tesla, Inc."
+    sector: "consumer"
+    exchange: "NASDAQ"
+
+  - ticker: "WMT"
+    name: "Walmart Inc."
+    sector: "consumer"
+    exchange: "NYSE"
+
+  - ticker: "PG"
+    name: "The Procter & Gamble Company"
+    sector: "consumer"
+    exchange: "NYSE"
+
+  - ticker: "KO"
+    name: "The Coca-Cola Company"
+    sector: "consumer"
+    exchange: "NYSE"
+

@@ -1,0 +1,1063 @@
+H-MARL-GNN - PHÂN CÔNG CÔNG VIỆC THEO TỪNG TICKET
+Vai trò: Tech Lead / Research Lead
+Mục tiêu: Chia đồ án thành các ticket có dependency rõ ràng, mỗi ticket có mục tiêu, đầu ra và tiêu chí hoàn thành.
+
+======================================================================
+EPIC 0 — PROJECT FOUNDATION
+======================================================================
+
+TICKET SETUP-001 — Khởi tạo repository
+
+Priority: P0
+Estimate: 1–2 giờ
+Dependency: Không có
+
+Mục tiêu:
+Tạo skeleton chuẩn cho toàn bộ research project.
+
+Cấu trúc đề xuất:
+
+h-marl-gnn/
+├── configs/
+├── data/
+│   ├── raw/
+│   ├── interim/
+│   └── processed/
+├── src/
+│   ├── data/
+│   ├── features/
+│   ├── graph/
+│   ├── env/
+│   ├── models/
+│   ├── agents/
+│   ├── training/
+│   ├── evaluation/
+│   └── utils/
+├── tests/
+├── notebooks/
+├── experiments/
+├── scripts/
+├── requirements.txt
+├── .gitignore
+└── README.md
+
+Python:
+Python 3.11+
+
+Output:
+Project chạy được với:
+
+python -m pytest
+
+Acceptance Criteria:
+- Có virtual environment.
+- Có .gitignore.
+- Không commit dataset lớn.
+- Có README.md.
+- pytest chạy được.
+- Import được package từ src.
+
+
+======================================================================
+EPIC 1 — MARKET DATA PIPELINE
+======================================================================
+
+TICKET DATA-001 — Chọn universe cổ phiếu
+
+Priority: P0
+Dependency: SETUP-001
+
+Mục tiêu:
+Xác định danh sách asset cố định cho V1.
+
+Scope:
+Chọn khoảng 20–30 cổ phiếu Mỹ từ nhiều sector.
+
+Ví dụ:
+
+Technology:
+AAPL
+MSFT
+NVDA
+AMD
+GOOGL
+META
+
+Finance:
+JPM
+BAC
+GS
+MS
+
+Healthcare:
+JNJ
+PFE
+UNH
+
+Energy:
+XOM
+CVX
+
+Consumer:
+AMZN
+WMT
+KO
+MCD
+
+Industrial:
+CAT
+BA
+
+File cần tạo:
+configs/assets.yaml
+
+Ví dụ:
+
+assets:
+  - ticker: AAPL
+    sector: technology
+
+  - ticker: MSFT
+    sector: technology
+
+  - ticker: JPM
+    sector: finance
+
+Acceptance Criteria:
+- Ít nhất 20 tickers.
+- Có ít nhất 4 sectors.
+- Không hard-code danh sách asset trong source code.
+- Data pipeline đọc từ config.
+
+
+----------------------------------------------------------------------
+TICKET DATA-002 — Viết OHLCV Downloader
+----------------------------------------------------------------------
+
+Priority: P0
+Dependency: DATA-001
+
+Mục tiêu:
+Tải historical OHLCV tự động.
+
+File:
+src/data/downloader.py
+
+API mong muốn:
+
+download_market_data(
+    tickers,
+    start_date,
+    end_date,
+)
+
+Output từng asset:
+
+Date
+Open
+High
+Low
+Close
+Volume
+
+Lưu file:
+
+data/raw/AAPL.parquet
+data/raw/MSFT.parquet
+data/raw/NVDA.parquet
+...
+
+Khuyến nghị:
+Dùng Parquet cho pipeline chính.
+
+Requirements:
+Downloader phải xử lý:
+- network error
+- ticker không tồn tại
+- empty dataset
+- duplicate rows
+- invalid date range
+
+Acceptance Criteria:
+Chạy:
+
+python scripts/download_data.py
+
+phải tạo được dữ liệu cho toàn bộ assets.
+
+Không có duplicate:
+
+df.index.duplicated().sum() == 0
+
+Ngày phải tăng dần.
+
+
+----------------------------------------------------------------------
+TICKET DATA-003 — Data Validation
+----------------------------------------------------------------------
+
+Mục tiêu:
+Không để dữ liệu lỗi đi vào model.
+
+File:
+src/data/validator.py
+
+Kiểm tra:
+- Open > 0
+- High > 0
+- Low > 0
+- Close > 0
+- Volume >= 0
+- High >= Open
+- High >= Close
+- Low <= Open
+- Low <= Close
+- missing date
+- NaN
+- duplicate
+- inf
+- zero prices
+
+Output mẫu:
+
+AAPL:
+rows: 2516
+missing: 0
+duplicates: 0
+invalid_price_rows: 0
+status: PASS
+
+Acceptance Criteria:
+Dataset lỗi phải raise exception hoặc bị quarantine.
+
+
+----------------------------------------------------------------------
+TICKET DATA-004 — Đồng bộ trading dates
+----------------------------------------------------------------------
+
+Problem:
+GNN tại ngày t cần dữ liệu của các asset trên cùng timestamp.
+
+Ví dụ:
+
+AAPL(t)
+MSFT(t)
+NVDA(t)
+...
+
+Công việc:
+Tạo common trading calendar.
+
+Output:
+
+Date       AAPL   MSFT   NVDA
+2020-01-02 yes    yes    yes
+2020-01-03 yes    yes    yes
+
+Acceptance Criteria:
+
+len(AAPL) == len(MSFT) == len(NVDA)
+
+và toàn bộ cùng Date index.
+
+
+======================================================================
+EPIC 2 — FEATURE ENGINEERING
+======================================================================
+
+TICKET FEAT-001 — Daily Return
+
+Mục tiêu:
+Tính:
+
+r_t = (P_t - P_(t-1)) / P_(t-1)
+
+File:
+src/features/returns.py
+
+Output:
+Date
+Close
+Return
+
+Test:
+100 -> 102
+
+Expected:
+return = 0.02
+
+Acceptance Criteria:
+Unit test sai số < 1e-8.
+
+
+----------------------------------------------------------------------
+TICKET FEAT-002 — Rolling Volatility
+----------------------------------------------------------------------
+
+Mục tiêu:
+Tính 20-day volatility.
+
+Ví dụ:
+
+returns.rolling(20).std()
+
+Nếu annualized:
+
+sigma_annual = sigma_daily * sqrt(252)
+
+V1 chọn:
+daily rolling volatility cho input model.
+
+
+----------------------------------------------------------------------
+TICKET FEAT-003 — RSI
+----------------------------------------------------------------------
+
+Mục tiêu:
+Implement RSI-14 theo Wilder.
+
+File:
+src/features/rsi.py
+
+Input:
+Close
+
+Output:
+RSI_14
+
+Test cases:
+- Giá chỉ tăng: RSI gần 100
+- Giá chỉ giảm: RSI gần 0
+
+
+----------------------------------------------------------------------
+TICKET FEAT-004 — MACD
+----------------------------------------------------------------------
+
+Tính:
+
+EMA12
+EMA26
+
+MACD = EMA12 - EMA26
+Signal = EMA9(MACD)
+Histogram = MACD - Signal
+
+Output:
+MACD
+MACD_SIGNAL
+MACD_HIST
+
+
+----------------------------------------------------------------------
+TICKET FEAT-005 — Volume Normalization
+----------------------------------------------------------------------
+
+Không đưa raw volume trực tiếp vào neural network.
+
+Có thể dùng:
+- Volume / rolling_mean(volume)
+- log transformation
+
+Khuyến nghị:
+
+log_volume = log1p(volume)
+
+sau đó normalize theo train statistics.
+
+
+----------------------------------------------------------------------
+TICKET FEAT-006 — Feature Pipeline
+----------------------------------------------------------------------
+
+Gộp:
+
+OHLCV
+ ↓
+Return
+RSI
+MACD
+Volatility
+Normalized Volume
+
+Output cuối:
+
+Date
+Ticker
+Return
+Volatility
+RSI
+MACD
+MACD_SIGNAL
+VolumeNorm
+
+V1 không cần đưa raw price trực tiếp vào model.
+
+
+======================================================================
+EPIC 3 — TRAIN / VALIDATION / TEST
+======================================================================
+
+TICKET SPLIT-001 — Time-based Dataset Split
+
+Critical:
+Không dùng train_test_split(shuffle=True) cho financial time series.
+
+Ví dụ split:
+
+2015–2021 -> Train
+2022–2023 -> Validation
+2024–2025 -> Test
+
+Acceptance Criteria:
+
+max(train_date) < min(validation_date)
+
+max(validation_date) < min(test_date)
+
+
+----------------------------------------------------------------------
+TICKET SPLIT-002 — Feature Normalization
+----------------------------------------------------------------------
+
+Standardization:
+
+z = (x - mu) / sigma
+
+Critical:
+mu và sigma chỉ được tính từ TRAIN DATA.
+
+Pipeline:
+
+fit(train)
+
+transform(train)
+transform(validation)
+transform(test)
+
+Không được dùng test data để fit scaler.
+
+
+======================================================================
+EPIC 4 — PORTFOLIO BACKTESTER
+======================================================================
+
+TICKET ENV-001 — Portfolio State
+
+File:
+src/env/portfolio.py
+
+State:
+
+PortfolioState(
+    cash,
+    portfolio_value,
+    weights,
+    peak_value,
+)
+
+Ví dụ:
+
+Cash            = $10,000
+Portfolio Value = $100,000
+
+AAPL = 0.2
+MSFT = 0.3
+NVDA = 0.4
+Cash = 0.1
+
+
+----------------------------------------------------------------------
+TICKET ENV-002 — Portfolio Return Engine
+----------------------------------------------------------------------
+
+Input:
+weights(t)
+asset returns(t+1)
+
+Tính:
+
+R_p = SUM_i w_i * r_i
+
+Unit test:
+
+AAPL weight = 0.5
+MSFT weight = 0.5
+
+AAPL return = +10%
+MSFT return = -10%
+
+Expected:
+portfolio return = 0%
+
+
+----------------------------------------------------------------------
+TICKET ENV-003 — Transaction Cost
+----------------------------------------------------------------------
+
+Implement:
+
+Turnover_t = SUM_i |w_(i,t) - w_(i,t-1)|
+
+TC_t = c * Turnover_t * V_t
+
+Config:
+
+transaction_cost_rate: 0.001
+
+Không hard-code.
+
+
+----------------------------------------------------------------------
+TICKET ENV-004 — Drawdown Tracker
+----------------------------------------------------------------------
+
+Tính:
+Peak(t)
+Drawdown(t)
+Maximum Drawdown
+
+Formula:
+
+DD_t = (V_t - Peak_t) / Peak_t
+
+
+----------------------------------------------------------------------
+TICKET ENV-005 — Risk Calculator
+----------------------------------------------------------------------
+
+V1 sử dụng rolling portfolio volatility.
+
+Sau này có thể thêm covariance risk.
+
+
+----------------------------------------------------------------------
+TICKET ENV-006 — Reward Function V1
+----------------------------------------------------------------------
+
+Bắt đầu đơn giản:
+
+Reward_t = R_portfolio,t - beta * TC_t
+
+Sau khi model chạy ổn mới thêm:
+
+- lambda * Risk_t
+
+Không nhét quá nhiều penalty từ đầu.
+
+
+======================================================================
+EPIC 5 — BASELINES
+======================================================================
+
+TICKET BASE-001 — Cash Baseline
+
+Portfolio:
+Cash = 100%
+
+Mục đích:
+Sanity check.
+
+
+----------------------------------------------------------------------
+TICKET BASE-002 — Equal Weight Portfolio
+----------------------------------------------------------------------
+
+Nếu 20 stocks:
+
+w_i = 1 / 20 = 5%
+
+Backtest toàn test period.
+
+Output:
+- Cumulative Return
+- Sharpe
+- MDD
+- Calmar
+- Turnover
+
+
+----------------------------------------------------------------------
+TICKET BASE-003 — Buy and Hold
+----------------------------------------------------------------------
+
+Chia vốn đầu kỳ rồi không rebalance.
+
+So sánh với Equal Weight Rebalance.
+
+
+----------------------------------------------------------------------
+TICKET BASE-004 — Single-Agent PPO
+----------------------------------------------------------------------
+
+Đây là RL đầu tiên.
+
+Input:
+- market features
+- portfolio state
+
+Output:
+- portfolio weights
+
+Không có GNN.
+Không có MARL.
+
+Mục tiêu:
+Chứng minh Environment + RL hoạt động trước.
+
+
+======================================================================
+EPIC 6 — GRAPH NEURAL NETWORK
+======================================================================
+
+TICKET GRAPH-001 — Correlation Matrix
+
+Tính rolling correlation.
+
+Ví dụ:
+window = 60 trading days
+
+Output:
+
+        AAPL MSFT NVDA AMD
+AAPL    1    .72  .54  .41
+MSFT   .72   1    .49  .38
+
+
+----------------------------------------------------------------------
+TICKET GRAPH-002 — Correlation Graph
+----------------------------------------------------------------------
+
+Rule V1:
+
+abs(correlation) >= threshold
+
+Ví dụ:
+
+correlation_threshold: 0.6
+
+Tạo:
+- edge_index
+- edge_weight
+
+
+----------------------------------------------------------------------
+TICKET GRAPH-003 — Sector Graph
+----------------------------------------------------------------------
+
+Ví dụ:
+
+AAPL -> Technology
+MSFT -> Technology
+
+Thì thêm edge type:
+same_sector
+
+
+----------------------------------------------------------------------
+TICKET GRAPH-004 — Dynamic Graph Builder
+----------------------------------------------------------------------
+
+Graph tại t=100 không nhất thiết giống t=200.
+
+Tính rolling correlation chỉ bằng dữ liệu <= t.
+
+Không được dùng dữ liệu tương lai.
+
+
+----------------------------------------------------------------------
+TICKET GNN-001 — Basic Graph Encoder
+----------------------------------------------------------------------
+
+Implement GCN trước.
+
+Input:
+
+[N assets, F features]
+
+Output:
+
+[N assets, embedding_dim]
+
+Ví dụ:
+
+[20, 6]
+  ↓ GCN
+[20, 32]
+
+
+----------------------------------------------------------------------
+TICKET GNN-002 — GAT Encoder
+----------------------------------------------------------------------
+
+Sau GCN mới implement GAT.
+
+So sánh:
+GCN vs GAT
+
+Không assume GAT chắc chắn tốt hơn.
+
+
+======================================================================
+EPIC 7 — MULTI-AGENT RL
+======================================================================
+
+TICKET MARL-001 — Định nghĩa agent boundaries
+
+V1 chia theo sector:
+
+Tech Agent
+Finance Agent
+Energy Agent
+Healthcare Agent
+Consumer Agent
+
+Không tạo một agent cho mỗi cổ phiếu ở V1.
+
+
+----------------------------------------------------------------------
+TICKET MARL-002 — Low-Level Agent Observation
+----------------------------------------------------------------------
+
+Ví dụ Tech Agent nhận:
+- AAPL embedding
+- MSFT embedding
+- NVDA embedding
+- AMD embedding
+- sector budget
+- portfolio state
+
+
+----------------------------------------------------------------------
+TICKET MARL-003 — Low-Level Action
+----------------------------------------------------------------------
+
+Ví dụ Tech Agent output:
+
+AAPL = 30%
+MSFT = 25%
+NVDA = 25%
+AMD  = 20%
+
+Đây là weight bên trong sector.
+
+SUM_i w_i = 1
+
+
+----------------------------------------------------------------------
+TICKET MARL-004 — Multi-Agent Environment
+----------------------------------------------------------------------
+
+Environment phải kết hợp:
+
+sector allocations
+       ↓
+global portfolio weights
+
+
+======================================================================
+EPIC 8 — HIERARCHICAL MARL
+======================================================================
+
+TICKET HMARL-001 — High-Level Agent
+
+High-level observation:
+- market graph embedding
+- sector state
+- portfolio state
+- risk
+
+Output:
+
+Technology = 35%
+Finance = 25%
+Healthcare = 20%
+Energy = 10%
+Cash = 10%
+
+
+----------------------------------------------------------------------
+TICKET HMARL-002 — Hierarchical Allocation
+----------------------------------------------------------------------
+
+Ví dụ High-level:
+
+Technology = 40%
+
+Low-level Tech:
+
+AAPL = 30%
+MSFT = 30%
+NVDA = 25%
+AMD  = 15%
+
+Final:
+
+AAPL = 0.4 * 0.30 = 12%
+MSFT = 0.4 * 0.30 = 12%
+NVDA = 0.4 * 0.25 = 10%
+AMD  = 0.4 * 0.15 = 6%
+
+
+----------------------------------------------------------------------
+TICKET HMARL-003 — Cross-Agent Communication
+----------------------------------------------------------------------
+
+Sử dụng graph representation để low-level agents chia sẻ information.
+
+Chỉ implement khi:
+- Single Agent chạy ổn
+- Graph chạy ổn
+- MARL chạy ổn
+- Hierarchical chạy ổn
+
+
+======================================================================
+EPIC 9 — EXPERIMENT & RESEARCH
+======================================================================
+
+TICKET EXP-001 — Evaluation Metrics
+
+Implement:
+- Cumulative Return
+- Annualized Return
+- Volatility
+- Sharpe Ratio
+- Maximum Drawdown
+- Calmar Ratio
+- Turnover
+
+
+----------------------------------------------------------------------
+TICKET EXP-002 — Experiment Runner
+----------------------------------------------------------------------
+
+Ví dụ:
+
+python scripts/train.py --model h_marl_gat --seed 42
+
+Experiment config:
+
+model: h_marl_gat
+
+seed: 42
+
+graph:
+  type: correlation
+  threshold: 0.6
+
+training:
+  learning_rate: 0.0003
+
+environment:
+  transaction_cost: 0.001
+
+
+----------------------------------------------------------------------
+TICKET EXP-003 — Multiple Seeds
+----------------------------------------------------------------------
+
+RL có variance cao.
+
+Không chỉ chạy 1 seed.
+
+Khuyến nghị:
+42
+123
+456
+789
+2026
+
+Báo cáo:
+mean ± std
+
+
+----------------------------------------------------------------------
+TICKET EXP-004 — Main Baseline Comparison
+----------------------------------------------------------------------
+
+So sánh:
+
+Equal Weight
+Buy & Hold
+Single-Agent PPO
+MARL
+H-MARL
+H-MARL + GCN
+H-MARL + GAT
+
+
+----------------------------------------------------------------------
+TICKET EXP-005 — Ablation: Graph
+----------------------------------------------------------------------
+
+So sánh:
+
+No Graph
+Static Graph
+Dynamic Graph
+
+
+----------------------------------------------------------------------
+TICKET EXP-006 — Ablation: Indicators
+----------------------------------------------------------------------
+
+So sánh:
+
+Return + Volume
+
+vs
+
+Return + Volume + RSI + MACD + Volatility
+
+
+----------------------------------------------------------------------
+TICKET EXP-007 — Ablation: Hierarchy
+----------------------------------------------------------------------
+
+So sánh:
+
+Single Agent
+MARL
+Hierarchical MARL
+
+
+----------------------------------------------------------------------
+TICKET EXP-008 — Market Regime Analysis
+----------------------------------------------------------------------
+
+Chia test theo:
+- bull
+- bear
+- high volatility
+- sideways
+
+Xem model nào robust hơn.
+
+
+======================================================================
+THỨ TỰ THỰC HIỆN
+======================================================================
+
+SETUP-001
+   ↓
+DATA-001
+   ↓
+DATA-002
+   ↓
+DATA-003
+   ↓
+DATA-004
+   ↓
+FEAT-001
+   ↓
+FEAT-002
+   ↓
+FEAT-003
+   ↓
+FEAT-004
+   ↓
+FEAT-005
+   ↓
+FEAT-006
+   ↓
+SPLIT-001
+   ↓
+SPLIT-002
+   ↓
+ENV-001 -> ENV-006
+   ↓
+BASE-001 -> BASE-004
+   ↓
+GRAPH-001 -> GRAPH-004
+   ↓
+GNN-001 -> GNN-002
+   ↓
+MARL-001 -> MARL-004
+   ↓
+HMARL-001 -> HMARL-003
+   ↓
+EXP-001 -> EXP-008
+
+
+======================================================================
+SPRINT 1 — DATA FOUNDATION
+======================================================================
+
+Sprint 1 chỉ làm Data Foundation.
+
+Chưa làm:
+- RSI nâng cao ngoài phạm vi ticket
+- GNN
+- RL
+- MARL
+
+Các ticket:
+
+SETUP-001
+Khởi tạo project.
+Deliverable: repo skeleton.
+
+DATA-001
+Chọn 20–30 stocks.
+Deliverable: assets.yaml.
+
+DATA-002
+Download OHLCV.
+Deliverable: raw Parquet.
+
+DATA-003
+Validate data.
+Deliverable: validator + tests.
+
+DATA-004
+Align trading dates.
+Deliverable: synchronized dataset.
+
+
+Definition of Done của Sprint 1:
+
+Chạy:
+
+python scripts/download_data.py
+
+Pipeline phải thực hiện:
+
+Load assets.yaml
+     ↓
+Download OHLCV
+     ↓
+Validate
+     ↓
+Align trading dates
+     ↓
+Save dataset
+
+Output mong muốn:
+
+Assets loaded:       24
+Period:              2015-01-01 -> 2025-12-31
+Trading days:        2768
+
+Missing values:      0
+Duplicate rows:      0
+Invalid OHLCV rows:  0
+
+Dataset status: PASS
+
+
+======================================================================
+TICKET BẮT ĐẦU
+======================================================================
+
+Ticket đầu tiên cần làm:
+
+SETUP-001 — Khởi tạo repository
+
+Sau khi hoàn thành ticket, thực hiện review theo trạng thái:
+
+PASS
+hoặc
+NEED CHANGES
+
+Chỉ chuyển sang DATA-001 khi SETUP-001 đạt Definition of Done.

@@ -1,0 +1,201 @@
+======================================================================
+EPIC 0: PROJECT FOUNDATION (KHỞI TẠO NỀN TẢNG DỰ ÁN)
+Đề tài: H-MARL-GNN — Hierarchical Multi-Agent RL with Dynamic GNN
+Mã Ticket: SETUP-001
+Trạng thái: READY TO EXECUTE
+======================================================================
+
+I. MỤC TIÊU CỦA EPIC 0
+----------------------------------------------------------------------
+Thiết lập bộ khung (skeleton) tiêu chuẩn cho toàn bộ dự án nghiên cứu,
+đảm bảo:
+1. Cấu trúc thư mục module hóa rõ ràng, dễ bảo trì và mở rộng.
+2. Môi trường phát triển nhất quán (Virtual Environment & Dependencies).
+3. Cho phép import trực tiếp các module nội bộ từ thư mục `src/`.
+4. Không commit dữ liệu lớn, mã nhị phân hay file rác vào Git.
+5. Kiểm thử tự động (pytest) hoạt động tốt ngay từ ngày đầu tiên.
+
+
+II. CHI TIẾT CÁC CÔNG VIỆC CẦN LÀM (STEP-BY-STEP TASKS)
+----------------------------------------------------------------------
+
+[TASK 0.1] Khởi tạo cấu trúc thư mục chuẩn
+--------------------------------------------------
+Tạo cây thư mục phân cấp theo chuẩn dự án nghiên cứu định lượng (Quantitative Research):
+
+h-marl-gnn/ (Thư mục gốc dự án)
+├── configs/                # Chứa file cấu hình YAML (assets, model, hyperparams)
+├── data/
+│   ├── raw/                # Dữ liệu thô tải từ Yahoo Finance (CSV/Parquet)
+│   ├── interim/            # Dữ liệu trung gian sau khi làm sạch/đồng bộ ngày
+│   └── processed/          # Dữ liệu cuối cùng kèm các chỉ báo kỹ thuật
+├── src/                    # Mã nguồn chính của dự án
+│   ├── __init__.py
+│   ├── data/               # Module tải, làm sạch và xác thực dữ liệu
+│   │   └── __init__.py
+│   ├── features/           # Module tính Return, Volatility, RSI, MACD...
+│   │   └── __init__.py
+│   ├── graph/              # Module xây dựng Dynamic Graph & Correlation
+│   │   └── __init__.py
+│   ├── env/                # Trading Environment (Gymnasium), Transaction Cost, Risk
+│   │   └── __init__.py
+│   ├── models/             # GNN / GAT Encoders
+│   │   └── __init__.py
+│   ├── agents/             # High-Level Agent & Low-Level Sector Agents
+│   │   └── __init__.py
+│   ├── training/           # Pipeline huấn luyện MARL & GNN
+│   │   └── __init__.py
+│   ├── evaluation/         # Backtester, Sharpe, MDD, Turnover, Metrics
+│   │   └── __init__.py
+│   └── utils/              # Các hàm tiện ích (logging, seed, visualization)
+│       └── __init__.py
+├── tests/                  # Bộ unit test và integration test
+│   ├── __init__.py
+│   └── test_setup.py       # Test kiểm tra môi trường và import
+├── notebooks/              # Jupyter notebooks phục vụ EDA và thử nghiệm nhanh
+├── experiments/            # Lưu log thí nghiệm, TensorBoard, model checkpoints
+├── scripts/                # Các script chạy độc lập (download_data.py, train.py...)
+├── requirements.txt        # Danh sách thư viện Python cần thiết
+├── pyproject.toml          # Cấu hình cài đặt package nội bộ (editable mode)
+├── .gitignore              # Loại trừ file rác và dữ liệu lớn
+└── README.md               # Tài liệu hướng dẫn cài đặt và vận hành
+
+
+[TASK 0.2] Xây dựng file quản lý thư viện (requirements.txt)
+--------------------------------------------------
+Liệt kê chính xác các thư viện cần thiết phục vụ cho cả đề tài:
+- Xử lý dữ liệu: numpy, pandas, pyarrow, yfinance
+- Học máy & Đồ thị: torch, torchvision, torchaudio, torch-geometric
+- Học tăng cường: gymnasium, stable-baselines3
+- Cấu hình & Tiện ích: pyyaml, tqdm, matplotlib, seaborn, scipy, scikit-learn
+- Kiểm thử: pytest
+
+
+[TASK 0.3] Cấu hình kiểm soát phiên bản (.gitignore)
+--------------------------------------------------
+Đảm bảo Git không bị phình to hoặc rò rỉ dữ liệu nhạy cảm:
+- Môi trường ảo: `.venv/`, `venv/`, `env/`
+- Bytecode Python: `__pycache__/`, `*.py[cod]`
+- Dữ liệu tài chính: `data/raw/*`, `data/interim/*`, `data/processed/*`, `*.parquet`, `*.csv` (ngoại trừ .gitkeep)
+- Checkpoints & Log: `experiments/*`, `runs/`, `*.pt`, `*.pth`
+- File tạm của hệ điều hành & IDE: `.vscode/`, `.idea/`, `.DS_Store`
+- Cache kiểm thử: `.pytest_cache/`
+
+
+[TASK 0.4] Cấu hình cài đặt module nội bộ (pyproject.toml)
+--------------------------------------------------
+Tạo file `pyproject.toml` để biến thư mục `src/` thành một package có thể import được ở bất kỳ đâu thông qua lệnh:
+    pip install -e .
+Sau khi cài đặt, các script trong `tests/` hoặc `scripts/` có thể gọi:
+    from src.data.downloader import download_market_data
+    from src.env.portfolio import PortfolioState
+mà không bao giờ bị lỗi `ModuleNotFoundError` hay phải dùng mẹo `sys.path.append()`.
+
+
+[TASK 0.5] Soạn thảo tài liệu khởi tạo (README.md)
+--------------------------------------------------
+Tài liệu hướng dẫn gồm các mục:
+1. Giới thiệu tên đề tài: H-MARL-GNN.
+2. Yêu cầu môi trường (Python 3.10+).
+3. Hướng dẫn từng bước:
+   - Tạo venv và kích hoạt.
+   - Cài đặt requirements.
+   - Cài đặt package editable (`pip install -e .`).
+   - Chạy lệnh test (`python -m pytest`).
+4. Bảng mô tả cấu trúc thư mục.
+
+
+[TASK 0.6] Viết bài test kiểm tra nền tảng (tests/test_setup.py)
+--------------------------------------------------
+Viết các unit test cơ bản để xác nhận hệ thống sẵn sàng:
+1. `test_python_version()`: Đảm bảo Python >= 3.10.
+2. `test_imports()`: Import thử `torch`, `pandas`, `numpy`, `gymnasium`.
+3. `test_src_package()`: Import thử `src` thành công.
+4. `test_directory_structure()`: Kiểm tra các thư mục cốt lõi đã tồn tại.
+
+
+III. TIÊU CHÍ NGHIỆM THU (ACCEPTANCE CRITERIA)
+----------------------------------------------------------------------
+Epic 0 chỉ được coi là HOÀN THÀNH khi thỏa mãn toàn bộ các điều kiện:
+
+[ ] 1. Môi trường ảo `.venv` đã được tạo và kích hoạt.
+[ ] 2. Đã cài đặt đầy đủ các package trong `requirements.txt`.
+[ ] 3. Đã chạy lệnh `pip install -e .` thành công.
+[ ] 4. Lệnh kiểm thử `python -m pytest` chạy thành công (100% tests PASSED).
+[ ] 5. Lệnh `python -c "import src; print('Setup Success!')"` in ra kết quả.
+[ ] 6. File `.gitignore` hoạt động chuẩn, `git status` không hiển thị các file trong `data/raw/` hay `.venv`.
+[ ] 7. Đã có file `README.md` mô tả dự án.
+
+
+IV. LỆNH THỰC HIỆN NHANH (QUICK-RUN SCRIPT)
+----------------------------------------------------------------------
+Các lệnh bash để thực hiện Epic 0:
+
+# 1. Tạo thư mục
+mkdir -p configs data/raw data/interim data/processed
+mkdir -p src/{data,features,graph,env,models,agents,training,evaluation,utils}
+mkdir -p tests notebooks experiments scripts
+
+# 2. Tạo __init__.py
+touch src/__init__.py
+touch src/{data,features,graph,env,models,agents,training,evaluation,utils}/__init__.py
+touch tests/__init__.py
+
+# 3. Giữ thư mục data trên git
+touch data/raw/.gitkeep data/interim/.gitkeep data/processed/.gitkeep
+
+# 4. Kiểm thử
+pytest
+
+======================================================================
+KẾT THÚC EPIC 0 — SẴN SÀNG CHUYỂN SANG EPIC 1 (MARKET DATA PIPELINE)
+======================================================================
+
+
+======================================================================
+V. BÁO CÁO THỰC THI & KẾT QUẢ CÁC BƯỚC ĐÃ THÀNH CÔNG
+Trạng thái: ĐÃ HOÀN THÀNH TOÀN BỘ (100% SUCCESS)
+Ngày hoàn thành: 2026-09-09
+======================================================================
+
+1. [THÀNH CÔNG] Tạo khung cấu trúc thư mục chuẩn:
+   - Đã tạo: configs/, data/{raw, interim, processed},
+     src/{data, features, graph, env, models, agents, training, evaluation, utils},
+     tests/, notebooks/, experiments/, scripts/.
+   - Đã tạo toàn bộ file __init__.py trong các sub-packages của src/ và tests/.
+   - Đã thêm .gitkeep vào data/raw/, data/interim/, data/processed/, configs/,
+     notebooks/, experiments/, scripts/.
+
+2. [THÀNH CÔNG] Tạo file cấu hình thư viện (requirements.txt):
+   - Đã khai báo đầy đủ các nhóm thư viện cốt lõi:
+     + Dữ liệu: numpy, pandas, pyarrow, yfinance
+     + Học máy & Đồ thị: torch
+     + Học tăng cường: gymnasium, stable-baselines3
+     + Khoa học & Tiện ích: scipy, scikit-learn, matplotlib, seaborn, pyyaml, tqdm
+     + Kiểm thử: pytest
+
+3. [THÀNH CÔNG] Cấu hình kiểm soát phiên bản (.gitignore):
+   - Đã chặn môi trường ảo (.venv/), file bytecode (__pycache__/, *.pyc).
+   - Đã chặn toàn bộ file dữ liệu lớn (*.parquet, *.csv) và log/checkpoints (experiments/*).
+   - Đã khởi tạo Git repository (git init) và xác nhận git status sạch sẽ.
+
+4. [THÀNH CÔNG] Cấu hình đóng gói nội bộ (pyproject.toml):
+   - Đã tạo file pyproject.toml với build-system setuptools và cấu hình package discovery.
+   - Đã thiết lập đường dẫn editable thông qua file .pth trong virtual environment (.venv).
+   - Xác thực: Lệnh python -c "import src" hoạt động thành công từ bất kỳ vị trí nào.
+
+5. [THÀNH CÔNG] Soạn thảo tài liệu dự án (README.md):
+   - Đã mô tả tổng quan đề tài H-MARL-GNN.
+   - Đã cung cấp sơ đồ cây thư mục chi tiết.
+   - Đã cung cấp hướng dẫn cài đặt và chạy kiểm thử tự động.
+
+6. [THÀNH CÔNG] Xây dựng và thực thi bộ kiểm thử nền tảng (tests/test_setup.py):
+   - Đã viết 4 test cases kiểm thử:
+     * test_python_version: Kiểm tra Python >= 3.10 (Hệ thống: Python 3.12.3 -> PASS)
+     * test_src_package_import: Kiểm tra import toàn bộ các module con trong src -> PASS
+     * test_directory_structure: Kiểm tra sự tồn tại của 9 thư mục cốt lõi -> PASS
+     * test_core_dependencies: Kiểm tra import pandas, numpy, yfinance -> PASS
+   - Kết quả chạy thực tế:
+     ----------------------------------------------------------------------
+     Ran 4 tests in 0.413s
+     OK (4/4 tests PASSED, 0 failures, 0 errors)
