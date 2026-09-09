@@ -8,6 +8,11 @@
 > - Thành viên A hiểu môi trường rất sâu nhưng không giải thích được cơ chế GAT hay thuật toán MARL.
 > - Thành viên B hiểu mô hình nhưng không nắm chắc giả định tài chính, rủi ro hay logic tránh rò rỉ dữ liệu (Data Leakage).
 >
+> ⚖️ **Phân định đóng góp khoa học (Scientific Contributions):**
+> - **Thành viên A** chịu trách nhiệm chính cho **Financial RL & Hierarchical Allocation Contribution** (Trading Environment, Reward Formulation, PPO Baseline, High-Level Macro Policy, Backtesting Framework).
+> - **Thành viên B** chịu trách nhiệm chính cho **Graph-learning Contribution** (Dynamic Financial Graph, GCN/GAT, Low-Level Sector Agents, Graph Communication).
+> - Cả hai thành viên **đồng sở hữu Overall Scientific Contribution** của đề tài. Khi bảo vệ đồ án và phỏng vấn tuyển dụng, cả hai đều có câu chuyện AI độc lập, sâu sắc và thuyết phục.
+>
 > Giải pháp chuẩn xác nhất: **Mô hình 70/30 (Primary Owner + Secondary Learner)**.
 
 ```text

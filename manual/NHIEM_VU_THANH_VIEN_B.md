@@ -7,7 +7,10 @@ _(DYNAMIC GRAPH + GNN/GAT + PPO BASELINE + LOW-LEVEL SECTOR MARL + GAT COMMUNICA
 > **Mô tả vai trò:**
 > Bạn là người chịu trách nhiệm về phần **trí tuệ nhân tạo đồ thị và hệ thống đa tác tử**: xây dựng **Đồ thị tài chính động (Dynamic Financial Graph)**, mạng **GCN/GAT** để trích xuất embedding, cùng A làm chủ thuật toán **PPO**, phát triển **Low-Level Sector Agents** và **Cơ chế giao tiếp liên tác tử qua Graph Attention (GAT Communication)**.
 >
-> Đóng góp học thuật (Scientific Novelty) của đề tài về việc biểu diễn quan hệ tài chính và cho các agent giao tiếp bằng đồ thị nằm ở các module do bạn phụ trách.
+> ⚖️ **Phân định đóng góp khoa học (Scientific Contributions):**
+> - **Thành viên B** chịu trách nhiệm chính cho **Graph-learning Contribution** (Dynamic Financial Graph, GCN/GAT, Low-Level Sector Agents, Graph Communication).
+> - **Thành viên A** chịu trách nhiệm chính cho **Financial RL & Hierarchical Allocation Contribution** (Trading Environment, Reward Formulation, PPO Baseline, High-Level Macro Policy, Backtesting Framework).
+> - Cả hai thành viên **đồng sở hữu Overall Scientific Contribution** của đề tài. Khi bảo vệ đồ án và phỏng vấn, mỗi thành viên đều có câu chuyện AI độc lập, sâu sắc và thuyết phục: B đại diện cho **Graph Representation Learning & Multi-Agent Coordination**, A đại diện cho **Financial RL & Hierarchical Decision Systems**.
 >
 > 📖 **Quy chế 70/30 & Lộ trình 5 Level học AI:** Xem chi tiết tại [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md).
 > 🤝 **Bảng điều phối chung với A:** Xem tại [BANG_DIEU_PHOI_2_NGUOI.md](file:///home/tuan/AI/AI_roject1/manual/BANG_DIEU_PHOI_2_NGUOI.md).
@@ -36,9 +39,9 @@ src/
 
 ## 2. Phân tầng Scope cá nhân & 3 Mốc Dừng
 
-- **🎯 MỐC A (Hoàn thành — Đủ điều kiện bảo vệ):** Hoàn thành toàn bộ các ticket đánh dấu `[CORE]` từ Sprint 1 đến Sprint 10 (Correlation Graph, Dynamic Graph, GCN Encoder, Single-Agent PPO cùng A, Low-Level Sector Agents, H-MARL Training Loop cùng A, Backtest & Ablation).
-- **🏆 MỐC B (Xuất sắc — Mục tiêu điểm tối đa):** Hoàn thành thêm các module nâng cao: GAT Encoder (`GNN-003`), Dynamic GNN training (`GNN-004`), GCN vs GAT Ablation (`EXP-008`), 5 Random Seeds (`EXP-003`), Phân tích 3 chế độ thị trường (`EXP-010`), Model Registry (`RESEARCH-003`).
-- **🚀 MỐC C (Nghiên cứu mở rộng Paper — Còn thời gian mới làm):** Khai phá đồ thị tri thức không đồng nhất toàn diện: Heterogeneous Graph V2 (`ADV-GRAPH-001`), Quan hệ chuỗi cung ứng (`ADV-GRAPH-002`), Sở hữu tổ chức (`ADV-GRAPH-003`), Macro/Sector nodes (`ADV-GRAPH-004`), Hetero-GNN/Hetero-GAT (`ADV-GNN-001`), Cross-Agent GAT Communication (`HMARL-005`), và Advanced Graph Ablation (`ADV-EXP-001`).
+- **🎯 MỐC A (Đủ hoàn thành / Bảo vệ tốt):** Hoàn thành toàn bộ các ticket đánh dấu `[CORE]` từ Sprint 1 đến Sprint 10 (Correlation Graph, Dynamic Graph, GCN Encoder, Single-Agent PPO cùng A, Low-Level Sector Agents, H-MARL Training Loop cùng A, Backtest & Ablation). Đủ điều kiện hoàn thành và bảo vệ tốt đồ án.
+- **🏆 MỐC B (Mục tiêu Xuất sắc):** Hoàn thành thêm các module nâng cao: GAT Encoder (`GNN-003`), Multi-relation Graph V1 (`GRAPH-005`), Dynamic GNN training (`GNN-004`), GCN vs GAT Ablation (`EXP-008`), 5 Random Seeds (`EXP-003`), Phân tích 3 chế độ thị trường (`EXP-010`), Model Registry (`RESEARCH-003`).
+- **🚀 MỐC C (Research Extension — Mở rộng nghiên cứu Paper):** Khai phá đồ thị tri thức không đồng nhất toàn diện: True Advanced Heterogeneous Graph (`ADV-GRAPH-001..004`: Supply-chain, Ownership, Macro nodes), Hetero-GNN/Hetero-GAT (`ADV-GNN-001`), Cross-Agent GAT Communication (`HMARL-005`), và Advanced Graph Ablation (`ADV-EXP-001`).
 
 ---
 
@@ -103,9 +106,11 @@ _Mục tiêu: Đồ thị tài chính thay đổi linh hoạt theo từng ngày 
   - _Tệp cần tạo:_ `src/graph/dynamic_graph.py`
   - _Nội dung:_ Với mỗi bước thời gian $t$, module trả về đồ thị tài chính tương ứng của ngày hôm đó: `Graph_t = (Nodes_t, Edges_t)`.
 
-- [ ] **[GRAPH-005] Đồ thị không đồng nhất Heterogeneous Graph V1 (P1)**
-  - _Tệp cần tạo:_ `src/graph/hetero_graph.py`
-  - _Nội dung:_ Tích hợp 2 loại quan hệ trên cùng một đồ thị: Cạnh tương quan giá (`correlation`) và cạnh cùng sector (`same_sector`).
+- [ ] **[GRAPH-005] Đồ thị đa quan hệ Multi-relation Graph V1 (P1) `[MỐC B]`**
+  - _Tệp cần tạo:_ `src/graph/multi_relation_graph.py` (hoặc `hetero_graph.py`)
+  - _Nội dung:_ Tích hợp 2 loại quan hệ trên cùng một đồ thị: Cạnh tương quan giá (`correlation`) và cạnh cùng ngành (`same_sector`).
+  - _Lưu ý học thuật:_ Đây là **Multi-relation Graph V1** ở mức cơ bản, đóng vai trò bước đệm trước khi mở rộng lên Đồ thị không đồng nhất hoàn chỉnh (**True Advanced Heterogeneous Graph** ở Mốc C). Tránh gọi nhầm V1 là đồ thị tri thức hoàn chỉnh trong báo cáo khoa học.
+
 
 ---
 
@@ -269,9 +274,10 @@ _Mục tiêu: Hoàn thiện báo cáo khoa học và đóng gói source code._
 
 > **Lưu ý:** Đây là các module nghiên cứu chuyên sâu hướng tới xuất bản bài báo khoa học (Paper track). Chỉ bắt đầu khi đã hoàn thành vững chắc **Mốc A** và **Mốc B**.
 
-- [ ] **[ADV-GRAPH-001] Xây dựng Heterogeneous Graph V2 (P2)**
+- [ ] **[ADV-GRAPH-001] Xây dựng True Advanced Heterogeneous Graph (P2)**
   - _Tệp cần tạo:_ `src/graph/hetero_v2.py`
-  - _Nội dung:_ Tích hợp đa dạng các loại cạnh và node khác nhau vào một đồ thị không đồng nhất hoàn chỉnh: node cổ phiếu, node chỉ số vĩ mô, cạnh tương quan động, cạnh cùng ngành, cạnh chuỗi cung ứng, cạnh đồng sở hữu.
+  - _Nội dung:_ Tích hợp toàn diện các loại node và quan hệ phức tạp thành đồ thị tri thức tài chính thực thụ: Company + Sector + Institution + Macro + Supply-Chain. Khác biệt rõ rệt với Multi-relation Graph V1 ở Mốc B (chỉ gồm correlation + sector).
+
 
 - [ ] **[ADV-GRAPH-002] Tích hợp quan hệ Chuỗi cung ứng (Supply-Chain Relationships) (P2)**
   - _Tệp cần tạo:_ `src/graph/supply_chain.py`, `data/raw/supply_chain.json`

@@ -7,7 +7,12 @@ _(DATA + ENVIRONMENT + PPO BASELINE + HIGH-LEVEL MACRO AGENT + EVALUATION)_
 > **Mô tả vai trò:**
 > Bạn chịu trách nhiệm về toàn bộ chuỗi giá trị cốt lõi: **Data $\rightarrow$ Environment $\rightarrow$ Single-Agent PPO $\rightarrow$ High-Level Macro Agent $\rightarrow$ Backtest**.
 >
-> Bạn không phải là người chuẩn bị dữ liệu đơn thuần, mà là một **Quant AI Engineer** thực thụ: nắm vững cách thị trường vận hành, mô phỏng môi trường giao dịch thực tế, làm chủ thuật toán PPO và huấn luyện Agent vĩ mô phân bổ vốn vào các nhóm ngành. Khi bảo vệ đồ án, bạn có thể tự tin thuyết trình từ A đến Z toàn bộ hệ thống.
+> Bạn không phải là người chuẩn bị dữ liệu đơn thuần, mà là một **Quant AI Engineer** thực thụ: nắm vững cách thị trường vận hành, mô phỏng môi trường giao dịch thực tế, xây dựng cơ chế phần thưởng (Reward Formulation), làm chủ thuật toán PPO và huấn luyện Agent vĩ mô phân bổ vốn vào các nhóm ngành. Khi bảo vệ đồ án và phỏng vấn, bạn có câu chuyện AI trọn vẹn và độc lập về **Financial RL & Hierarchical Decision Systems**.
+>
+> ⚖️ **Phân định đóng góp khoa học (Scientific Contributions):**
+> - **Thành viên A** chịu trách nhiệm chính cho **Financial RL & Hierarchical Allocation Contribution** (Trading Environment, Reward Formulation, PPO Baseline, High-Level Macro Policy, Backtesting Framework).
+> - **Thành viên B** chịu trách nhiệm chính cho **Graph-learning Contribution** (Dynamic Financial Graph, GCN/GAT, Low-Level Sector Agents, Graph Communication).
+> - Cả hai thành viên **đồng sở hữu Overall Scientific Contribution** của đề tài.
 >
 > 📖 **Quy chế 70/30 & Lộ trình 5 Level học AI:** Xem chi tiết tại [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md).
 > 🤝 **Bảng điều phối chung với B:** Xem tại [BANG_DIEU_PHOI_2_NGUOI.md](file:///home/tuan/AI/AI_roject1/manual/BANG_DIEU_PHOI_2_NGUOI.md).
@@ -35,9 +40,9 @@ src/
 
 ## 2. Phân tầng Scope cá nhân & 3 Mốc Dừng
 
-- **🎯 MỐC A (Hoàn thành — Đủ điều kiện bảo vệ):** Hoàn thành toàn bộ các ticket đánh dấu `[CORE]` từ Sprint 1 đến Sprint 10 (Data, Features, Env, Backtest, Single-Agent PPO, High-Level Agent, Combiner).
-- **🏆 MỐC B (Xuất sắc — Mục tiêu điểm tối đa):** Hoàn thành thêm các phân tích `[MỐC B]` (Phân tích độ nhạy phí giao dịch `EXP-009`, Phân tích 3 chế độ thị trường `EXP-010`, chạy 5 seeds).
-- **🚀 MỐC C (Nghiên cứu mở rộng Paper):** Hỗ trợ B tích hợp đồ thị chuỗi cung ứng nếu còn thời gian.
+- **🎯 MỐC A (Đủ hoàn thành / Bảo vệ tốt):** Hoàn thành toàn bộ các ticket đánh dấu `[CORE]` từ Sprint 1 đến Sprint 10 (Data Pipeline, Features, Trading Env, Backtesting, Single-Agent PPO, High-Level Macro Policy, Combiner). Đủ điều kiện hoàn thành và bảo vệ tốt đồ án tốt nghiệp.
+- **🏆 MỐC B (Mục tiêu Xuất sắc):** Hoàn thành thêm các phân tích chuyên sâu `[MỐC B]` (Phân tích độ nhạy phí giao dịch `EXP-009`, Phân tích 3 chế độ thị trường `EXP-010`, chạy 5 seeds kiểm chứng thống kê).
+- **🚀 MỐC C (Research Extension — Mở rộng nghiên cứu Paper):** Hỗ trợ B tích hợp các quan hệ phi giá trên đồ thị tri thức (chuỗi cung ứng, sở hữu tổ chức) nếu còn thời gian trước hạn chót.
 
 ---
 
