@@ -8,6 +8,7 @@ _(DYNAMIC GRAPH + GNN/GAT + PPO BASELINE + LOW-LEVEL SECTOR MARL + GAT COMMUNICA
 > Bạn là người chịu trách nhiệm về phần **trí tuệ nhân tạo đồ thị và hệ thống đa tác tử**: xây dựng **Đồ thị tài chính động (Dynamic Financial Graph)**, mạng **GCN/GAT** để trích xuất embedding, cùng A làm chủ thuật toán **PPO**, phát triển **Low-Level Sector Agents** và **Cơ chế giao tiếp liên tác tử qua Graph Attention (GAT Communication)**.
 >
 > ⚖️ **Phân định đóng góp khoa học (Scientific Contributions):**
+>
 > - **Thành viên B** chịu trách nhiệm chính cho **Graph-learning Contribution** (Dynamic Financial Graph, GCN/GAT, Low-Level Sector Agents, Graph Communication).
 > - **Thành viên A** chịu trách nhiệm chính cho **Financial RL & Hierarchical Allocation Contribution** (Trading Environment, Reward Formulation, PPO Baseline, High-Level Macro Policy, Backtesting Framework).
 > - Cả hai thành viên **đồng sở hữu Overall Scientific Contribution** của đề tài. Khi bảo vệ đồ án và phỏng vấn, mỗi thành viên đều có câu chuyện AI độc lập, sâu sắc và thuyết phục: B đại diện cho **Graph Representation Learning & Multi-Agent Coordination**, A đại diện cho **Financial RL & Hierarchical Decision Systems**.
@@ -111,7 +112,6 @@ _Mục tiêu: Đồ thị tài chính thay đổi linh hoạt theo từng ngày 
   - _Nội dung:_ Tích hợp 2 loại quan hệ trên cùng một đồ thị: Cạnh tương quan giá (`correlation`) và cạnh cùng ngành (`same_sector`).
   - _Lưu ý học thuật:_ Đây là **Multi-relation Graph V1** ở mức cơ bản, đóng vai trò bước đệm trước khi mở rộng lên Đồ thị không đồng nhất hoàn chỉnh (**True Advanced Heterogeneous Graph** ở Mốc C). Tránh gọi nhầm V1 là đồ thị tri thức hoàn chỉnh trong báo cáo khoa học.
 
-
 ---
 
 ### 🏁 SPRINT 4: Xây dựng Bộ mã hóa Mạng nơ-ron đồ thị (GNN & GAT Encoders)
@@ -195,21 +195,51 @@ _Mục tiêu: Chia việc ra quyết định cho nhiều Agent chuyên trách th
 
 ---
 
-### 🏁 SPRINT 7: Giao tiếp Đồ thị Liên tác tử & Tích hợp Phân cấp (H-MARL)
+### 🏁 SPRINT 7: Tích hợp Hệ thống Học tăng cường Phân cấp (Hierarchical MARL)
 
-_Mục tiêu: Cho phép các Sector Agent giao tiếp qua Graph Attention và ghép nối với High-Level Agent của A._
+_Mục tiêu: Tích hợp High-Level Macro Policy (A) và Low-Level Sector Policies (B) thành một pipeline hoàn chỉnh mà KHÔNG PHỤ THUỘC vào GAT Communication._
 
-- [ ] **[HMARL-005] Cơ chế giao tiếp liên tác tử qua Graph Attention (P1)**
-  - _Tệp cần tạo:_ `src/agents/communication.py`
-  - _Đóng góp khoa học:_ Cho phép các Sector Agent trao đổi thông tin tương quan với nhau thông qua mạng Graph Attention Network (GAT) trước khi chốt tỷ trọng cổ phiếu trong ngành.
+#### 🔹 PHẦN CORE (BẮT BUỘC ĐỂ HOÀN THÀNH SPRINT 7):
 
-- [ ] **[HMARL-004] Tích hợp Vòng lặp Huấn luyện Hierarchical MARL (P0 - Chung A+B)**
-  - _Tệp cần tạo:_ `src/training/train_hmarl.py`, `scripts/train_hmarl.py`
+Pipeline CORE vận hành độc lập:
+```text
+High-Level Agent (A: HMARL-001/002)
+       ↓ (Quyết định phân bổ ngân sách ngành)
+Sector Budgets
+       ↓ (Cấp ngân sách cho từng nhóm ngành)
+Low-Level Sector Agents (B: MARL-002/003)
+       ↓ (Tối ưu tỷ trọng nội bộ từng ngành)
+Asset Allocation
+       ↓ (Ghép nối tỷ trọng toàn cục)
+Combiner (A: HMARL-003)
+       ↓
+Portfolio Weights (Nạp vào Gym Trading Env)
+```
+
+- [ ] **[HMARL-004] Tích hợp Vòng lặp Huấn luyện Hierarchical MARL (P0 - Chung A+B) `[CORE]`**
+  - _Tệp cùng thực hiện:_ `src/training/train_hmarl.py`, `scripts/train_hmarl.py`
   - _Quy trình phối hợp:_
-    1. High-Level Agent (do A xây dựng) ra quyết định phân bổ ngân sách ngành.
-    2. Các Low-Level Sector Agents (do B xây dựng) giao tiếp qua GAT và chọn mã chi tiết.
-    3. Bộ Combiner (của A) tính toán tỷ trọng danh mục toàn cục và nạp vào Environment.
-    4. Cả A và B cùng tối ưu gradient cho cả 2 tầng tác tử.
+    1. High-Level Agent (do A xây dựng) ra quyết định phân bổ ngân sách cho từng ngành và tỷ lệ tiền mặt.
+    2. Các Low-Level Sector Agents (do B xây dựng) nhận ngân sách ngành và quyết định tỷ trọng các mã cổ phiếu trong ngành đó.
+    3. Bộ Combiner (do A xây dựng) tính toán tỷ trọng danh mục đầu tư toàn cục và chuyển cho Trading Environment.
+    4. Cả A và B cùng phối hợp tối ưu hóa gradient cho cả 2 tầng tác tử.
+
+#### 🔸 PHẦN OPTIONAL / MỐC C (NGHIÊN CỨU MỞ RỘNG — KHÔNG BẮT BUỘC CHO DEFENSE):
+
+Extension khi còn thời gian hướng tới xuất bản bài báo khoa học:
+```text
+Low-Level Sector Agents
+       ↕
+GAT Communication (HMARL-005)
+       ↓
+Asset Allocation
+```
+
+- [ ] **[HMARL-005] Cơ chế giao tiếp liên tác tử qua Graph Attention (P1) `[MỐC C - ADVANCED]`**
+  - _Tệp cần tạo:_ `src/agents/communication.py`
+  - _Nội dung:_ Cho phép các Sector Agent trao đổi thông tin ẩn (latent messages) qua mạng Graph Attention Network (GAT) trước khi chốt tỷ trọng.
+  - _Lưu ý quan trọng:_ Pipeline CORE bắt buộc phải chạy độc lập hoàn hảo mà **KHÔNG CẦN** module này. `HMARL-005` chỉ là thành phần mở rộng bổ sung cho Mốc C.
+
 
 ---
 
@@ -277,7 +307,6 @@ _Mục tiêu: Hoàn thiện báo cáo khoa học và đóng gói source code._
 - [ ] **[ADV-GRAPH-001] Xây dựng True Advanced Heterogeneous Graph (P2)**
   - _Tệp cần tạo:_ `src/graph/hetero_v2.py`
   - _Nội dung:_ Tích hợp toàn diện các loại node và quan hệ phức tạp thành đồ thị tri thức tài chính thực thụ: Company + Sector + Institution + Macro + Supply-Chain. Khác biệt rõ rệt với Multi-relation Graph V1 ở Mốc B (chỉ gồm correlation + sector).
-
 
 - [ ] **[ADV-GRAPH-002] Tích hợp quan hệ Chuỗi cung ứng (Supply-Chain Relationships) (P2)**
   - _Tệp cần tạo:_ `src/graph/supply_chain.py`, `data/raw/supply_chain.json`
