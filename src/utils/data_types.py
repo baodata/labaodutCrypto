@@ -1,6 +1,6 @@
 """
-src/utils/contracts.py
-Giao diện và quy chuẩn hợp đồng dữ liệu kỹ thuật giữa Thành viên A và Thành viên B.
+src/utils/data_types.py
+Giao diện và quy chuẩn kiểu dữ liệu kỹ thuật giữa Thành viên A và Thành viên B.
 
 Ticket: CONTRACT-001 (P0 - Chung A + B)
 Sprint: 1
@@ -24,7 +24,7 @@ import numpy as np
 @dataclass
 class MarketDataTensor:
     """
-    Hợp đồng dữ liệu Feature Tensor [T, N, F] do Thành viên A bàn giao cho Thành viên B.
+    Khuôn đúc Feature Tensor [T, N, F] do Thành viên A bàn giao cho Thành viên B.
     - T: Số bước thời gian (trading days)
     - N: Số lượng tài sản (assets)
     - F: Số lượng đặc trưng kỹ thuật (features: return, volatility, rsi, macd, volume...)
@@ -56,7 +56,7 @@ class MarketDataTensor:
 @dataclass
 class DynamicGraphData:
     """
-    Hợp đồng Đồ thị tài chính do Thành viên B xây dựng tại mỗi timestep t.
+    Khuôn đúc Đồ thị tài chính do Thành viên B xây dựng tại mỗi timestep t.
     - node_features: Ma trận đặc trưng các node [N, F]
     - edge_index: Ma trận cạnh liên kết [2, E] (kiểu int)
     - edge_weight: Trọng số các cạnh [E] (kiểu float)
@@ -90,7 +90,7 @@ class DynamicGraphData:
 @dataclass
 class MarketObservation:
     """
-    Hợp đồng Observation linh hoạt của Gymnasium Environment (A) hỗ trợ cả 2 chế độ:
+    Khuôn đúc Observation linh hoạt của Gymnasium Environment (A) hỗ trợ cả 2 chế độ:
     1. mode='raw_features': state tensor [N, F] nạp thẳng vào Actor-Critic (Single-Agent PPO không GNN).
     2. mode='graph_embeddings': state tensor [N, D] đã qua GNN/GAT encoder.
     """
@@ -123,7 +123,7 @@ class MarketObservation:
 @dataclass
 class PortfolioAction:
     """
-    Hợp đồng Action của Agent (đầu ra của Actor nạp vào Gym Env).
+    Khuôn đúc Action của Agent (đầu ra của Actor nạp vào Gym Env).
     - target_weights: Tỷ trọng phân bổ mong muốn cho N tài sản [N]
     - target_cash: Tỷ trọng tiền mặt mong muốn
     """

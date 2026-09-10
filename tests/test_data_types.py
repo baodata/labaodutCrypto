@@ -1,12 +1,12 @@
 """
-tests/test_contracts.py
-Unit tests cho hợp đồng dữ liệu kỹ thuật CONTRACT-001.
+tests/test_data_types.py
+Unit tests cho các khuôn đúc dữ liệu kỹ thuật.
 """
 
 import numpy as np
 import pytest
 
-from src.utils.contracts import (
+from src.utils.data_types import (
     DynamicGraphData,
     MarketDataTensor,
     MarketObservation,
@@ -14,7 +14,7 @@ from src.utils.contracts import (
 )
 
 
-class TestContracts:
+class TestDataTypes:
     def test_market_data_tensor_valid(self):
         """Kiểm tra MarketDataTensor hợp lệ."""
         tensor = np.ones((10, 4, 5))
