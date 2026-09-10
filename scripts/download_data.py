@@ -3,6 +3,13 @@
 scripts/download_data.py
 CLI script tải dữ liệu OHLCV tự động từ Yahoo Finance.
 
+FILE NÀY ĐỂ LÀM GÌ?
+- Đây là một script dòng lệnh (Command Line Interface - CLI) độc lập.
+- Nó gọi đến các hàm xử lý dữ liệu lõi trong thư mục `src/data/` để kéo 
+  dữ liệu giá cổ phiếu (Mở cửa, Đóng cửa, Đỉnh, Đáy, Khối lượng) về máy.
+
+- Chạy file này để không phải mỏi tay tải từng file.
+
 Ticket: DATA-002 (P0)
 Usage:
     python scripts/download_data.py
@@ -21,7 +28,12 @@ from src.data.downloader import OHLCVDownloader
 from src.utils.config import AssetsConfig, get_project_root
 
 
+
+# Phân tích các tham số dòng lệnh (CLI) khi chạy script này.
+
+
 def parse_args() -> argparse.Namespace:
+
     parser = argparse.ArgumentParser(
         description="Tải dữ liệu OHLCV lịch sử từ Yahoo Finance và lưu vào data/raw/."
     )
@@ -150,7 +162,7 @@ def main():
         print("[CẢNH BÁO] Có một số mã không thể tải dữ liệu!", file=sys.stderr)
         sys.exit(1)
     else:
-        print("✓ Tải dữ liệu toàn bộ hoàn tất mỹ mãn.")
+        print("✓ Tải dữ liệu xong, dữ liệu raw được lưu vào thư mục data/raw/.")
         sys.exit(0)
 
 

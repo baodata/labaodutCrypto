@@ -1,3 +1,14 @@
+"""
+src/utils/config.py
+Module quản lý cấu hình và tiện ích đường dẫn dự án.
+
+FILE NÀY ĐỂ LÀM GÌ?
+- Cung cấp các hàm tiện ích (utilities) dùng chung cho toàn dự án.
+- Tự động tìm đường dẫn tuyệt đối của dự án (tránh lỗi đường dẫn tương đối khi chạy script ở các thư mục khác nhau).
+- Đọc các file cấu hình YAML (như `assets.yaml`, `env.yaml`) và chuyển nó thành dạng Object 
+  để các module khác dễ dàng truy xuất thông tin (ví dụ: lấy danh sách các mã cổ phiếu, phân ngành).
+"""
+
 from pathlib import Path
 from typing import Any, Dict, List
 import yaml

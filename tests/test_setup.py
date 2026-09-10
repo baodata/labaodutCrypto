@@ -1,3 +1,14 @@
+"""
+tests/test_setup.py
+Unit tests cho việc thiết lập dự án và cấu trúc thư mục (Epic 0).
+
+- Ticket: EPIC-0 (Sprint 1 - Member A)
+
+FILE NÀY ĐỂ LÀM GÌ?
+- Kiểm tra phiên bản Python, import các package cốt lõi, và cấu trúc thư mục của dự án.
+"""
+
+
 import sys
 import unittest
 from pathlib import Path

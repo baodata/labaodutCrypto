@@ -1,0 +1,22 @@
+# ==============================================================================
+# H-MARL-GNN: MODEL & TRAINING CONFIGURATION (PLACEHOLDER)
+# ==============================================================================
+
+# Ticket liên quan: MODEL-001, GNN-001, TRAIN-001 (Sprint 4 & 5)
+ 
+# FILE NÀY ĐỂ LÀM GÌ?
+# - Lưu trữ các siêu tham số (Hyperparameters) của các mạng Neural Networks (GNN, GAT)
+#   và mô hình Học Tăng Cường (PPO, H-MARL).
+# - Hỗ trợ việc chạy thực nghiệm (Ablation Study), cứ thay đổi file này.
+ 
+# CÁC THAM SỐ SẼ ĐƯỢC THÊM VÀO ĐÂY TRONG TƯƠNG LAI:
+# - learning_rate: Tốc độ học (ví dụ: 3e-4)
+# - batch_size: Kích thước batch huấn luyện
+# - gnn_hidden_dim: Số chiều lớp ẩn của Graph Neural Network
+# - gat_heads: Số lượng attention heads của Graph Attention Network
+# - ppo_clip_range: Ngưỡng clip của hàm Loss PPO
+
+# ==============================================================================
+
+version: "1.0"
+# Chưa làm tới

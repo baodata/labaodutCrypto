@@ -1,6 +1,13 @@
 """
 tests/test_downloader.py
 Unit tests cho module OHLCV Downloader (DATA-002).
+
+- Ticket: DATA-002 (Sprint 1 - Member A)
+
+FILE NÀY ĐỂ LÀM GÌ?
+- Kiểm thử các hàm tải dữ liệu OHLCV từ Yahoo Finance.
+- Sử dụng pytest và unittest.mock để mô phỏng các tình huống tải dữ liệu
+- Kiểm tra chuẩn hóa dữ liệu, lưu file Parquet/CSV, và xử lý lỗi khi tải dữ liệu.
 """
 
 from pathlib import Path

@@ -1,8 +1,18 @@
 # ==============================================================================
 # H-MARL-GNN: ASSET UNIVERSE CONFIGURATION (V1)
 # ==============================================================================
+
 # Ticket: DATA-001 (P0)
-# Khoảng thời gian: 2015-01-01 đến 2025-12-31
+
+# FILE NÀY ĐỂ LÀM GÌ?
+# - Định nghĩa các assets được sử dụng trong môi trường giao dịch.
+# - Tránh việc hard-code các con số trực tiếp vào mã nguồn.
+# - tạo ra các datasets huấn luyện, đánh giá các chiến lược đầu tư.
+# Những file mã nguồn khác sẽ tham chiếu đến file này để lấy danh sách các cổ phiếu, nhóm ngành, chỉ số benchmark.
+
+
+
+# ==============================================================================
 # Tiêu chí lựa chọn:
 #   1. Cổ phiếu vốn hóa lớn (Large Cap) niêm yết trên sàn Mỹ (NASDAQ / NYSE).
 #   2. Thanh khoản cao, khối lượng giao dịch dồi dào để hạn chế trượt giá.
@@ -13,19 +23,24 @@
 
 version: "1.0"
 
+# Đây là chỉ số tham chiếu (Benchmark) để đánh giá hiệu suất chiến lược đầu tư.
 benchmark:
   ticker: "SPY"
   name: "SPDR S&P 500 ETF Trust"
   sector: "index"
 
+# Ngày bắt đầu và kết thúc đi vào đây 
 date_range:
   start_date: "2015-01-01"
   end_date: "2025-12-31"
 
+# đây là gì
 cash:
   symbol: "CASH"
   risk_free_rate_annual: 0.02  # Lãi suất phi rủi ro 2%/năm phục vụ tính Sharpe Ratio
 
+
+# Danh sách các nhóm ngành (Sectors)
 sectors:
   technology:
     name: "Technology"
@@ -43,6 +58,8 @@ sectors:
     name: "Consumer"
     description: "Hàng tiêu dùng thiết yếu và hàng tiêu dùng không thiết yếu"
 
+
+# Danh sách các cổ phiếu được lựa chọn từ 5 nhóm ngành (Sectors) khác nhau
 assets:
   # ----------------------------------------------------------------------------
   # 1. TECHNOLOGY (6 cổ phiếu)

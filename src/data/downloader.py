@@ -2,6 +2,14 @@
 src/data/downloader.py
 Module tải dữ liệu giá lịch sử OHLCV từ Yahoo Finance.
 
+FILE NÀY ĐỂ LÀM GÌ?
+- Trái ngược với script `download_data.py` ở vòng ngoài chỉ để làm giao diện gõ lệnh (CLI),
+  file này nằm ở tầng "Lõi" (Core).
+- Nhiệm vụ chính: Kết nối trực tiếp vào Yahoo Finance, kéo dữ liệu thô về.
+- Rất quan trọng: Nó chứa logic chuẩn hóa định dạng dữ liệu, ép kiểu cột, chuyển đổi thời gian 
+  (time-zone), và lọc dòng lỗi. Đảm bảo dữ liệu tải về ở tình trạng "Sạch" và chuẩn form nhất
+  cho toàn bộ dự án.
+
 Ticket: DATA-002 (P0)
 Primary Owner: Thành viên A
 Reviewer: Thành viên B
