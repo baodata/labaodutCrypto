@@ -67,11 +67,16 @@ _Mục tiêu: Có dữ liệu OHLCV đầy đủ của 20–30 mã cổ phiếu 
   - _Kết quả thực tế:_ Tải thành công 25/25 mã (24 cổ phiếu + SPY benchmark), mỗi mã đạt chính xác 2.765 phiên giao dịch (100% không rò rỉ, không trùng lặp). Đã vượt qua 13/13 unit tests.
   - _Người review:_ Thành viên B.
 
-- [ ] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt với Thành viên B (P0 - Chung)**
-  - Chốt định dạng đầu ra cho B: Tensor `[T, N, F]`.
-  - Chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ:
+- [x] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt với Thành viên B (P0 - Chung)**
+  - _Tệp đã tạo:_ `src/utils/contracts.py`, `tests/test_contracts.py`
+  - _Đã chốt định dạng đầu ra cho B:_ `MarketDataTensor` kích thước `[T, N, F]` (thời gian $\times$ tài sản $\times$ đặc trưng kỹ thuật).
+  - _Đã chốt cấu trúc đồ thị tương thích với B (`builder.py`):_ `DynamicGraphData` gồm `node_features` `[N, F]`, `edge_index` `[2, E]`, `edge_weight` `[E]`.
+  - _Đã chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ (`MarketObservation`):_
     - Chế độ 1: `raw_features` `[N, F]` (cho Single-Agent PPO chạy không cần GNN).
     - Chế độ 2: `graph_embeddings` `[N, D]` (cho mô hình GNN/H-MARL).
+  - _Đã chốt định dạng Action (`PortfolioAction`):_ Trọng số tài sản $w_i \ge 0, w_{cash} \ge 0$ thỏa mãn $\sum w_i + w_{cash} = 1.0$.
+  - 100% unit tests kiểm tra hợp đồng pass (`tests/test_contracts.py`).
+
 
 ---
 
