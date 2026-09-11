@@ -1,4 +1,17 @@
-"""Unit tests for CalendarAligner and Trading Calendar Alignment."""
+"""
+tests/test_alignment.py
+Bộ kiểm thử tính toàn vẹn đồng bộ lịch giao dịch (Trading Calendar Alignment Tests).
+
+Ticket: DATA-004 (P0 - Thành viên A)
+Sprint: 2
+
+Mục đích kiểm thử:
+1. Kiểm tra thuật toán 'intersection': giữ chính xác các ngày chung của mọi tài sản.
+2. Kiểm tra thuật toán 'union_ffill': kiểm tra forward-fill giá và điền 0 cho volume.
+3. Kiểm tra trích xuất bảng giá đa tài sản to_price_panel() kích thước [T, N].
+4. Bắt lỗi khi người dùng truyền phương pháp căn chỉnh không hợp lệ hoặc dữ liệu rỗng.
+5. Kiểm định thực tế trên toàn bộ 25 file Parquet thật trong thư mục data/raw/.
+"""
 
 from pathlib import Path
 import numpy as np

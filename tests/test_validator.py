@@ -1,4 +1,17 @@
-"""Unit tests for DataValidator."""
+"""
+tests/test_validator.py
+Bộ kiểm thử tự động cho DataValidator (Raw OHLCV Validator Tests).
+
+Ticket: DATA-003 (P0 - Thành viên A)
+Sprint: 2
+
+Mục đích kiểm thử:
+1. Kiểm tra 7 luật toàn vẹn dữ liệu: non-empty, required columns, timeline, price > 0, volume >= 0, logic nến, NaN/Inf.
+2. Kiểm tra các ca biên (edge cases): DataFrame rỗng, đảo ngược ngày, trùng lặp ngày, giá <= 0.
+3. Kiểm tra cơ chế cảnh báo vs bắt lỗi khi Volume = 0 (allow_zero_volume).
+4. Kiểm tra phương thức raise_if_invalid() ném ngoại lệ chuẩn xác.
+5. Nghiệm thu thực tế trên toàn bộ 25 file Parquet thật trong thư mục data/raw/.
+"""
 
 import numpy as np
 import pandas as pd

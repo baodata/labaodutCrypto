@@ -1,4 +1,25 @@
 {
+  "_metadata_info": {
+    "ticket": "DATA-005 (P1 - Thành viên A)",
+    "sprint": 2,
+    "title": "Siêu dữ liệu nguồn gốc tập dữ liệu (Dataset Provenance Metadata)",
+    "description": "Lưu trữ thông tin nguồn gốc, phiên bản và quy chuẩn căn chỉnh dữ liệu phục vụ báo cáo khoa học và tính tái lập (reproducibility).",
+    "field_explanations": {
+      "dataset_name": "Tên tập dữ liệu nghiên cứu 24 cổ phiếu Large-Cap Mỹ + Benchmark SPY",
+      "created_at": "Thời điểm chuẩn hóa và căn chỉnh dữ liệu theo chuẩn ISO 8601 UTC",
+      "num_assets": "Tổng số lượng tài sản trong vũ trụ đầu tư (24 cổ phiếu + 1 SPY)",
+      "num_timesteps": "Số bước thời gian T (số ngày giao dịch chung sau căn chỉnh)",
+      "start_date": "Ngày bắt đầu chuỗi thời gian lịch sử",
+      "end_date": "Ngày kết thúc chuỗi thời gian lịch sử",
+      "benchmark": "Chỉ số thị trường đối chuẩn để đo Alpha, Beta và Information Ratio",
+      "risk_free_rate": "Lãi suất phi rủi ro danh nghĩa hàng năm dùng tính Sharpe Ratio và Sortino Ratio",
+      "sectors": "5 nhóm ngành kinh tế chính dùng cho cấu trúc phân cấp H-MARL",
+      "tickers_by_sector": "Phân bổ chi tiết từng mã cổ phiếu vào đúng Sector Agent phụ trách",
+      "alignment_method": "Phương pháp căn chỉnh: 'intersection' (chỉ giữ các ngày toàn bộ thị trường cùng mở cửa)",
+      "data_format": "Định dạng tệp lưu trữ nhị phân tốc độ cao Parquet",
+      "total_raw_rows": "Tổng số lượng dòng dữ liệu thô đã kiểm định và làm sạch"
+    }
+  },
   "dataset_name": "H-MARL-GNN US Large-Cap Dataset",
   "created_at": "2026-09-11T18:22:36.455284+00:00",
   "num_assets": 25,
