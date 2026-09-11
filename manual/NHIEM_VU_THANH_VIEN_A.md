@@ -98,19 +98,20 @@ _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xo
   - _Tệp đã tạo:_ `data/interim/dataset_metadata.json`
   - _Nội dung:_ Lưu lại thời gian tạo, phiên bản dữ liệu, số mã (25), số ngày (2,765), phân loại theo 5 sector, benchmark SPY, phương pháp căn chỉnh, và tổng số 69,125 dòng phục vụ báo cáo khoa học.
 
-- [ ] **[FEAT-001] Tính toán Daily Return (P0)**
-  - _Tệp cần tạo:_ `src/features/returns.py`, `tests/test_returns.py`
-  - _Công thức:_ $R_t = \frac{P_t - P_{t-1}}{P_{t-1}}$
-  - _Tiêu chuẩn nghiệm thu:_ Unit test tính toán chính xác sai số $< 10^{-8}$.
+- [x] **[FEAT-001] Tính toán Daily Return (P0)**
+  - _Tệp đã tạo:_ `src/features/returns.py`, `tests/test_returns.py`
+  - _Công thức:_ Simple Return $R_t = \frac{P_t - P_{t-1}}{P_{t-1}}$ và Log Return $r_t = \ln(P_t / P_{t-1})$. Hỗ trợ xuất ma trận $[T, N]$.
+  - _Tiêu chuẩn nghiệm thu:_ 5/5 unit tests pass, sai số số học $< 10^{-8}$.
 
-- [ ] **[FEAT-002] Tính toán Rolling Volatility (P0)**
-  - _Tệp cần tạo:_ `src/features/volatility.py`
-  - _Công thức:_ Độ lệch chuẩn của return trong cửa sổ trượt 20 ngày (`rolling(20).std()`).
+- [x] **[FEAT-002] Tính toán Rolling Volatility (P0)**
+  - _Tệp đã tạo:_ `src/features/volatility.py`, `tests/test_volatility.py`
+  - _Công thức:_ Độ lệch chuẩn của return trong cửa sổ trượt 20 ngày (`rolling(20).std()`), hỗ trợ niên độ hóa $\sigma_{\text{ann}} = \sigma_{\text{daily}} \times \sqrt{252}$ và `min_periods=1` chống NaN.
+  - _Tiêu chuẩn nghiệm thu:_ 5/5 unit tests pass, hỗ trợ xuất ma trận $[T, N]$.
 
-- [ ] **[FEAT-003] Tính toán RSI-14 (P1)**
-  - _Tệp cần tạo:_ `src/features/rsi.py`, `tests/test_rsi.py`
-  - _Nội dung:_ Cài đặt công thức Wilder RSI chu kỳ 14 ngày.
-  - _Tiêu chuẩn nghiệm thu:_ Giá liên tục tăng thì RSI tiệm cận 100; giá liên tục giảm thì RSI tiệm cận 0.
+- [x] **[FEAT-003] Tính toán RSI-14 (P1)**
+  - _Tệp đã tạo:_ `src/features/rsi.py`, `tests/test_rsi.py`
+  - _Nội dung:_ Cài đặt chuẩn xác công thức Wilder RSI chu kỳ 14 ngày (EMA với $\alpha = 1/14$). Hỗ trợ scale $[0, 1]$ cho RL.
+  - _Tiêu chuẩn nghiệm thu:_ 6/6 unit tests pass (bull run $\ge 99.9$, bear run $\le 0.1$, flat $= 50.0$, và test trực tiếp trên 25 mã thật).
 
 > 🤝 **Bàn giao:** Chuyển dữ liệu Return đã làm sạch cho Thành viên B để B bắt đầu thử nghiệm dựng ma trận tương quan đồ thị.
 
