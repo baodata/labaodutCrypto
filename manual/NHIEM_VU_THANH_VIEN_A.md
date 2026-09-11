@@ -10,6 +10,7 @@ _(DATA + ENVIRONMENT + PPO BASELINE + HIGH-LEVEL MACRO AGENT + EVALUATION)_
 > Bạn không phải là người chuẩn bị dữ liệu đơn thuần, mà là một **Quant AI Engineer** thực thụ: nắm vững cách thị trường vận hành, mô phỏng môi trường giao dịch thực tế, xây dựng cơ chế phần thưởng (Reward Formulation), làm chủ thuật toán PPO và huấn luyện Agent vĩ mô phân bổ vốn vào các nhóm ngành. Khi bảo vệ đồ án và phỏng vấn, bạn có câu chuyện AI trọn vẹn và độc lập về **Financial RL & Hierarchical Decision Systems**.
 >
 > ⚖️ **Phân định đóng góp khoa học (Scientific Contributions):**
+>
 > - **Thành viên A** chịu trách nhiệm chính cho **Financial RL & Hierarchical Allocation Contribution** (Trading Environment, Reward Formulation, PPO Baseline, High-Level Macro Policy, Backtesting Framework).
 > - **Thành viên B** chịu trách nhiệm chính cho **Graph-learning Contribution** (Dynamic Financial Graph, GCN/GAT, Low-Level Sector Agents, Graph Communication).
 > - Cả hai thành viên **đồng sở hữu Overall Scientific Contribution** của đề tài.
@@ -77,17 +78,16 @@ _Mục tiêu: Có dữ liệu OHLCV đầy đủ của 20–30 mã cổ phiếu 
   - _Đã chốt định dạng Action (`PortfolioAction`):_ Trọng số tài sản $w_i \ge 0, w_{cash} \ge 0$ thỏa mãn $\sum w_i + w_{cash} = 1.0$.
   - 100% unit tests kiểm tra hợp đồng pass (`tests/test_contracts.py`).
 
-
 ---
 
 ### 🏁 SPRINT 2: Kiểm định, Đồng bộ ngày & Tính đặc trưng ban đầu
 
 _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xong Return, Volatility, RSI._
 
-- [ ] **[DATA-003] Viết bộ kiểm định dữ liệu Raw Data Validator (P0)**
-  - _Tệp cần tạo:_ `src/data/validator.py`, `tests/test_validator.py`
-  - _Nội dung:_ Kiểm tra tự động: Giá > 0, Volume $\ge$ 0, High $\ge$ Open/Close, Low $\le$ Open/Close, không có giá trị vô cực (Inf), không có ngày rỗng.
-  - _Tiêu chuẩn nghiệm thu:_ Tự động raise lỗi hoặc cảnh báo cách ly nếu file dữ liệu bị lỗi. Test coverage pass 100%.
+- [x] **[DATA-003] Viết bộ kiểm định dữ liệu Raw Data Validator (P0)**
+  - _Tệp đã tạo:_ `src/data/validator.py`, `tests/test_validator.py`
+  - _Nội dung:_ Kiểm tra tự động 7 luật: Non-empty, Required OHLCV, Timeline sorted/unique, Giá > 0, Volume $\ge$ 0, Logic nến $High \ge Low / Open / Close$, Không chứa NaN/Inf.
+  - _Tiêu chuẩn nghiệm thu:_ Đã kiểm định tự động toàn bộ 25 file Parquet thật trong `data/raw/` đều hợp lệ 100%. Đạt 12/12 unit tests pass.
 
 - [ ] **[DATA-004] Đồng bộ ngày giao dịch (Trading Calendar Alignment) (P0)**
   - _Tệp cần tạo:_ `src/data/alignment.py`

@@ -55,16 +55,16 @@ _Mục tiêu: Đảm bảo code chạy qua config (không hard-code tham số) v
 - [x] **[SETUP-001] Khởi tạo Repository & Skeleton nền tảng (P0 - Chung A+B) `[CORE]`**
   - _Đã hoàn thành ở Epic 0:_ Tạo cấu trúc thư mục, môi trường ảo, requirements.txt, pyproject.toml, chạy pass 4/4 tests ban đầu.
 
-- [ ] **[CONFIG-001] Xây dựng hệ thống cấu hình YAML chuẩn (P0)**
+- [x] **[CONFIG-001] Xây dựng hệ thống cấu hình YAML chuẩn (P0)**
   - _Tệp cần tạo:_ `configs/env.yaml`, `configs/model.yaml`, `src/utils/config.py`
   - _Nội dung:_ Viết hàm đọc và validate file cấu hình YAML. Tuyệt đối không để các tham số (learning rate, window size, threshold, transaction fee...) bị hard-code trong mã nguồn.
   - _Người review:_ Thành viên A.
 
-- [ ] **[TEST-001] Thiết lập hạ tầng kiểm thử và dữ liệu giả lập (Fixture) (P0)**
+- [x] **[TEST-001] Thiết lập hạ tầng kiểm thử và dữ liệu giả lập (Fixture) (P0)**
   - _Tệp cần tạo:_ `tests/conftest.py`
   - _Nội dung:_ Tạo synthetic market data fixture (dữ liệu thị trường giả định) trong pytest để có thể chạy test các thuật toán ngay cả khi Thành viên A chưa tải xong toàn bộ dữ liệu thật.
 
-- [ ] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt (Data Contract) với A (P0 - Chung)**
+- [x] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt (Data Contract) với A (P0 - Chung)**
   - Chốt cấu trúc dữ liệu đầu vào: Tensor `[T, N, F]`.
   - Chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ:
     - Chế độ 1: `raw_features` `[N, F]` (cho Single-Agent PPO chạy độc lập không cần GNN).
@@ -202,6 +202,7 @@ _Mục tiêu: Tích hợp High-Level Macro Policy (A) và Low-Level Sector Polic
 #### 🔹 PHẦN CORE (BẮT BUỘC ĐỂ HOÀN THÀNH SPRINT 7):
 
 Pipeline CORE vận hành độc lập:
+
 ```text
 High-Level Agent (A: HMARL-001/002)
        ↓ (Quyết định phân bổ ngân sách ngành)
@@ -227,6 +228,7 @@ Portfolio Weights (Nạp vào Gym Trading Env)
 #### 🔸 PHẦN OPTIONAL / MỐC C (NGHIÊN CỨU MỞ RỘNG — KHÔNG BẮT BUỘC CHO DEFENSE):
 
 Extension khi còn thời gian hướng tới xuất bản bài báo khoa học:
+
 ```text
 Low-Level Sector Agents
        ↕
@@ -239,7 +241,6 @@ Asset Allocation
   - _Tệp cần tạo:_ `src/agents/communication.py`
   - _Nội dung:_ Cho phép các Sector Agent trao đổi thông tin ẩn (latent messages) qua mạng Graph Attention Network (GAT) trước khi chốt tỷ trọng.
   - _Lưu ý quan trọng:_ Pipeline CORE bắt buộc phải chạy độc lập hoàn hảo mà **KHÔNG CẦN** module này. `HMARL-005` chỉ là thành phần mở rộng bổ sung cho Mốc C.
-
 
 ---
 
