@@ -1,9 +1,22 @@
-"""Raw Market Data Validator.
+"""
+src/data/validator.py
+Bộ kiểm định chất lượng và tính toàn vẹn dữ liệu thị trường thô (Raw OHLCV Validator).
 
-Validates OHLCV historical time series data to ensure financial logic consistency,
-timeline integrity, non-negativity of prices/volume, and absence of NaN/Inf values.
-Supports both TitleCase ('Open', 'High', ...) and lowercase ('open', 'high', ...)
-conventions, and automatically handles 'Date' / 'date' columns or DatetimeIndex.
+Ticket: DATA-003 (P0 - Thành viên A)
+Sprint: 2
+
+Mục đích:
+1. Đảm bảo dữ liệu thô (Parquet/CSV) tuân thủ nghiêm ngặt 7 luật toàn vẹn dữ liệu định lượng:
+   - Non-empty: DataFrame không được rỗng.
+   - Required OHLCV: Đầy đủ các cột giá mở, cao, thấp, đóng và khối lượng.
+   - Timeline Integrity: DatetimeIndex tăng dần đơn điệu, không trùng lặp timestamp.
+   - Strictly Positive Prices: Open, High, Low, Close > 0 (chống lỗi chia 0 hoặc ln(P_t/P_{t-1})).
+   - Non-negative Volume: Khối lượng giao dịch >= 0.
+   - Candlestick Logic: High >= max(Open, Close), Low <= min(Open, Close), High >= Low.
+   - No NaN/Inf: Loại bỏ hoàn toàn giá trị rỗng/vô cực, ngăn chặn triệt để "NaN Contamination" trong PyTorch.
+2. Tự động chuẩn hóa schema (hỗ trợ cả TitleCase và lowercase, nhận diện cột Date).
+3. Cung cấp đối tượng ValidationResult chi tiết (is_valid, errors, warnings, stats) cho từng mã tài sản.
+4. Cung cấp hàm validate_raw_dir quét và nghiệm thu toàn bộ thư mục dữ liệu 25 mã cổ phiếu.
 """
 
 from dataclasses import dataclass, field
