@@ -89,14 +89,14 @@ _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xo
   - _Nội dung:_ Kiểm tra tự động 7 luật: Non-empty, Required OHLCV, Timeline sorted/unique, Giá > 0, Volume $\ge$ 0, Logic nến $High \ge Low / Open / Close$, Không chứa NaN/Inf.
   - _Tiêu chuẩn nghiệm thu:_ Đã kiểm định tự động toàn bộ 25 file Parquet thật trong `data/raw/` đều hợp lệ 100%. Đạt 12/12 unit tests pass.
 
-- [ ] **[DATA-004] Đồng bộ ngày giao dịch (Trading Calendar Alignment) (P0)**
-  - _Tệp cần tạo:_ `src/data/alignment.py`
-  - _Nội dung:_ Thị trường có thể có ngày nghỉ bất thường hoặc mã niêm yết lệch. Cần tạo lịch giao dịch chung (Common Dates) sao cho toàn bộ các mã có cùng một Index ngày.
-  - _Tiêu chuẩn nghiệm thu:_ `len(df_AAPL) == len(df_MSFT) == len(df_NVDA)` và chung Index `Date`.
+- [x] **[DATA-004] Đồng bộ ngày giao dịch (Trading Calendar Alignment) (P0)**
+  - _Tệp đã tạo:_ `src/data/alignment.py`, `tests/test_alignment.py`
+  - _Nội dung:_ Hỗ trợ 2 cơ chế: `intersection` (giữ ngày giao dịch chung) và `union_ffill` (điền giá hôm trước chống look-ahead bias). Hỗ trợ xuất bảng giá đa tài sản `to_price_panel()` `[T, N]`.
+  - _Tiêu chuẩn nghiệm thu:_ Đã đồng bộ 25 mã cổ phiếu thật về chung 1 lịch giao dịch gồm 2,765 ngày, 6/6 unit tests pass.
 
-- [ ] **[DATA-005] Lưu siêu dữ liệu nguồn (Provenance Metadata) (P1)**
-  - _Tệp cần tạo:_ `data/interim/dataset_metadata.json`
-  - _Nội dung:_ Lưu lại thời gian tải, phiên bản dữ liệu, số dòng, khoảng thời gian để phục vụ viết báo cáo khoa học.
+- [x] **[DATA-005] Lưu siêu dữ liệu nguồn (Provenance Metadata) (P1)**
+  - _Tệp đã tạo:_ `data/interim/dataset_metadata.json`
+  - _Nội dung:_ Lưu lại thời gian tạo, phiên bản dữ liệu, số mã (25), số ngày (2,765), phân loại theo 5 sector, benchmark SPY, phương pháp căn chỉnh, và tổng số 69,125 dòng phục vụ báo cáo khoa học.
 
 - [ ] **[FEAT-001] Tính toán Daily Return (P0)**
   - _Tệp cần tạo:_ `src/features/returns.py`, `tests/test_returns.py`
