@@ -107,7 +107,6 @@ _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xo
   - _Tệp đã tạo:_ `src/features/volatility.py`, `tests/test_volatility.py`
   - _Công thức:_ Độ lệch chuẩn của return trong cửa sổ trượt 20 ngày (`rolling(20).std()`), hỗ trợ niên độ hóa $\sigma_{\text{ann}} = \sigma_{\text{daily}} \times \sqrt{252}$ và `min_periods=1` chống NaN.
   - _Tiêu chuẩn nghiệm thu:_ 5/5 unit tests pass, hỗ trợ xuất ma trận $[T, N]$.
-  
 - [x] **[FEAT-003] Tính toán RSI-14 (P1)**
   - _Tệp đã tạo:_ `src/features/rsi.py`, `tests/test_rsi.py`
   - _Nội dung:_ Cài đặt chuẩn xác công thức Wilder RSI chu kỳ 14 ngày (EMA với $\alpha = 1/14$). Hỗ trợ scale $[0, 1]$ cho RL.
@@ -121,28 +120,26 @@ _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xo
 
 _Mục tiêu: Đóng gói toàn bộ đặc trưng vào tensor và chia Train/Val/Test tuyệt đối không rò rỉ dữ liệu._
 
-- [ ] **[FEAT-004] Tính toán MACD (P1)**
-  - _Tệp cần tạo:_ `src/features/macd.py`
-  - _Nội dung:_ Tính đường MACD (EMA12 - EMA26), đường Signal (EMA9 của MACD) và Histogram.
+- [x] **[FEAT-004] Tính toán MACD (P1)**
+  - _Tệp đã tạo:_ `src/features/macd.py`, `tests/test_macd.py`
+  - _Nội dung:_ Tính đường MACD (EMA12 - EMA26), đường Signal (EMA9 của MACD) và Histogram. 6/6 unit tests pass.
 
-- [ ] **[FEAT-005] Chuẩn hóa Volume (P1)**
-  - _Tệp cần tạo:_ `src/features/volume.py`
-  - _Nội dung:_ Áp dụng $\log(1 + \text{Volume})$ và chuẩn hóa (Normalize). Tuyệt đối không dùng thông tin tương lai để tính mean/std.
+- [x] **[FEAT-005] Chuẩn hóa Volume (P1)**
+  - _Tệp đã tạo:_ `src/features/volume.py`, `tests/test_volume.py`
+  - _Nội dung:_ Áp dụng $\log(1 + \text{Volume})$ và Rolling Z-score ($W=20$). Tuyệt đối không dùng thông tin tương lai. 7/7 unit tests pass.
 
-- [ ] **[FEAT-006] Đóng gói toàn bộ Feature Pipeline (P0)**
-  - _Tệp cần tạo:_ `src/features/pipeline.py`
-  - _Nội dung:_ Gộp 6 đặc trưng thành tensor đồng nhất cho từng ngày và từng cổ phiếu: `[Return, Volatility, RSI, MACD, MACD_Signal, VolumeNorm]`.
-  - _Tiêu chuẩn nghiệm thu:_ Tạo ra file dữ liệu sẵn sàng cho Model tại `data/processed/features.parquet`.
+- [x] **[FEAT-006] Đóng gói toàn bộ Feature Pipeline (P0)**
+  - _Tệp đã tạo:_ `src/features/pipeline.py`, `tests/test_pipeline.py`
+  - _Nội dung:_ Gộp 6 đặc trưng `[return, volatility_20d, rsi_14, macd, macd_signal, volume_norm]`, đúc `MarketDataTensor` $[T, N, F]$ và xuất ra `data/processed/features.parquet` (4.0 MB). 4/4 unit tests pass.
 
-- [ ] **[SPLIT-001] Phân chia Train / Validation / Test theo thời gian (P0)**
-  - _Tệp cần tạo:_ `src/data/split.py`
-  - _Quy tắc sống còn:_ KHÔNG dùng `train_test_split(shuffle=True)`.
+- [x] **[SPLIT-001] Phân chia Train / Validation / Test theo thời gian (P0)**
+  - _Tệp đã tạo:_ `src/data/split.py`, `tests/test_split.py`
   - _Phân chia:_ Train (2015–2021), Validation (2022–2023), Test (2024–2025).
-  - _Tiêu chuẩn nghiệm thu:_ `max(train_date) < min(val_date)` và `max(val_date) < min(test_date)`.
+  - _Tiêu chuẩn nghiệm thu:_ Đảm bảo tuyệt đối `max(train_date) < min(val_date) < min(test_date)`. Hỗ trợ cắt `MarketDataTensor`. 3/3 unit tests pass.
 
-- [ ] **[SPLIT-002] Chuẩn hóa chỉ học trên tập Train (Train-only Normalization) (P0)**
-  - _Tệp cần tạo:_ `src/features/scaler.py`
-  - _Nội dung:_ Tính $\mu$ và $\sigma$ duy nhất từ tập Train, sau đó áp dụng biến đổi cho tập Validation và Test. Lưu lại tham số scaler ra file.
+- [x] **[SPLIT-002] Chuẩn hóa chỉ học trên tập Train (Train-only Normalization) (P0)**
+  - _Tệp đã tạo:_ `src/features/scaler.py`, `tests/test_scaler.py`
+  - _Nội dung:_ Tính $\mu$ và $\sigma$ duy nhất từ tập Train, áp dụng đóng băng biến đổi cho Validation và Test. Lưu trữ tham số tại `data/processed/scaler_params.json`. 4/4 unit tests pass.
 
 ---
 

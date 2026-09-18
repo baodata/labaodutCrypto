@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "is_fitted": true,
+  "feature_names": [
+    "return",
+    "volatility_20d",
+    "rsi_14",
+    "macd",
+    "macd_signal",
+    "volume_norm"
+  ],
+  "means": {
+    "return": 0.0006982104387134314,
+    "volatility_20d": 0.016778120771050453,
+    "rsi_14": 0.5339596271514893,
+    "macd": 0.45463383197784424,
+    "macd_signal": 0.45154744386672974,
+    "volume_norm": -0.026392845436930656
+  },
+  "stds": {
+    "return": 0.020205147564411163,
+    "volatility_20d": 0.011327388696372509,
+    "rsi_14": 0.12144441902637482,
+    "macd": 2.2260582447052,
+    "macd_signal": 2.0859553813934326,
+    "volume_norm": 1.0534265041351318
+  },
+  "eps": 1e-08,
+  "clip_range": [
+    -10.0,
+    10.0
+  ]
+}

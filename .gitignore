@@ -55,6 +55,7 @@ data/interim/*
 !data/interim/dataset_metadata.json
 data/processed/*
 !data/processed/.gitkeep
+!data/processed/scaler_params.json
 *.parquet
 *.csv
 !configs/*.csv
