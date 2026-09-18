@@ -106,3 +106,4 @@ def test_returns_engine_multi_asset_dict():
     updated_dict = engine.calculate_for_dict(data_dict, add_column=True, return_col_name="return")
     assert "return" in updated_dict["AAPL"].columns
     assert "return" in updated_dict["MSFT"].columns
+

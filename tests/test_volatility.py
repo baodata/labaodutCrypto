@@ -81,3 +81,4 @@ def test_volatility_engine_multi_asset_dict():
     updated_dict = engine.calculate_for_dict(data_dict, add_column=True, vol_col_name="vol_5d")
     assert "vol_5d" in updated_dict["AAPL"].columns
     assert "vol_5d" in updated_dict["MSFT"].columns
+

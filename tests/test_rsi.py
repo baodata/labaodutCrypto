@@ -109,3 +109,4 @@ def test_rsi_on_real_market_data():
     assert not rsi_matrix.isna().any().any()
     assert (rsi_matrix >= 0.0).all().all()
     assert (rsi_matrix <= 1.0).all().all()
+

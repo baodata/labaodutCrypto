@@ -188,3 +188,4 @@ class RSIEngine:
             result_df = pd.DataFrame(rsi_matrix)
             result_df.index.name = "Date"
             return result_df
+

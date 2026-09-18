@@ -107,7 +107,7 @@ _Mục tiêu: Dữ liệu sạch sẽ, không có NaN/giá âm và đã tính xo
   - _Tệp đã tạo:_ `src/features/volatility.py`, `tests/test_volatility.py`
   - _Công thức:_ Độ lệch chuẩn của return trong cửa sổ trượt 20 ngày (`rolling(20).std()`), hỗ trợ niên độ hóa $\sigma_{\text{ann}} = \sigma_{\text{daily}} \times \sqrt{252}$ và `min_periods=1` chống NaN.
   - _Tiêu chuẩn nghiệm thu:_ 5/5 unit tests pass, hỗ trợ xuất ma trận $[T, N]$.
-
+  
 - [x] **[FEAT-003] Tính toán RSI-14 (P1)**
   - _Tệp đã tạo:_ `src/features/rsi.py`, `tests/test_rsi.py`
   - _Nội dung:_ Cài đặt chuẩn xác công thức Wilder RSI chu kỳ 14 ngày (EMA với $\alpha = 1/14$). Hỗ trợ scale $[0, 1]$ cho RL.
