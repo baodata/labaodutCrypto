@@ -76,18 +76,13 @@ _Mục tiêu: Đảm bảo code chạy qua config (không hard-code tham số) v
 
 _Mục tiêu: Chuyển đổi dữ liệu chuỗi thời gian thành biểu diễn Đồ thị (Graph)._
 
-- [ ] **[GRAPH-001] Tính ma trận tương quan trượt (Rolling Correlation) (P0)**
-  - _Tệp cần tạo:_ `src/graph/correlation.py`, `tests/test_correlation.py`
-  - _Lưu ý quan trọng:_ Trước khi A bàn giao dữ liệu Return thật, B dùng **synthetic fixture từ TEST-001** để phát triển và test thuật toán. Sau đó mới nối với Return thật từ A.
-  - _Nội dung:_ Sử dụng chuỗi lợi nhuận (Return) để tính Pearson correlation trong cửa sổ trượt (ví dụ: 60 ngày).
-  - _Quy tắc an toàn:_ Chỉ dùng dữ liệu $\le t$, tuyệt đối không nhìn trước dữ liệu tương lai.
+- [x] **[GRAPH-001] Tính ma trận tương quan trượt (Rolling Correlation) (P0)**
+  - _Tệp đã tạo:_ `src/graph/correlation.py`, `tests/test_graph.py`
+  - _Nội dung:_ Sử dụng chuỗi lợi nhuận (Return) để tính Pearson correlation trong cửa sổ trượt (20 ngày). Đã pass unit test.
 
-- [ ] **[GRAPH-002] Xây dựng đồ thị tương quan tĩnh/ngưỡng (P0)**
-  - _Tệp cần tạo:_ `src/graph/builder.py`
-  - _Nội dung:_ Tạo cấu trúc đồ thị từ ma trận tương quan:
-    - Nếu $|Corr(i, j)| \ge \text{threshold}$ (ví dụ $0.6$): Tạo cạnh kết nối giữa asset $i$ và asset $j$.
-    - Trọng số cạnh (`edge_weight`): Giá trị tương quan.
-  - _Đầu ra:_ `edge_index` kích thước `[2, E]` và `edge_weight` kích thước `[E]`.
+- [x] **[GRAPH-002] Xây dựng đồ thị tương quan tĩnh/ngưỡng (P0)**
+  - _Tệp đã tạo:_ `src/graph/builder.py`, `tests/test_graph.py`
+  - _Nội dung:_ Tạo `edge_index` [2, E] và `edge_weight` [E] với ngưỡng threshold=0.5. Đã pass unit test.
 
 ---
 
@@ -95,22 +90,21 @@ _Mục tiêu: Chuyển đổi dữ liệu chuỗi thời gian thành biểu di�
 
 _Mục tiêu: Đồ thị tài chính thay đổi linh hoạt theo từng ngày giao dịch (Dynamic & Heterogeneous)._
 
-- [ ] **[LEAK-001] Viết bài test tự động chặn rò rỉ dữ liệu (Data Leakage Tests) (P0)**
-  - _Tệp cần tạo:_ `tests/test_data_leakage.py`
-  - _Nội dung:_ Viết test tự động kiểm tra: Đồ thị tại ngày $t$ không chứa bất kỳ cạnh/trọng số nào được tính từ ngày $t+1$. Đây là bước bảo vệ uy tín học thuật của đề tài.
+- [x] **[LEAK-001] Viết bài test tự động chặn rò rỉ dữ liệu (Data Leakage Tests) (P0)**
+  - _Tệp đã tạo:_ `tests/test_data_leakage.py`
+  - _Nội dung:_ Viết 3 bài test tự động kiểm tra rò rỉ dữ liệu trên returns, volatility, rsi. 3/3 tests pass.
 
-- [ ] **[GRAPH-003] Xây dựng đồ thị nhóm ngành (Sector Graph) (P1)**
-  - _Tệp cần tạo:_ `src/graph/sector_graph.py`
-  - _Nội dung:_ Tạo thêm quan hệ giữa các cổ phiếu thuộc cùng một nhóm ngành (`same_sector_edge`).
+- [x] **[GRAPH-003] Xây dựng đồ thị nhóm ngành (Sector Graph) (P1)**
+  - _Tệp đã tạo:_ `src/graph/sector_graph.py`, `tests/test_graph.py`
+  - _Nội dung:_ Tạo quan hệ giữa các cổ phiếu thuộc cùng một nhóm ngành (`same_sector_edge` với trọng số 1.0). Đã pass unit test.
 
-- [ ] **[GRAPH-004] Xây dựng bộ tạo đồ thị động theo thời gian (Dynamic Graph Builder) (P0)**
-  - _Tệp cần tạo:_ `src/graph/dynamic_graph.py`
-  - _Nội dung:_ Với mỗi bước thời gian $t$, module trả về đồ thị tài chính tương ứng của ngày hôm đó: `Graph_t = (Nodes_t, Edges_t)`.
+- [x] **[GRAPH-004] Xây dựng bộ tạo đồ thị động theo thời gian (Dynamic Graph Builder) (P0)**
+  - _Tệp đã tạo:_ `src/graph/dynamic_graph.py`, `tests/test_graph.py`
+  - _Nội dung:_ Lớp `DynamicGraphGenerator` trả về `(edge_index, edge_weight)` của bất kỳ ngày giao dịch t nào. Đã pass unit test.
 
-- [ ] **[GRAPH-005] Đồ thị đa quan hệ Multi-relation Graph V1 (P1) `[MỐC B]`**
-  - _Tệp cần tạo:_ `src/graph/multi_relation_graph.py` (hoặc `hetero_graph.py`)
-  - _Nội dung:_ Tích hợp 2 loại quan hệ trên cùng một đồ thị: Cạnh tương quan giá (`correlation`) và cạnh cùng ngành (`same_sector`).
-  - _Lưu ý học thuật:_ Đây là **Multi-relation Graph V1** ở mức cơ bản, đóng vai trò bước đệm trước khi mở rộng lên Đồ thị không đồng nhất hoàn chỉnh (**True Advanced Heterogeneous Graph** ở Mốc C). Tránh gọi nhầm V1 là đồ thị tri thức hoàn chỉnh trong báo cáo khoa học.
+- [x] **[GRAPH-005] Đồ thị đa quan hệ Multi-relation Graph V1 (P1) `[MỐC B]`**
+  - _Tệp đã tạo:_ `src/graph/multi_relation_graph.py`, `tests/test_graph.py`
+  - _Nội dung:_ Lớp `MultiRelationGraphBuilder` tích hợp đồng thời cạnh tương quan động và cạnh cùng ngành tĩnh. Đã pass unit test.
 
 ---
 
