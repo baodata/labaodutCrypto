@@ -22,15 +22,17 @@ Mục đích:
    - dict[str, pd.DataFrame]: Danh mục 25 mã cổ phiếu.
 """
 
-from typing import Union
+from typing import Union, TypeVar, cast
 
 import numpy as np
 import pandas as pd
 
+T = TypeVar("T", pd.Series, pd.DataFrame)
+
 
 def compute_log_volume(
-    volume: Union[pd.Series, pd.DataFrame],
-) -> Union[pd.Series, pd.DataFrame]:
+    volume: T,
+) -> T:
     """Tính toán logarit tự nhiên của khối lượng: ln(1 + Volume).
 
     Args:
@@ -39,18 +41,18 @@ def compute_log_volume(
     Returns:
         Series hoặc DataFrame đã áp dụng log1p.
     """
-    if (volume < 0).any().any() if isinstance(volume, pd.DataFrame) else (volume < 0).any():
+    if (volume.to_numpy() < 0).any():
         raise ValueError("Khối lượng giao dịch không thể âm (< 0).")
-    return np.log1p(volume)
+    return np.log1p(volume)  # type: ignore
 
 
 def compute_normalized_volume(
-    volume: Union[pd.Series, pd.DataFrame],
+    volume: T,
     window: int = 20,
     min_periods: int = 1,
     eps: float = 1e-8,
     fill_zero: bool = True,
-) -> Union[pd.Series, pd.DataFrame]:
+) -> T:
     """Chuẩn hóa khối lượng qua 2 tầng: Log1p và Rolling Z-score W ngày.
 
     Args:
@@ -176,7 +178,7 @@ class VolumeEngine:
         else:
             norm_matrix: dict[str, pd.Series] = {}
             for ticker, df in aligned_dict.items():
-                norm_matrix[ticker] = self.calculate(df)
+                norm_matrix[ticker] = cast(pd.Series, self.calculate(df))
             result_df = pd.DataFrame(norm_matrix)
             result_df.index.name = "Date"
             return result_df
