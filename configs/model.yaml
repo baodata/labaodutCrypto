@@ -1,22 +1,22 @@
-# ==============================================================================
-# H-MARL-GNN: MODEL & TRAINING CONFIGURATION (PLACEHOLDER)
-# ==============================================================================
+# configs/model.yaml
+# Cấu hình Kiến trúc Học Sâu (Deep Learning Architectures)
+# Gồm Mạng GNN (Thành viên B) và Tác tử RL (Thành viên A & B)
 
-# Ticket liên quan: MODEL-001, GNN-001, TRAIN-001 (Sprint 4 & 5)
- 
-# FILE NÀY ĐỂ LÀM GÌ?
-# - Lưu trữ các siêu tham số (Hyperparameters) của các mạng Neural Networks (GNN, GAT)
-#   và mô hình Học Tăng Cường (PPO, H-MARL).
-# - Hỗ trợ việc chạy thực nghiệm (Ablation Study), cứ thay đổi file này.
- 
-# CÁC THAM SỐ SẼ ĐƯỢC THÊM VÀO ĐÂY TRONG TƯƠNG LAI:
-# - learning_rate: Tốc độ học (ví dụ: 3e-4)
-# - batch_size: Kích thước batch huấn luyện
-# - gnn_hidden_dim: Số chiều lớp ẩn của Graph Neural Network
-# - gat_heads: Số lượng attention heads của Graph Attention Network
-# - ppo_clip_range: Ngưỡng clip của hàm Loss PPO
+gnn:
+  # Cấu hình Mạng Nơ-ron Đồ thị (Bộ não Low-Level)
+  architecture: "GAT"            # Chọn "GCN" (Cơ bản) hoặc "GAT" (Chú ý - Mốc B)
+  in_channels: 6                 # Kích thước đầu vào (6 features từ Pipeline của A)
+  hidden_channels: 64            # Số lượng nơ-ron ở lớp ẩn
+  out_channels: 32               # Số chiều của Vector Nhúng đầu ra [N, 32]
+  heads: 4                       # Số lượng "con mắt" Attention (Chỉ dùng cho GAT)
+  dropout: 0.2                   # Tỷ lệ tắt nơ-ron ngẫu nhiên để chống học vẹt (Overfitting)
+  threshold_corr: 0.5            # Ngưỡng tạo cạnh Tương quan động
 
-# ==============================================================================
-
-version: "1.0"
-# Chưa làm tới
+rl_agent:
+  # Cấu hình Thuật toán Học Tăng Cường (PPO)
+  algorithm: "PPO"               # Thuật toán Proximal Policy Optimization
+  learning_rate: 0.0003          # Tốc độ học (3e-4 là chuẩn vàng của PPO)
+  gamma: 0.99                    # Hệ số chiết khấu tương lai (Tầm nhìn dài hạn)
+  clip_ratio: 0.2                # Giới hạn cập nhật policy để AI không bị "sốc"
+  batch_size: 64                 # Kích thước lô huấn luyện
+  entropy_coef: 0.01             # Khuyến khích AI khám phá các chiến thuật mua bán mới mẻ

@@ -26,12 +26,16 @@ class MultiRelationGraphBuilder:
         self.sec_edge_index, self.sec_edge_weight = generate_sector_edges(tickers)
         
     def build_at_time(self, timestamp: pd.Timestamp) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Gộp cả Tương quan và Ngành vào một hệ thống."""
-        # 1. Lấy đồ thị động tại ngày t (Correlation)
+        """Gộp cả Tương quan và Ngành vào một hệ thống (dành cho Backtest)."""
         corr_edge_index, corr_edge_weight = self.dynamic_gen.get_graph_at_time(timestamp)
-        
-        # 2. Hợp nhất với đồ thị tĩnh (Sector)
         combined_index = torch.cat([corr_edge_index, self.sec_edge_index], dim=1)
         combined_weight = torch.cat([corr_edge_weight, self.sec_edge_weight], dim=0)
-        
+        return combined_index, combined_weight
+
+    def build_from_matrix(self, corr_matrix: np.ndarray, threshold: float = 0.5) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Gộp cả Tương quan và Ngành từ ma trận trực tiếp (Dành cho Adapter và Live Trading)."""
+        from src.graph.dynamic_graph import generate_correlation_edges
+        corr_edge_index, corr_edge_weight = generate_correlation_edges(corr_matrix, threshold)
+        combined_index = torch.cat([corr_edge_index, self.sec_edge_index], dim=1)
+        combined_weight = torch.cat([corr_edge_weight, self.sec_edge_weight], dim=0)
         return combined_index, combined_weight
