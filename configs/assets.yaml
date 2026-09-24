@@ -1,46 +1,49 @@
 # ==============================================================================
 # H-MARL-GNN: ASSET UNIVERSE CONFIGURATION (V1)
 # ==============================================================================
-
 # Ticket: DATA-001 (P0)
-
+#
 # FILE NÀY ĐỂ LÀM GÌ?
-# - Định nghĩa các assets được sử dụng trong môi trường giao dịch.
-# - Tránh việc hard-code các con số trực tiếp vào mã nguồn.
-# - tạo ra các datasets huấn luyện, đánh giá các chiến lược đầu tư.
-# Những file mã nguồn khác sẽ tham chiếu đến file này để lấy danh sách các cổ phiếu, nhóm ngành, chỉ số benchmark.
-
-
-
-# ==============================================================================
+# - Định nghĩa vũ trụ tài sản (assets) dùng trong môi trường giao dịch.
+# - Tránh hard-code danh sách mã, nhóm ngành, benchmark trong mã nguồn Python.
+# - Là nguồn duy nhất (single source of truth) để tạo dataset huấn luyện,
+#   đánh giá chiến lược, và chia nhóm agent cho MARL.
+# Các module khác (downloader, features, graph, env, agents) đọc file này.
+#
 # Tiêu chí lựa chọn:
 #   1. Cổ phiếu vốn hóa lớn (Large Cap) niêm yết trên sàn Mỹ (NASDAQ / NYSE).
 #   2. Thanh khoản cao, khối lượng giao dịch dồi dào để hạn chế trượt giá.
-#   3. Có lịch sử giao dịch liên tục trọn vẹn từ trước năm 2015 đến nay (tránh rủi ro thiếu dữ liệu/IPO muộn).
-#   4. Phân bổ cân bằng trên 5 nhóm ngành (Sectors) phục vụ cho Multi-Agent RL.
-# Tổng số tài sản: 24 cổ phiếu thuộc 5 nhóm ngành + Chỉ số tham chiếu Benchmark (SPY).
+#   3. Có lịch sử giao dịch liên tục từ trước năm 2015 đến nay
+#      (tránh rủi ro thiếu dữ liệu / IPO muộn).
+#   4. Phân bổ trên 5 nhóm ngành (sectors) phục vụ Multi-Agent RL.
+# Tổng số tài sản: 24 cổ phiếu thuộc 5 nhóm ngành + benchmark SPY.
 # ==============================================================================
 
 version: "1.0"
 
-# Đây là chỉ số tham chiếu (Benchmark) để đánh giá hiệu suất chiến lược đầu tư.
+# Chỉ số tham chiếu (benchmark) để đánh giá hiệu suất chiến lược.
+# LƯU Ý: SPY CHỈ dùng làm benchmark. Không đưa vào tensor [T, N, F]
+# và không nằm trong action [N + 1]. N = 24.
 benchmark:
   ticker: "SPY"
   name: "SPDR S&P 500 ETF Trust"
   sector: "index"
+  agent_group: "index"
 
-# Ngày bắt đầu và kết thúc đi vào đây 
+# Khoảng thời gian dữ liệu (train/val/test được chia riêng trong split.py).
 date_range:
   start_date: "2015-01-01"
   end_date: "2025-12-31"
 
-# đây là gì
+# Tiền mặt (cash): tài sản thứ N + 1 trong action, không phải cổ phiếu.
+# risk_free_rate_annual dùng để tính Sharpe Ratio (và có thể dùng làm lãi tiền mặt).
+# Lưu ý: lãi suất thực tế giai đoạn 2022-2025 cao hơn 2%, nên cân nhắc
+# đặt theo từng giai đoạn hoặc chạy độ nhạy nếu Sharpe của baseline bị lệch.
 cash:
   symbol: "CASH"
-  risk_free_rate_annual: 0.02  # Lãi suất phi rủi ro 2%/năm phục vụ tính Sharpe Ratio
+  risk_free_rate_annual: 0.02
 
-
-# Danh sách các nhóm ngành (Sectors)
+# Danh sách các nhóm ngành (sectors)
 sectors:
   technology:
     name: "Technology"
@@ -58,8 +61,23 @@ sectors:
     name: "Consumer"
     description: "Hàng tiêu dùng thiết yếu và hàng tiêu dùng không thiết yếu"
 
+# Phân nhóm agent cho Multi-Agent RL (MARL-001)
+# Energy và Consumer gộp chung do số lượng tài sản nhỏ (3 + 5 = 8).
+agent_groups:
+  technology:
+    name: "Technology Agent"
+    sectors: ["technology"]
+  financials:
+    name: "Financials Agent"
+    sectors: ["financials"]
+  healthcare:
+    name: "Healthcare Agent"
+    sectors: ["healthcare"]
+  energy_consumer:
+    name: "Energy & Consumer Agent"
+    sectors: ["energy", "consumer"]
 
-# Danh sách các cổ phiếu được lựa chọn từ 5 nhóm ngành (Sectors) khác nhau
+# Danh sách 24 cổ phiếu (giá trị agent_group phải khớp khóa trong agent_groups)
 assets:
   # ----------------------------------------------------------------------------
   # 1. TECHNOLOGY (6 cổ phiếu)
@@ -67,31 +85,37 @@ assets:
   - ticker: "AAPL"
     name: "Apple Inc."
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   - ticker: "MSFT"
     name: "Microsoft Corporation"
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   - ticker: "NVDA"
     name: "NVIDIA Corporation"
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   - ticker: "AMD"
     name: "Advanced Micro Devices, Inc."
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   - ticker: "GOOGL"
     name: "Alphabet Inc. (Class A)"
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   - ticker: "META"
     name: "Meta Platforms, Inc."
     sector: "technology"
+    agent_group: "technology"
     exchange: "NASDAQ"
 
   # ----------------------------------------------------------------------------
@@ -100,26 +124,31 @@ assets:
   - ticker: "JPM"
     name: "JPMorgan Chase & Co."
     sector: "financials"
+    agent_group: "financials"
     exchange: "NYSE"
 
   - ticker: "BAC"
     name: "Bank of America Corporation"
     sector: "financials"
+    agent_group: "financials"
     exchange: "NYSE"
 
   - ticker: "GS"
     name: "The Goldman Sachs Group, Inc."
     sector: "financials"
+    agent_group: "financials"
     exchange: "NYSE"
 
   - ticker: "MS"
     name: "Morgan Stanley"
     sector: "financials"
+    agent_group: "financials"
     exchange: "NYSE"
 
   - ticker: "WFC"
     name: "Wells Fargo & Company"
     sector: "financials"
+    agent_group: "financials"
     exchange: "NYSE"
 
   # ----------------------------------------------------------------------------
@@ -128,26 +157,31 @@ assets:
   - ticker: "JNJ"
     name: "Johnson & Johnson"
     sector: "healthcare"
+    agent_group: "healthcare"
     exchange: "NYSE"
 
   - ticker: "PFE"
     name: "Pfizer Inc."
     sector: "healthcare"
+    agent_group: "healthcare"
     exchange: "NYSE"
 
   - ticker: "UNH"
     name: "UnitedHealth Group Incorporated"
     sector: "healthcare"
+    agent_group: "healthcare"
     exchange: "NYSE"
 
   - ticker: "ABBV"
     name: "AbbVie Inc."
     sector: "healthcare"
+    agent_group: "healthcare"
     exchange: "NYSE"
 
   - ticker: "LLY"
     name: "Eli Lilly and Company"
     sector: "healthcare"
+    agent_group: "healthcare"
     exchange: "NYSE"
 
   # ----------------------------------------------------------------------------
@@ -156,16 +190,19 @@ assets:
   - ticker: "XOM"
     name: "Exxon Mobil Corporation"
     sector: "energy"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
 
   - ticker: "CVX"
     name: "Chevron Corporation"
     sector: "energy"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
 
   - ticker: "COP"
     name: "ConocoPhillips"
     sector: "energy"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
 
   # ----------------------------------------------------------------------------
@@ -174,25 +211,29 @@ assets:
   - ticker: "AMZN"
     name: "Amazon.com, Inc."
     sector: "consumer"
+    agent_group: "energy_consumer"
     exchange: "NASDAQ"
 
   - ticker: "TSLA"
     name: "Tesla, Inc."
     sector: "consumer"
+    agent_group: "energy_consumer"
     exchange: "NASDAQ"
 
   - ticker: "WMT"
     name: "Walmart Inc."
     sector: "consumer"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
 
   - ticker: "PG"
     name: "The Procter & Gamble Company"
     sector: "consumer"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
 
   - ticker: "KO"
     name: "The Coca-Cola Company"
     sector: "consumer"
+    agent_group: "energy_consumer"
     exchange: "NYSE"
-

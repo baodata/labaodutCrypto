@@ -112,16 +112,16 @@ _Mục tiêu: Đồ thị tài chính thay đổi linh hoạt theo từng ngày 
 
 _Mục tiêu: Mạng GNN nhận đồ thị và trả về vector đặc trưng (Embedding) cho từng mã cổ phiếu._
 
-- [ ] **[GNN-001] Cài đặt bộ mã hóa GCN Encoder (P0)**
+- [x] **[GNN-001] Cài đặt bộ mã hóa GCN Encoder (P0)**
   - _Tệp cần tạo:_ `src/models/gcn.py`, `tests/test_gcn.py`
   - _Kiến trúc:_ 2 lớp Graph Convolutional Network (GCN).
   - _Đầu vào:_ Node features `[N, F]` (do A chuẩn bị) và `edge_index` `[2, E]`.
   - _Đầu ra:_ Node embeddings `[N, embedding_dim]` (ví dụ: `embedding_dim = 32` hoặc `64`).
 
-- [ ] **[GNN-002] Chạy kiểm thử tích hợp GNN với dữ liệu của Thành viên A (P0 - Chung)**
+- [x] **[GNN-002] Chạy kiểm thử tích hợp GNN với dữ liệu của Thành viên A (P0 - Chung)**
   - Đảm bảo model forward pass thành công với tensor dữ liệu thật từ Feature Pipeline mà không gặp lỗi lệch shape hay NaN.
 
-- [ ] **[GNN-003] Cài đặt bộ mã hóa Graph Attention Network (GAT Encoder) (P1)**
+- [x] **[GNN-003] Cài đặt bộ mã hóa Graph Attention Network (GAT Encoder) (P1)**
   - _Tệp cần tạo:_ `src/models/gat.py`
   - _Nội dung:_ Sử dụng cơ chế Attention để học trọng số liên kết giữa các node cổ phiếu (ví dụ: NVDA sẽ chú ý nhiều hơn đến TSM và AMD so với các mã khác).
 

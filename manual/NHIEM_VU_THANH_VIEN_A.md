@@ -68,9 +68,10 @@ _Mục tiêu: Có dữ liệu OHLCV đầy đủ của 20–30 mã cổ phiếu 
   - _Kết quả thực tế:_ Tải thành công 25/25 mã (24 cổ phiếu + SPY benchmark), mỗi mã đạt chính xác 2.765 phiên giao dịch (100% không rò rỉ, không trùng lặp). Đã vượt qua 13/13 unit tests.
   - _Người review:_ Thành viên B.
 
-- [x] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt với Thành viên B (P0 - Chung)**
+- [x] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt với Thành viên B (P0 - Chung)** _(đã chỉnh)_
   - _Tệp đã tạo:_ `src/utils/contracts.py`, `tests/test_contracts.py`
   - _Đã chốt định dạng đầu ra cho B:_ `MarketDataTensor` kích thước `[T, N, F]` (thời gian $\times$ tài sản $\times$ đặc trưng kỹ thuật).
+  - _Quy ước:_ **$N = 24$ tài sản giao dịch.** SPY chỉ là benchmark đánh giá hiệu suất, **không được đưa vào** tensor `[T, N, F]` hay action `[N+1]`.
   - _Đã chốt cấu trúc đồ thị tương thích với B (`builder.py`):_ `DynamicGraphData` gồm `node_features` `[N, F]`, `edge_index` `[2, E]`, `edge_weight` `[E]`.
   - _Đã chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ (`MarketObservation`):_
     - Chế độ 1: `raw_features` `[N, F]` (cho Single-Agent PPO chạy không cần GNN).
@@ -143,6 +144,11 @@ _Mục tiêu: Đóng gói toàn bộ đặc trưng vào tensor và chia Train/Va
 
 ---
 
+- [ ] **[LEAK-002] Kiểm thử rò rỉ dữ liệu mở rộng (P0)** _(mới)_
+  - _Nội dung:_ Test rò rỉ dữ liệu cho MACD, volume_norm, scaler (train-only) và split, bổ sung cho LEAK-001 (chỉ phủ returns, volatility, RSI).
+
+---
+
 ### 🏁 SPRINT 4: Xây dựng Môi trường Giao dịch (Trading Environment)
 
 _Mục tiêu: Xây dựng logic tính toán tiền mặt, cổ phiếu, phí giao dịch và lợi nhuận danh mục._
@@ -151,29 +157,37 @@ _Mục tiêu: Xây dựng logic tính toán tiền mặt, cổ phiếu, phí gia
   - _Tệp cần tạo:_ `src/env/portfolio.py`
   - _Nội dung:_ Class lưu trữ: `cash`, `portfolio_value`, `weights`, `peak_value`.
 
-- [ ] **[ENV-002] Bộ máy tính toán lợi nhuận danh mục (Return Engine) (P0)**
+- [ ] **[ENV-002] Bộ máy tính toán lợi nhuận danh mục (Return Engine) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/returns.py`, `tests/test_portfolio_returns.py`
-  - _Công thức:_ $R_p(t+1) = \sum_{i} w_i(t) \cdot r_i(t+1)$. Có unit test chặt chẽ.
+  - _Công thức:_ $R_p(t+1) = \sum_{i} w_i(t) \cdot r_i(t+1)$. **Lưu ý: Đây là return GỘP (gross), chưa trừ phí giao dịch.** Có unit test chặt chẽ.
 
 - [ ] **[ENV-003] Ràng buộc tỷ trọng đầu tư (Rebalancing Constraints) (P0)**
   - _Tệp cần tạo:_ `src/env/rebalance.py`
   - _Ràng buộc:_ Long-only ($w_i \ge 0$), tổng tỷ trọng cổ phiếu + tiền mặt = 1 ($\sum w_i + w_{cash} = 1$). Có hàm chiếu (projection) nếu agent đưa ra weight không hợp lệ.
 
-- [ ] **[ENV-004] Mô hình hóa chi phí giao dịch (Transaction Cost) (P0)**
+- [ ] **[ENV-004] Mô hình hóa chi phí giao dịch (Transaction Cost) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/cost.py`
-  - _Công thức:_ $\text{Turnover}_t = \sum_i |w_{i,t} - w_{i,t-1}|$; $\text{Cost}_t = c \cdot \text{Turnover}_t \cdot V_t$ (với tỷ lệ phí $c = 0.1\%$ lấy từ cấu hình).
+  - _Công thức:_ 
+    - Tính tỷ trọng đã trôi (drifted weight) bao gồm cả cash với lãi suất phi rủi ro: $	ilde{w}_i = w_{i,t-1} \cdot (1 + r_i) / (1 + R_p)$
+    - Tính tỷ lệ phí giao dịch: $TC_t = c \cdot \sum_i |w_{i,t} - 	ilde{w}_i|$
+  - _Lưu ý:_ Không nhân $V_t$ trực tiếp trong env. Giá trị đô la = $TC_t \cdot V_t$ nếu cần báo cáo.
 
 - [ ] **[ENV-005] Bộ theo dõi sụt giảm vốn (Drawdown Tracker) (P0)**
   - _Tệp cần tạo:_ `src/env/drawdown.py`
   - _Công thức:_ $\text{DD}_t = \frac{V_t - \text{Peak}_t}{\text{Peak}_t}$; tính Maximum Drawdown (MDD).
 
-- [ ] **[ENV-006] Tính toán độ biến động rủi ro danh mục (Risk Calculator) (P1)**
+- [ ] **[ENV-006] Tính toán độ biến động rủi ro danh mục (Risk Calculator) (P1)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/risk.py`
-  - _Nội dung:_ Tính rolling portfolio volatility: $\sigma_p = \sqrt{w^T \Sigma w}$.
+  - _Nội dung:_ Tính rolling portfolio volatility: $\sigma_p = \sqrt{w^T \Sigma w}$. Cửa sổ ước lượng covariance từ 60 ngày hoặc dùng shrinkage Ledoit-Wolf (Lý do: 20 quan sát cho 24 tài sản làm ma trận suy biến).
 
-- [ ] **[ENV-007] Thiết kế hàm Reward V1 (P0)**
+- [ ] **[ENV-007] Thiết kế hàm Reward V1 (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/reward.py`
-  - _Công thức ban đầu:_ $\text{Reward}_t = R_{p,t} - \beta \cdot \text{Cost}_t$ (đơn giản, ổn định trước khi thêm phạt rủi ro).
+  - _Công thức ban đầu:_ $\text{Reward}_t = R_{p,t} - \beta \cdot TC_t$
+  - _Ghi chú:_ $\beta = 1$ là phạt đúng phí thật. Nếu $\beta > 1$ thì đó là reward shaping, và mọi metrics đánh giá vẫn tính trên net return thật ($R_p - TC$).
+
+- [ ] **[ENV-009] Chốt quy ước khớp lệnh và thời điểm quyết định (P0)** _(mới)_
+  - _Quy ước:_ Quyết định cuối ngày $t$, khớp lệnh tại giá Open ngày $t+1$, return tính theo Open $\rightarrow$ Open.
+  - _Nội dung:_ Env đọc thêm ma trận giá open $[T, N]$. Yêu cầu ghi quy ước này vào docs TRƯỚC khi viết `trading_env.py`. Nhắc lại ở RESEARCH-002 (Sprint 9) rằng việc này chỉ còn là kiểm toán, không phải lúc quyết định.
 
 - [ ] **[GNN-002] Phối hợp chạy Integration Test cho GNN (P0 - Cùng B)**
   - Kiểm tra xem mạng GNN do Thành viên B viết có nhận đúng định dạng dữ liệu từ Feature Pipeline của bạn hay không.
@@ -192,9 +206,9 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
   - _Tệp cần tạo:_ `src/evaluation/backtester.py`
   - _Nội dung:_ Lặp qua từng ngày trong tập Test: ghi nhận Portfolio Value, Return, Phí giao dịch, Drawdown theo thời gian.
 
-- [ ] **[BASE-001] Triển khai Baseline Giữ tiền mặt (Cash Baseline) (P0)**
+- [ ] **[BASE-001] Triển khai Baseline Giữ tiền mặt (Cash Baseline) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/evaluation/baselines/cash.py`
-  - Giữ 100% Cash để làm mốc so sánh tối thiểu (Sanity check).
+  - Giữ 100% Cash để làm mốc so sánh, cho cash sinh lãi bằng risk-free rate thay vì 0%.
 
 - [ ] **[BASE-002] Triển khai Baseline Danh mục đều tay (Equal Weight 1/N) (P0)**
   - _Tệp cần tạo:_ `src/evaluation/baselines/equal_weight.py`
@@ -204,13 +218,24 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
   - _Tệp cần tạo:_ `src/evaluation/baselines/buy_and_hold.py`
   - Phân bổ đều lúc đầu kỳ, sau đó để mặc cho giá tự trôi mà không rebalance.
 
-- [ ] **[BASE-004] Cùng Thành viên B lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)**
+- [ ] **[BASE-004] Cùng Thành viên B lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)** _(đã chỉnh)_
   - _Tệp cùng thực hiện:_ `src/training/single_agent_ppo.py`, `scripts/train_single_agent.py`
-  - _Phần việc của A:_
-    - Kết nối Trading Environment với thuật toán PPO.
+  - _Phần việc của A (Primary):_
+    - Bổ sung vòng lặp huấn luyện PPO, tính GAE/advantage và clip loss.
     - Thiết kế hàm Reward động (thưởng Return, phạt Transaction Cost và Volatility).
+    - LƯU Ý: Phần của B sẽ giảm về Adapter Obs/Action, Softmax, review. Nên tách lõi PPO dùng chung (vd. `src/training/ppo_core.py`) để hai người không cùng sửa `single_agent_ppo.py`.
     - Theo dõi đồ thị học tập (learning curve) và phân tích hành vi đặt trọng số của Agent.
-    - Cùng B tinh chỉnh (tune) siêu tham số: `learning_rate`, `clip_range`, `gamma`, `entropy_coef`.
+
+- [ ] **[EXP-001] Cài đặt đầy đủ các chỉ số tài chính chuẩn (P0)** _(đã chỉnh)_
+  - _Tệp cần tạo:_ `src/evaluation/metrics.py`, `tests/test_metrics.py`
+  - _Các chỉ số bắt buộc:_
+    1. **Cumulative Return:** Tổng tỷ suất sinh lời toàn kỳ.
+    2. **Annualized Return:** Lợi nhuận quy năm.
+    3. **Annualized Volatility:** Biến động danh mục quy năm ($\sigma_{daily} \times \sqrt{252}$).
+    4. **Sharpe Ratio:** Tỷ suất sinh lời có điều chỉnh theo rủi ro (thêm risk-free rate vào Sharpe).
+    5. **Maximum Drawdown (MDD):** Mức sụt giảm tài khoản sâu nhất từ đỉnh.
+    6. **Calmar Ratio:** Tỷ số giữa Annualized Return và MDD.
+    7. **Turnover & Total Costs:** Tỷ lệ đảo danh mục và tổng chi phí phát sinh.
 
 > 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: Dữ liệu processed $\rightarrow$ Trading Environment $\rightarrow$ PPO (A+B) $\rightarrow$ Backtest $\rightarrow$ Xuất bảng metrics so sánh với Equal Weight & Cash. Không chỉ là từng module chạy riêng lẻ!
 
@@ -220,19 +245,17 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
 
 _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức độ rủi ro gánh chịu._
 
-- [ ] **[EXP-001] Cài đặt đầy đủ các chỉ số tài chính chuẩn (P0)**
-  - _Tệp cần tạo:_ `src/evaluation/metrics.py`, `tests/test_metrics.py`
-  - _Các chỉ số bắt buộc:_
-    1. **Cumulative Return:** Tổng tỷ suất sinh lời toàn kỳ.
-    2. **Annualized Return:** Lợi nhuận quy năm.
-    3. **Annualized Volatility:** Biến động danh mục quy năm ($\sigma_{daily} \times \sqrt{252}$).
-    4. **Sharpe Ratio:** Tỷ suất sinh lời có điều chỉnh theo rủi ro.
-    5. **Maximum Drawdown (MDD):** Mức sụt giảm tài khoản sâu nhất từ đỉnh.
-    6. **Calmar Ratio:** Tỷ số giữa Annualized Return và MDD.
-    7. **Turnover & Total Costs:** Tỷ lệ đảo danh mục và tổng chi phí phát sinh.
-
 - [ ] **[MARL-001] Thống nhất ranh giới phân chia Sector với B (P0 - Chung)**
   - Cung cấp danh sách phân nhóm cổ phiếu cho từng sector agent.
+
+- [ ] **[MARL-002] Huấn luyện Sector Agent phân bổ tỷ trọng (P0)** _(mới)_
+  - Huấn luyện Agent phân bổ nội bộ cho nhóm ngành được phân công.
+
+- [ ] **[MARL-003] Huấn luyện cơ chế khen thưởng từng nhóm (P0)** _(mới)_
+  - Thiết kế reward riêng cho mỗi Sector Agent.
+
+- [ ] **[MARL-004] Tích hợp mạng MARL với Môi trường giao dịch (P0)** _(mới)_
+  - Kết nối Multi-Agent với `portfolio_env.py`.
 
 - [ ] **[MARL-006] Đánh giá mô hình MARL sơ bộ (P0 - Chung)**
   - Dùng Backtester chạy đánh giá so sánh giữa Baseline truyền thống và mô hình MARL do B train.
@@ -243,6 +266,12 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 
 _Mục tiêu: Làm chủ Agent vĩ mô phân bổ vốn vào các nhóm ngành và tiền mặt, sau đó ghép nối toàn diện._
 
+- [ ] **[HMARL-000] Tài liệu thiết kế huấn luyện phân cấp (P0)** _(mới)_
+  - Chốt 3 điều:
+    - (a) Reward của low-level agent là reward danh mục chung hay reward riêng theo sector?
+    - (b) Tần suất ra quyết định của high-level (hàng ngày hay hàng tuần)?
+    - (c) Lịch cập nhật hai tầng (xen kẽ hoặc đóng băng một tầng khi tầng kia học) để giảm non-stationarity.
+
 - [ ] **[HMARL-001] Xây dựng Trạng thái Quan sát cho High-Level Agent (P0)**
   - _Tệp cần tạo:_ `src/agents/high_level.py`
   - _Nội dung:_ Vector quan sát vĩ mô gồm: Trạng thái tổng hợp thị trường (Global Market Embedding), mức độ biến động rủi ro toàn danh mục, số dư tiền mặt hiện tại và drawdown hiện hành.
@@ -250,7 +279,7 @@ _Mục tiêu: Làm chủ Agent vĩ mô phân bổ vốn vào các nhóm ngành v
 - [ ] **[HMARL-002] Xây dựng Chính sách Phân bổ Vốn Vĩ mô (Macro Policy) (P0)**
   - _Tệp cần tạo:_ `src/agents/high_level.py`
   - _Nội dung:_ Agent học chính sách phân bổ ngân sách cho từng nhóm ngành và tiền mặt:
-    $$\text{Budget}_{Tech}, \text{Budget}_{Finance}, \text{Budget}_{Healthcare}, \text{Budget}_{Energy}, \text{Ratio}_{Cash}$$
+    $$\text{Budget}_{Tech}, \text{Budget}_{Finance}, \text{Budget}_{Healthcare}, \text{Budget}_{Energy\_Consumer}, \text{Ratio}_{Cash}$$ _(đã chỉnh)_
   - _Mục tiêu:_ Tự động co hẹp ngân sách ngành và tăng tỷ lệ tiền mặt khi thị trường biến động mạnh hoặc downtrend.
 
 - [ ] **[HMARL-003] Xây dựng bộ ghép nối tỷ trọng phân cấp (P0)**
