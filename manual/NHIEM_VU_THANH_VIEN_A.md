@@ -144,7 +144,7 @@ _Mục tiêu: Đóng gói toàn bộ đặc trưng vào tensor và chia Train/Va
 
 ---
 
-- [ ] **[LEAK-002] Kiểm thử rò rỉ dữ liệu mở rộng (P0)** _(mới)_
+- [x] **[LEAK-002] Kiểm thử rò rỉ dữ liệu mở rộng (P0)** _(mới)_
   - _Nội dung:_ Test rò rỉ dữ liệu cho MACD, volume_norm, scaler (train-only) và split, bổ sung cho LEAK-001 (chỉ phủ returns, volatility, RSI).
 
 ---
@@ -153,43 +153,43 @@ _Mục tiêu: Đóng gói toàn bộ đặc trưng vào tensor và chia Train/Va
 
 _Mục tiêu: Xây dựng logic tính toán tiền mặt, cổ phiếu, phí giao dịch và lợi nhuận danh mục._
 
-- [ ] **[ENV-001] Quản lý trạng thái danh mục (Portfolio State) (P0)**
+- [x] **[ENV-001] Quản lý trạng thái danh mục (Portfolio State) (P0)**
   - _Tệp cần tạo:_ `src/env/portfolio.py`
   - _Nội dung:_ Class lưu trữ: `cash`, `portfolio_value`, `weights`, `peak_value`.
 
-- [ ] **[ENV-002] Bộ máy tính toán lợi nhuận danh mục (Return Engine) (P0)** _(đã chỉnh)_
+- [x] **[ENV-002] Bộ máy tính toán lợi nhuận danh mục (Return Engine) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/returns.py`, `tests/test_portfolio_returns.py`
   - _Công thức:_ $R_p(t+1) = \sum_{i} w_i(t) \cdot r_i(t+1)$. **Lưu ý: Đây là return GỘP (gross), chưa trừ phí giao dịch.** Có unit test chặt chẽ.
 
-- [ ] **[ENV-003] Ràng buộc tỷ trọng đầu tư (Rebalancing Constraints) (P0)**
+- [x] **[ENV-003] Ràng buộc tỷ trọng đầu tư (Rebalancing Constraints) (P0)**
   - _Tệp cần tạo:_ `src/env/rebalance.py`
   - _Ràng buộc:_ Long-only ($w_i \ge 0$), tổng tỷ trọng cổ phiếu + tiền mặt = 1 ($\sum w_i + w_{cash} = 1$). Có hàm chiếu (projection) nếu agent đưa ra weight không hợp lệ.
 
-- [ ] **[ENV-004] Mô hình hóa chi phí giao dịch (Transaction Cost) (P0)** _(đã chỉnh)_
+- [x] **[ENV-004] Mô hình hóa chi phí giao dịch (Transaction Cost) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/cost.py`
-  - _Công thức:_ 
-    - Tính tỷ trọng đã trôi (drifted weight) bao gồm cả cash với lãi suất phi rủi ro: $	ilde{w}_i = w_{i,t-1} \cdot (1 + r_i) / (1 + R_p)$
+  - _Công thức:_
+    - Tính tỷ trọng đã trôi (drifted weight) bao gồm cả cash với lãi suất phi rủi ro: $ ilde{w}_i = w_{i,t-1} \cdot (1 + r_i) / (1 + R_p)$
     - Tính tỷ lệ phí giao dịch: $TC_t = c \cdot \sum_i |w_{i,t} - 	ilde{w}_i|$
   - _Lưu ý:_ Không nhân $V_t$ trực tiếp trong env. Giá trị đô la = $TC_t \cdot V_t$ nếu cần báo cáo.
 
-- [ ] **[ENV-005] Bộ theo dõi sụt giảm vốn (Drawdown Tracker) (P0)**
+- [x] **[ENV-005] Bộ theo dõi sụt giảm vốn (Drawdown Tracker) (P0)**
   - _Tệp cần tạo:_ `src/env/drawdown.py`
   - _Công thức:_ $\text{DD}_t = \frac{V_t - \text{Peak}_t}{\text{Peak}_t}$; tính Maximum Drawdown (MDD).
 
-- [ ] **[ENV-006] Tính toán độ biến động rủi ro danh mục (Risk Calculator) (P1)** _(đã chỉnh)_
+- [x] **[ENV-006] Tính toán độ biến động rủi ro danh mục (Risk Calculator) (P1)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/risk.py`
   - _Nội dung:_ Tính rolling portfolio volatility: $\sigma_p = \sqrt{w^T \Sigma w}$. Cửa sổ ước lượng covariance từ 60 ngày hoặc dùng shrinkage Ledoit-Wolf (Lý do: 20 quan sát cho 24 tài sản làm ma trận suy biến).
 
-- [ ] **[ENV-007] Thiết kế hàm Reward V1 (P0)** _(đã chỉnh)_
+- [x] **[ENV-007] Thiết kế hàm Reward V1 (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/env/reward.py`
   - _Công thức ban đầu:_ $\text{Reward}_t = R_{p,t} - \beta \cdot TC_t$
   - _Ghi chú:_ $\beta = 1$ là phạt đúng phí thật. Nếu $\beta > 1$ thì đó là reward shaping, và mọi metrics đánh giá vẫn tính trên net return thật ($R_p - TC$).
 
-- [ ] **[ENV-009] Chốt quy ước khớp lệnh và thời điểm quyết định (P0)** _(mới)_
+- [x] **[ENV-009] Chốt quy ước khớp lệnh và thời điểm quyết định (P0)** _(mới)_
   - _Quy ước:_ Quyết định cuối ngày $t$, khớp lệnh tại giá Open ngày $t+1$, return tính theo Open $\rightarrow$ Open.
   - _Nội dung:_ Env đọc thêm ma trận giá open $[T, N]$. Yêu cầu ghi quy ước này vào docs TRƯỚC khi viết `trading_env.py`. Nhắc lại ở RESEARCH-002 (Sprint 9) rằng việc này chỉ còn là kiểm toán, không phải lúc quyết định.
 
-- [ ] **[GNN-002] Phối hợp chạy Integration Test cho GNN (P0 - Cùng B)**
+- [x] **[GNN-002] Phối hợp chạy Integration Test cho GNN (P0 - Cùng B)**
   - Kiểm tra xem mạng GNN do Thành viên B viết có nhận đúng định dạng dữ liệu từ Feature Pipeline của bạn hay không.
 
 ---
@@ -198,7 +198,7 @@ _Mục tiêu: Xây dựng logic tính toán tiền mặt, cổ phiếu, phí gia
 
 _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được các chiến lược Baseline truyền thống._
 
-- [ ] **[ENV-008] Đóng gói Gymnasium-compatible Trading Environment (P0)**
+- [x] **[ENV-008] Đóng gói Gymnasium-compatible Trading Environment (P0)**
   - _Tệp cần tạo:_ `src/env/trading_env.py`, `tests/test_trading_env.py`
   - _Nội dung:_ Cài đặt chuẩn Gymnasium: `reset()`, `step(action)`, `observation_space`, `action_space`.
 
@@ -319,6 +319,7 @@ _Mục tiêu: Đảm bảo kết quả trung thực, không bị bias và có ý
   - _Nội dung:_ Soát xét toàn bộ mã nguồn để đảm bảo:
     - Không bị Look-ahead Bias (tại thời điểm $t$ không dùng giá của ngày $t+1$).
     - Không bị Data Leakage khi chuẩn hóa dữ liệu.
+    - (Nhắc lại từ ENV-009): Kiểm toán xác nhận Env sử dụng đúng giá Open ngày t+1 để khớp lệnh và tính return, không vi phạm quy ước.
     - Giả định khớp lệnh thực tế (quyết định vào cuối ngày $t$, khớp lệnh tại giá mở cửa $t+1$ hoặc đóng cửa $t$).
 
 - [ ] **[EXP-011] Tổng hợp thống kê và xuất biểu đồ trực quan (P1)**

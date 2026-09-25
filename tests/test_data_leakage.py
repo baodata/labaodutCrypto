@@ -49,3 +49,85 @@ class TestDataLeakage:
         rsi_30_days = compute_rsi(prices, period=14)
         
         pd.testing.assert_frame_equal(rsi_20_days.iloc[:20], rsi_30_days.iloc[:20])
+
+    def test_no_lookahead_bias_in_macd(self):
+        """Đảm bảo tính toán MACD không rò rỉ dữ liệu tương lai (LEAK-002)"""
+        from src.features.macd import MACDEngine
+        prices = pd.DataFrame({
+            'AAPL': np.linspace(100, 200, 50)
+        })
+        engine = MACDEngine(fast_period=12, slow_period=26, signal_period=9)
+        
+        # Scenario 1: Calculate with 30 days
+        macd_30, sig_30, hist_30 = engine.calculate(prices.iloc[:30])
+        
+        # Scenario 2: Calculate with 50 days
+        macd_50, sig_50, hist_50 = engine.calculate(prices)
+        
+        # Should be exactly equal up to day 30
+        pd.testing.assert_frame_equal(macd_30.iloc[:30], macd_50.iloc[:30])
+        pd.testing.assert_frame_equal(sig_30.iloc[:30], sig_50.iloc[:30])
+        pd.testing.assert_frame_equal(hist_30.iloc[:30], hist_50.iloc[:30])
+
+    def test_no_lookahead_bias_in_volume_norm(self):
+        """Đảm bảo chuẩn hóa Volume (Z-score trượt) không nhìn vào tương lai (LEAK-002)"""
+        from src.features.volume import VolumeEngine
+        volumes = pd.DataFrame({
+            'AAPL': np.random.randint(1000, 5000, 50)
+        })
+        engine = VolumeEngine(window=20)
+        
+        # Scenario 1: Calculate with 30 days
+        norm_30 = engine.calculate(volumes.iloc[:30])
+        
+        # Scenario 2: Calculate with 50 days
+        norm_50 = engine.calculate(volumes)
+        
+        # Should be exactly equal up to day 30
+        pd.testing.assert_frame_equal(norm_30.iloc[:30], norm_50.iloc[:30])
+
+    def test_scaler_no_future_leakage(self):
+        """Đảm bảo Scaler chỉ được học trên tập Train, không chạm vào Val/Test (LEAK-002)"""
+        from src.features.scaler import MarketFeatureScaler
+        
+        # Giả lập data
+        train_df = pd.DataFrame({'feature1': np.random.randn(100) * 2 + 5})
+        val_df = pd.DataFrame({'feature1': np.random.randn(50) * 10 + 50}) # Data phân phối khác
+        
+        scaler = MarketFeatureScaler()
+        scaler.fit(train_df, feature_names=['feature1'])
+        
+        # Mean/std phải là của tập train, tuyệt đối không bị ảnh hưởng bởi val_df lớn
+        assert np.isclose(scaler.means['feature1'], train_df['feature1'].mean())
+        assert np.isclose(scaler.stds['feature1'], train_df['feature1'].std() + scaler.eps)
+        
+        # Việc biến đổi Val phải dùng tham số của Train
+        val_transformed = scaler.transform(val_df)
+        expected_val = (val_df - scaler.means['feature1']) / scaler.stds['feature1']
+        expected_val = np.clip(expected_val, scaler.clip_range[0], scaler.clip_range[1])
+        
+        pd.testing.assert_frame_equal(val_transformed, expected_val)
+
+    def test_split_temporal_strictness(self):
+        """Đảm bảo việc chia Train/Val/Test tuyệt đối theo thời gian, không rò rỉ (LEAK-002)"""
+        from src.data.split import TemporalSplitter
+        
+        dates = pd.date_range("2020-01-01", "2024-12-31")
+        df = pd.DataFrame({'price': np.random.randn(len(dates))}, index=dates)
+        
+        splitter = TemporalSplitter(
+            train_end="2021-12-31",
+            val_start="2022-01-01",
+            val_end="2023-12-31",
+            test_start="2024-01-01"
+        )
+        
+        result = splitter.split_dataframe(df)
+        
+        max_train = result.train.index.max()
+        min_val = result.val.index.min()
+        max_val = result.val.index.max()
+        min_test = result.test.index.min()
+        
+        assert max_train < min_val, f"Rò rỉ Train -> Val: {max_train} >= {min_val}"
+        assert max_val < min_test, f"Rò rỉ Val -> Test: {max_val} >= {min_test}"
