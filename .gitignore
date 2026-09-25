@@ -30,7 +30,6 @@ MANIFEST
 .venv/
 venv/
 ENV/
-env/
 
 # Pytest / Testing cache
 .pytest_cache/
