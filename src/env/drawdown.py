@@ -4,6 +4,10 @@ Ticket: ENV-005 (Sprint 4 - Thành viên A)
 
 Bộ theo dõi Sụt giảm vốn (Drawdown Tracker).
 Giám sát rủi ro lớn nhất của danh mục (Maximum Drawdown - MDD).
+ứng dụng trong môi trường RL (Reinforcement Learning) để tính toán phần thưởng (Reward) dựa trên rủi ro.
+Công thức:
+    Drawdown_t = (V_t - Peak_t) / Peak_t
+    Maximum Drawdown (MDD) = min(Drawdown_t)
 """
 
 class DrawdownTracker:
