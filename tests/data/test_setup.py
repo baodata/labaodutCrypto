@@ -42,7 +42,7 @@ class TestProjectFoundation(unittest.TestCase):
 
     def test_directory_structure(self):
         """Kiểm tra sự tồn tại của các thư mục cốt lõi trong dự án."""
-        project_root = Path(__file__).resolve().parent.parent
+        project_root = Path(__file__).resolve().parent.parent.parent
         expected_dirs = [
             "configs",
             "data/raw",
