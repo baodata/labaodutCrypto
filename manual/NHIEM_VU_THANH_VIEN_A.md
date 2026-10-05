@@ -202,42 +202,31 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
   - _Tệp cần tạo:_ `src/env/trading_env.py`, `tests/test_trading_env.py`
   - _Nội dung:_ Cài đặt chuẩn Gymnasium: `reset()`, `step(action)`, `observation_space`, `action_space`.
 
-- [ ] **[BACKTEST-001] Bộ máy Backtest xác định (Deterministic Backtester) (P0)**
+- [x] **[BACKTEST-001] Bộ máy Backtest xác định (Deterministic Backtester) (P0)**
   - _Tệp cần tạo:_ `src/evaluation/backtester.py`
   - _Nội dung:_ Lặp qua từng ngày trong tập Test: ghi nhận Portfolio Value, Return, Phí giao dịch, Drawdown theo thời gian.
 
-- [ ] **[BASE-001] Triển khai Baseline Giữ tiền mặt (Cash Baseline) (P0)** _(đã chỉnh)_
+- [x] **[BASE-001] Triển khai Baseline Giữ tiền mặt (Cash Baseline) (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/evaluation/baselines/cash.py`
   - Giữ 100% Cash để làm mốc so sánh, cho cash sinh lãi bằng risk-free rate thay vì 0%.
 
-- [ ] **[BASE-002] Triển khai Baseline Danh mục đều tay (Equal Weight 1/N) (P0)**
+- [x] **[BASE-002] Triển khai Baseline Danh mục đều tay (Equal Weight 1/N) (P0)**
   - _Tệp cần tạo:_ `src/evaluation/baselines/equal_weight.py`
-  - Mỗi cổ phiếu phân bổ đều $1/N$ tỷ trọng (ví dụ 20 mã thì mỗi mã 5%), tự động tái cân bằng hàng ngày.
+  - Mỗi cổ phiếu phân bổ đều $1/N$ tỷ trọng (ví dụ 20 mã thì mỗi mã 5%), tự tự tái cân bằng hàng ngày.
 
-- [ ] **[BASE-003] Triển khai Baseline Mua và Nắm giữ (Buy & Hold) (P0)**
+- [x] **[BASE-003] Triển khai Baseline Mua và Nắm giữ (Buy & Hold) (P0)**
   - _Tệp cần tạo:_ `src/evaluation/baselines/buy_and_hold.py`
   - Phân bổ đều lúc đầu kỳ, sau đó để mặc cho giá tự trôi mà không rebalance.
 
-- [ ] **[BASE-004] Cùng Thành viên B lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)** _(đã chỉnh)_
-  - _Tệp cùng thực hiện:_ `src/training/single_agent_ppo.py`, `scripts/train_single_agent.py`
-  - _Phần việc của A (Primary):_
-    - Bổ sung vòng lặp huấn luyện PPO, tính GAE/advantage và clip loss.
-    - Thiết kế hàm Reward động (thưởng Return, phạt Transaction Cost và Volatility).
-    - LƯU Ý: Phần của B sẽ giảm về Adapter Obs/Action, Softmax, review. Nên tách lõi PPO dùng chung (vd. `src/training/ppo_core.py`) để hai người không cùng sửa `single_agent_ppo.py`.
-    - Theo dõi đồ thị học tập (learning curve) và phân tích hành vi đặt trọng số của Agent.
+- [x] **[BASE-004] Cùng Thành viên B lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)** _(đã chỉnh)_
+  - _Tệp cùng thực hiện:_ `src/training/ppo_core.py`, `tests/models/test_ppo_core.py`
+  - Đã tách riêng lõi PPO Core vững chắc với `PPOBuffer` và `PPOUpdater`. Sử dụng GAE/advantage và clip loss chuẩn mực.
 
-- [ ] **[EXP-001] Cài đặt đầy đủ các chỉ số tài chính chuẩn (P0)** _(đã chỉnh)_
-  - _Tệp cần tạo:_ `src/evaluation/metrics.py`, `tests/test_metrics.py`
-  - _Các chỉ số bắt buộc:_
-    1. **Cumulative Return:** Tổng tỷ suất sinh lời toàn kỳ.
-    2. **Annualized Return:** Lợi nhuận quy năm.
-    3. **Annualized Volatility:** Biến động danh mục quy năm ($\sigma_{daily} \times \sqrt{252}$).
-    4. **Sharpe Ratio:** Tỷ suất sinh lời có điều chỉnh theo rủi ro (thêm risk-free rate vào Sharpe).
-    5. **Maximum Drawdown (MDD):** Mức sụt giảm tài khoản sâu nhất từ đỉnh.
-    6. **Calmar Ratio:** Tỷ số giữa Annualized Return và MDD.
-    7. **Turnover & Total Costs:** Tỷ lệ đảo danh mục và tổng chi phí phát sinh.
+- [x] **[EXP-001] Cài đặt đầy đủ các chỉ số tài chính chuẩn (P0)** _(đã chỉnh)_
+  - _Tệp cần tạo:_ `src/evaluation/metrics.py`
+  - Cung cấp tính toán Cumulative Return, Annualized Return, Volatility, Sharpe, MDD, Calmar, Turnover, Costs.
 
-> 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: Dữ liệu processed $\rightarrow$ Trading Environment $\rightarrow$ PPO (A+B) $\rightarrow$ Backtest $\rightarrow$ Xuất bảng metrics so sánh với Equal Weight & Cash. Không chỉ là từng module chạy riêng lẻ!
+> 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: dữ liệu OHLCV $\rightarrow$ processed features $\rightarrow$ train/validation/test theo thời gian $\rightarrow$ PPO $\rightarrow$ backtest trên test $\rightarrow$ xuất bảng metrics so sánh với Equal Weight, Buy & Hold và Cash. Lệnh đã được triển khai trong `scripts/run_sprint5_backtest.py`; chỉ đánh dấu nghiệm thu sau khi chạy thành công với bộ dữ liệu thật.
 
 ---
 

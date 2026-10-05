@@ -41,6 +41,9 @@ class TradingEnv(gym.Env):
         self.open_prices = open_prices
         
         self.T, self.N, self.F = self.market_tensor.tensor.shape
+
+        if self.T < 3:
+            raise ValueError("TradingEnv cần ít nhất 3 mốc thời gian để tính Open-to-Open return.")
         
         if self.open_prices.shape != (self.T, self.N):
             raise ValueError(f"open_prices shape {self.open_prices.shape} không khớp với T, N = {self.T}, {self.N}")
@@ -111,7 +114,10 @@ class TradingEnv(gym.Env):
         target_weights = self.rebalance_engine.project_weights(action)
         
         # 2. Tính phí giao dịch cho lần đảo danh mục này (So với tỷ trọng trôi của kỳ trước)
+        previous_value = self.portfolio.portfolio_value
+        turnover = float(np.sum(np.abs(target_weights - self.last_drifted_weights)))
         cost_rate = self.cost_engine.compute_cost_rate(target_weights, self.last_drifted_weights)
+        transaction_cost = previous_value * cost_rate
         
         # 3. Mua bán tại Open(t+1) và nắm giữ đến Open(t+2)
         t = self.current_step
@@ -154,6 +160,8 @@ class TradingEnv(gym.Env):
         info = self._get_info()
         info["net_return"] = net_return
         info["cost_rate"] = cost_rate
+        info["turnover"] = turnover
+        info["transaction_cost"] = transaction_cost
         info["reward"] = reward
         
         terminated = (self.current_step >= self.T - 2)
