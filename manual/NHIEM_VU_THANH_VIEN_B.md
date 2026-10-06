@@ -67,7 +67,7 @@ _Mục tiêu: Đảm bảo code chạy qua config (không hard-code tham số) v
 - [x] **[CONTRACT-001] Thống nhất giao diện dữ liệu linh hoạt (Data Contract) với A (P0 - Chung)**
   - Chốt cấu trúc dữ liệu đầu vào: Tensor `[T, N, F]`.
   - Chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ:
-    - Chế độ 1: `raw_features` `[N, F]` (cho Single-Agent PPO chạy độc lập không cần GNN).
+    - Chế độ 1: `raw_features` `[N, F]` là feature đã tính từ OHLCV (return, RSI, MACD...), cho Single-Agent PPO không cần GNN; không phải OHLCV thô.
     - Chế độ 2: `graph_embeddings` `[N, D]` (cho các mô hình tích hợp GNN/GAT).
 
 ---
@@ -135,7 +135,7 @@ _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi ph�
   - _Tệp cần tạo:_ `src/models/adapter.py`
   - _Nội dung:_
     - Chuyển đổi trạng thái từ môi trường của A thành tensor đầu vào cho mạng Actor-Critic.
-    - Hỗ trợ nạp trực tiếp `raw_features` `[N, F]` mà không cần qua GNN.
+    - Hỗ trợ nạp trực tiếp feature đã tính từ OHLCV `[N, F]` mà không cần qua GNN (`raw_features` nghĩa là trước GNN, không phải dữ liệu OHLCV thô).
     - Áp dụng lớp Softmax ở đầu ra của Actor để đảm bảo tổng trọng số luôn bằng 1 và không âm:
       $$w_i = \frac{e^{z_i}}{\sum_{j} e^{z_j}}$$
 
@@ -145,7 +145,7 @@ _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi ph�
     - Thiết kế kiến trúc mạng Actor-Critic (MLP).
     - Cài đặt thuật toán PPO Clip Objective, Value Loss, Entropy Bonus.
     - Đảm bảo đầu ra qua hàm Softmax tuân thủ ràng buộc $\sum w_i + w_{cash} = 1$.
-    - Cùng A huấn luyện trên `raw_features` (KHÔNG dùng GNN) để thiết lập mốc chuẩn đối chứng tối thiểu cho Ablation Study.
+    - Cùng A huấn luyện trên feature đã tính và chuẩn hóa (KHÔNG dùng GNN) để thiết lập mốc chuẩn đối chứng tối thiểu cho Ablation Study.
 
 - [ ] **[TRAIN-001] Xây dựng bộ ghi log huấn luyện & Lưu Checkpoint (P0)**
   - _Tệp cần tạo:_ `src/training/checkpoint.py`, `src/utils/logger.py`

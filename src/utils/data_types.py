@@ -10,7 +10,8 @@ Mục đích:
 2. Quy định cấu trúc Tensor đầu vào: [T, N, F] (Time, Assets, Features).
 3. Quy định cấu trúc Đồ thị tài chính: node_features [N, F], edge_index [2, E], edge_weight [E].
 4. Quy định Observation hỗ trợ linh hoạt 2 chế độ:
-   - 'raw_features' [N, F] (cho Single-Agent PPO baseline chạy độc lập không cần GNN).
+   - 'raw_features' [N, F]: các feature đã tính như return/RSI/MACD, trước khi qua GNN
+     (cho Single-Agent PPO; không phải OHLCV thô).
    - 'graph_embeddings' [N, D] (cho mô hình GNN/GAT và H-MARL).
 5. Quy định Action phân bổ danh mục: w_i >= 0, w_cash >= 0, sum(w_i) + w_cash = 1.0 (Long-only, no short-selling).
 """
@@ -91,7 +92,8 @@ class DynamicGraphData:
 class MarketObservation:
     """
     Khuôn đúc Observation linh hoạt của Gymnasium Environment (A) hỗ trợ cả 2 chế độ:
-    1. mode='raw_features': state tensor [N, F] nạp thẳng vào Actor-Critic (Single-Agent PPO không GNN).
+    1. mode='raw_features': feature tensor [N, F] đã tính từ OHLCV, nạp vào Actor-Critic
+       mà không qua GNN (không chứa OHLCV thô).
     2. mode='graph_embeddings': state tensor [N, D] đã qua GNN/GAT encoder.
     """
     mode: Literal["raw_features", "graph_embeddings"]

@@ -108,7 +108,7 @@ ADVANCED — NGHIÊN CỨU MỞ RỘNG (HƯỚNG TỚI BÀI BÁO KHOA HỌC)
 2. **Dynamic Graph (B xây dựng):** `node_features` `[N, F]`, `edge_index` `[2, E]`, `edge_weight` `[E]`.
 3. **Observation Contract:**
    $$\text{Observation}_t = [\text{market\_state}_t, \; \text{portfolio\_weights}_t, \; \text{cash\_ratio}_t]$$
-   Hỗ trợ cả `raw_features` `[N, F]` (cho Single-Agent PPO) và `graph_embeddings` `[N, D]` (cho GNN).
+   Hỗ trợ feature đã tính từ OHLCV `raw_features` `[N, F]` (cho Single-Agent PPO; không phải OHLCV thô) và `graph_embeddings` `[N, D]` (cho GNN).
 4. **Action Output:** Tensor `weights` kích thước `[N + 1]`, thỏa mãn $\sum_{i=1}^{N} w_i + w_{cash} = 1$ và $w \ge 0$.
 
 ---

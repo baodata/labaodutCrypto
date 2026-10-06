@@ -74,7 +74,7 @@ _Mục tiêu: Có dữ liệu OHLCV đầy đủ của 20–30 mã cổ phiếu 
   - _Quy ước:_ **$N = 24$ tài sản giao dịch.** SPY chỉ là benchmark đánh giá hiệu suất, **không được đưa vào** tensor `[T, N, F]` hay action `[N+1]`.
   - _Đã chốt cấu trúc đồ thị tương thích với B (`builder.py`):_ `DynamicGraphData` gồm `node_features` `[N, F]`, `edge_index` `[2, E]`, `edge_weight` `[E]`.
   - _Đã chốt định dạng Observation của Môi trường hỗ trợ 2 chế độ (`MarketObservation`):_
-    - Chế độ 1: `raw_features` `[N, F]` (cho Single-Agent PPO chạy không cần GNN).
+    - Chế độ 1: `raw_features` `[N, F]` là feature đã tính từ OHLCV (return, RSI, MACD...), cho Single-Agent PPO không cần GNN; không phải OHLCV thô.
     - Chế độ 2: `graph_embeddings` `[N, D]` (cho mô hình GNN/H-MARL).
   - _Đã chốt định dạng Action (`PortfolioAction`):_ Trọng số tài sản $w_i \ge 0, w_{cash} \ge 0$ thỏa mãn $\sum w_i + w_{cash} = 1.0$.
   - 100% unit tests kiểm tra hợp đồng pass (`tests/test_contracts.py`).

@@ -54,7 +54,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def observation_vector(obs: dict) -> np.ndarray:
-    """Flatten raw [N,F] features and current portfolio allocation for the MLP."""
+    """Flatten engineered/scaled [N,F] features and portfolio state for the MLP."""
     return np.concatenate(
         (
             np.asarray(obs["market_state"], dtype=np.float32).reshape(-1),
@@ -137,7 +137,7 @@ def main() -> None:
     scaler.save(PROJECT_ROOT / "data/processed/scaler_params.json")
     print(split.summary())
 
-    print("[2/6] Khởi tạo PPO MLP trên raw_features (không dùng GNN)...")
+    print("[2/6] Khởi tạo PPO MLP trên feature đã tính và chuẩn hóa (không dùng GNN)...")
     train_env = make_env(train_tensor, train_open, args.env_config)
     val_env = make_env(val_tensor, val_open, args.env_config)
     test_env = make_env(test_tensor, test_open, args.env_config)

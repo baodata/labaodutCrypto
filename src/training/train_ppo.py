@@ -18,6 +18,8 @@ warnings.filterwarnings('ignore')
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 
 from src.features.pipeline import FeaturePipeline
+from src.data.split import TemporalSplitter
+from src.features.scaler import MarketFeatureScaler
 from src.models.gnn.gat_encoder import GATEncoder
 from src.models.adapters import GNN_ActorCritic, ObservationAdapter, ActionAdapter
 from src.graph.multi_relation_graph import MultiRelationGraphBuilder
@@ -25,9 +27,10 @@ from src.training.logger import TrainerLogger
 from src.env.trading_env import TradingEnv
 
 def load_configs():
-    with open("configs/model.yaml", "r") as f:
+    project_root = Path(__file__).resolve().parent.parent.parent
+    with open(project_root / "configs/model.yaml", "r", encoding="utf-8") as f:
         model_cfg = yaml.safe_load(f)
-    with open("configs/env.yaml", "r") as f:
+    with open(project_root / "configs/env.yaml", "r", encoding="utf-8") as f:
         env_cfg = yaml.safe_load(f)
     return model_cfg, env_cfg
 
@@ -47,27 +50,48 @@ def main():
     print("[1] Đang nạp và xử lý Dữ liệu thị trường thật...")
     pipeline = FeaturePipeline()
     # Chạy pipeline lấy Data thật (Nếu chạy lần đầu sẽ hơi lâu để tính RSI/MACD)
-    processed_data, market_tensor = pipeline.run_from_raw(raw_dir="data/raw", export_parquet=False)
-    
+    project_root = Path(__file__).resolve().parent.parent.parent
+    processed_data, full_market_tensor = pipeline.run_from_raw(
+        raw_dir=project_root / "data/raw",
+        export_parquet=True,
+        output_file=project_root / "data/processed/features.parquet",
+    )
+
+    # Split chronologically before fitting the scaler. Only train features are
+    # used by this training entrypoint; validation/test dates stay out of PPO.
+    split = TemporalSplitter().split_market_data_tensor(full_market_tensor)
+    scaler = MarketFeatureScaler()
+    scaler.fit(split.train)
+    market_tensor = scaler.transform(split.train)
+    scaler.save(project_root / "data/processed/scaler_params.json")
+    print(split.summary())
+
     T_days, N_stocks, F_features = market_tensor.tensor.shape
     tickers = market_tensor.tickers
     print(f" -> Đã nạp thành công {N_stocks} cổ phiếu trong {T_days} ngày. Số đặc trưng: {F_features}")
     
     # Trích xuất giá Mở cửa (Open prices) để đưa vào Sàn giao dịch
-    open_prices = np.zeros((T_days, N_stocks))
+    full_open_prices = np.zeros((len(full_market_tensor.dates), N_stocks), dtype=np.float32)
     for idx, ticker in enumerate(tickers):
         df = processed_data[ticker]
-        open_col = 'open' if 'open' in df.columns else 'Open'
-        if open_col in df.columns:
-            open_prices[:, idx] = df[open_col].values
-        else:
-            open_prices[:, idx] = 100.0  # Fallback
+        open_col = next((column for column in df.columns if str(column).lower() == "open"), None)
+        if open_col is None:
+            raise ValueError(f"Thiếu cột Open cần cho mô phỏng giao dịch: {ticker}")
+        full_open_prices[:, idx] = df[open_col].to_numpy(dtype=np.float32)
+
+    date_to_index = {str(date): i for i, date in enumerate(full_market_tensor.dates)}
+    train_indices = [date_to_index[str(date)] for date in split.train.dates]
+    open_prices = full_open_prices[train_indices]
             
     # 3. KHỞI TẠO CÔNG CỤ
-    print("[2] Khởi tạo Sàn giao dịch (TradingEnv)...")
-    env = TradingEnv(market_tensor=market_tensor, open_prices=open_prices, config_path="configs/env.yaml")
+    print("[2] Khởi tạo TradingEnv trên tập train đã tách theo thời gian...")
+    env = TradingEnv(
+        market_tensor=market_tensor,
+        open_prices=open_prices,
+        config_path=str(project_root / "configs/env.yaml"),
+    )
     
-    print("[3] Khởi tạo GNN, Actor-Critic và Adapters...")
+    print("[3] Khởi tạo GNN, Actor-Critic và Adapters trên feature đã chuẩn hóa...")
     graph_builder = MultiRelationGraphBuilder(tickers=tickers, rolling_corr_df=None, threshold=model_cfg['gnn']['threshold_corr'])
     obs_adapter = ObservationAdapter(graph_builder)
     
@@ -94,6 +118,8 @@ def main():
             else:
                 obs_corr = np.zeros((N_stocks, N_stocks))
                 
+            # market_state contains engineered/scaled features. Raw OHLCV is
+            # only used upstream to calculate features and here for execution.
             x, edge_index, edge_weight = obs_adapter.process(obs['market_state'], obs_corr)
             
             optimizer.zero_grad()
