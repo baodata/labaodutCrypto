@@ -89,7 +89,11 @@ class DeterministicBacktester:
             return agent_fn(obs)
         return self.run_strategy(wrapper)
 
-    def compare(self, results: Dict[str, BacktestResult]) -> pd.DataFrame:
+    def compare(
+        self,
+        results: Dict[str, BacktestResult],
+        risk_free_rate_annual: float = 0.02,
+    ) -> pd.DataFrame:
         """
         So sánh kết quả của nhiều chiến lược bằng bảng Financial Metrics.
         
@@ -103,6 +107,7 @@ class DeterministicBacktester:
         for name, result in results.items():
             fm = FinancialMetrics(
                 daily_net_returns=result.daily_net_returns,
+                risk_free_rate_annual=risk_free_rate_annual,
                 daily_turnover=result.daily_turnover,
                 daily_costs=result.daily_costs,
             )

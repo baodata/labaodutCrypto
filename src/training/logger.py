@@ -8,9 +8,15 @@ from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
 
 class TrainerLogger:
-    def __init__(self, log_dir: str = "logs/tensorboard", checkpoint_dir: str = "models/checkpoints"):
+    def __init__(
+        self,
+        log_dir: str = "logs/tensorboard",
+        checkpoint_dir: str = "models/checkpoints",
+        best_checkpoint_name: str = "best_model.pth",
+    ):
         self.log_dir = Path(log_dir)
         self.checkpoint_dir = Path(checkpoint_dir)
+        self.best_checkpoint_name = best_checkpoint_name
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.writer = SummaryWriter(log_dir=str(self.log_dir))
@@ -27,6 +33,7 @@ class TrainerLogger:
         optimizer: torch.optim.Optimizer,
         current_reward: float,
         selection_metric: str = "reward",
+        metadata: dict | None = None,
     ):
         checkpoint = {
             'step': step,
@@ -36,11 +43,13 @@ class TrainerLogger:
             'selection_score': current_reward,
             'selection_metric': selection_metric,
         }
+        if metadata:
+            checkpoint.update(metadata)
         torch.save(checkpoint, self.checkpoint_dir / f"checkpoint_step_{step}.pth")
         
         if current_reward > self.best_reward:
             self.best_reward = current_reward
-            torch.save(checkpoint, self.checkpoint_dir / "best_model.pth")
+            torch.save(checkpoint, self.checkpoint_dir / self.best_checkpoint_name)
             
     def close(self):
         self.writer.close()

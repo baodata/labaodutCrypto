@@ -18,5 +18,9 @@ rl_agent:
   learning_rate: 0.0003          # Tốc độ học (3e-4 là chuẩn vàng của PPO)
   gamma: 0.99                    # Hệ số chiết khấu tương lai (Tầm nhìn dài hạn)
   clip_ratio: 0.2                # Giới hạn cập nhật policy để AI không bị "sốc"
-  batch_size: 64                 # Kích thước lô huấn luyện
+  batch_size: 256                # Minibatch PPO sau khi gom nhiều cửa sổ train
   entropy_coef: 0.01             # Khuyến khích AI khám phá các chiến thuật mua bán mới mẻ
+  target_kl: 0.01                # Dừng sớm cập nhật nếu policy lệch quá xa
+  gae_lambda: 0.95               # Hệ số GAE-Lambda
+  value_loss_coef: 0.5           # Trọng số critic loss
+  max_grad_norm: 0.5             # Cắt gradient để ổn định cập nhật

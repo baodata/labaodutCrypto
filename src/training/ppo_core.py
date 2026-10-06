@@ -90,8 +90,14 @@ class PPOUpdater:
         self.entropy_coef = entropy_coef
         self.max_grad_norm = max_grad_norm
 
-    def update(self, model: nn.Module, optimizer: torch.optim.Optimizer, 
-               buffer_data: Dict[str, torch.Tensor], train_iters: int = 10) -> Dict[str, Any]:
+    def update(
+        self,
+        model: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        buffer_data: Dict[str, torch.Tensor],
+        train_iters: int = 10,
+        batch_size: int | None = None,
+    ) -> Dict[str, Any]:
         """
         Thực hiện nhiều epoch cập nhật PPO.
         """
@@ -103,48 +109,82 @@ class PPOUpdater:
         ret = buffer_data['ret']
         adv = buffer_data['adv']
         old_logp = buffer_data['logp']
+        sample_count = len(obs)
+        if sample_count == 0:
+            raise ValueError("PPO buffer không được rỗng.")
+        if batch_size is None:
+            batch_size = sample_count
+        if batch_size <= 0:
+            raise ValueError("batch_size phải lớn hơn 0.")
+        batch_size = min(batch_size, sample_count)
 
-        stats = {'policy_loss': [], 'value_loss': [], 'entropy': [], 'kl': []}
+        stats = {"policy_loss": [], "value_loss": [], "entropy": [], "kl": [], "clip_frac": []}
+        weights = []
+        minibatches_completed = 0
+        epochs_completed = 0
+        stopped_early = False
 
-        for i in range(train_iters):
-            # Model cần cung cấp hàm `evaluate` trả về log_prob, entropy và value
-            log_prob, entropy, value = model.evaluate(obs, act)
+        for epoch in range(train_iters):
+            permutation = torch.randperm(sample_count, device=obs.device)
+            for indices in permutation.split(batch_size):
+                minibatch_obs = obs[indices]
+                minibatch_act = act[indices]
+                minibatch_ret = ret[indices]
+                minibatch_adv = adv[indices]
+                minibatch_old_logp = old_logp[indices]
 
-            # PPO objective
-            ratio = torch.exp(log_prob - old_logp)
-            clip_adv = torch.clamp(ratio, 1 - self.clip_ratio, 1 + self.clip_ratio) * adv
-            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean()
+                # Model.evaluate returns log probability, entropy, and value.
+                log_prob, entropy, value = model.evaluate(minibatch_obs, minibatch_act)
+                log_ratio = log_prob - minibatch_old_logp
+                ratio = torch.exp(log_ratio)
+                clipped_ratio = torch.clamp(
+                    ratio, 1 - self.clip_ratio, 1 + self.clip_ratio
+                )
+                loss_pi = -torch.minimum(ratio * minibatch_adv, clipped_ratio * minibatch_adv).mean()
+                loss_v = ((value.reshape(-1) - minibatch_ret.reshape(-1)) ** 2).mean()
+                ent = entropy.mean()
+                loss = loss_pi + self.value_loss_coef * loss_v - self.entropy_coef * ent
 
-            # Value loss
-            loss_v = ((value.reshape(-1) - ret.reshape(-1)) ** 2).mean()
+                with torch.no_grad():
+                    approx_kl = (((ratio - 1.0) - log_ratio).mean()).item()
+                    clip_frac = (torch.abs(ratio - 1.0) > self.clip_ratio).float().mean().item()
 
-            # Entropy
-            ent = entropy.mean()
+                # Do not apply a minibatch update that already exceeds the KL guard.
+                if approx_kl > 1.5 * self.target_kl:
+                    stopped_early = True
+                    break
 
-            # Total loss
-            loss = loss_pi + self.value_loss_coef * loss_v - self.entropy_coef * ent
+                optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
+                optimizer.step()
 
-            # KL divergence for early stopping
-            with torch.no_grad():
-                approx_kl = (old_logp - log_prob).mean().item()
-            
-            stats['policy_loss'].append(loss_pi.item())
-            stats['value_loss'].append(loss_v.item())
-            stats['entropy'].append(ent.item())
-            stats['kl'].append(approx_kl)
+                count = len(indices)
+                weights.append(count)
+                stats["policy_loss"].append(loss_pi.item())
+                stats["value_loss"].append(loss_v.item())
+                stats["entropy"].append(ent.item())
+                stats["kl"].append(approx_kl)
+                stats["clip_frac"].append(clip_frac)
+                minibatches_completed += 1
 
-            if approx_kl > 1.5 * self.target_kl:
+            epochs_completed = epoch + 1
+            if stopped_early:
                 break
 
-            optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), self.max_grad_norm)
-            optimizer.step()
+        if not weights:
+            raise RuntimeError("PPO không cập nhật được minibatch nào; kiểm tra target_kl và dữ liệu.")
+
+        def weighted_mean(name: str) -> float:
+            return float(np.average(stats[name], weights=weights))
 
         return {
-            'LossPi': np.mean(stats['policy_loss']),
-            'LossV': np.mean(stats['value_loss']),
-            'Entropy': np.mean(stats['entropy']),
-            'KL': stats['kl'][-1],
-            'StopIter': i + 1
+            "LossPi": weighted_mean("policy_loss"),
+            "LossV": weighted_mean("value_loss"),
+            "Entropy": weighted_mean("entropy"),
+            "KL": weighted_mean("kl"),
+            "ClipFrac": weighted_mean("clip_frac"),
+            "StopIter": epochs_completed,
+            "NumMinibatches": minibatches_completed,
+            "StoppedEarly": float(stopped_early),
         }

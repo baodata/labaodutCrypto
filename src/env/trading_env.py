@@ -23,7 +23,13 @@ from src.utils.data_types import MarketDataTensor
 class TradingEnv(gym.Env):
     """Môi trường giao dịch tài chính Đa tài sản, tương thích chuẩn Gymnasium."""
     
-    def __init__(self, market_tensor: MarketDataTensor, open_prices: np.ndarray, config_path: str = "configs/env.yaml"):
+    def __init__(
+        self,
+        market_tensor: MarketDataTensor,
+        open_prices: np.ndarray,
+        config_path: str = "configs/env.yaml",
+        reward_beta: float | None = None,
+    ):
         """
         Khởi tạo môi trường.
         
@@ -31,11 +37,16 @@ class TradingEnv(gym.Env):
             market_tensor: Dữ liệu tính năng (Features) của A.
             open_prices: Ma trận giá Open [T, N] dùng để khớp lệnh (ENV-009).
             config_path: Đường dẫn tới env.yaml.
+            reward_beta: Ghi đè hệ số phạt phí trong reward mà không đổi phí thật.
         """
         super(TradingEnv, self).__init__()
         
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)["environment"]
+        if reward_beta is not None:
+            if not np.isfinite(reward_beta) or reward_beta < 0:
+                raise ValueError("reward_beta phải là số hữu hạn không âm.")
+            self.config["reward_beta"] = float(reward_beta)
             
         self.market_tensor = market_tensor
         self.open_prices = open_prices
