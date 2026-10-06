@@ -18,14 +18,17 @@ class PortfolioState:
             initial_capital: Số vốn ban đầu (ví dụ: 100,000$).
             num_assets: Số lượng tài sản cổ phiếu (N). Không tính tiền mặt.
         """
-        self.initial_capital = initial_capital
+        if not np.isfinite(initial_capital) or initial_capital <= 0:
+            raise ValueError("initial_capital phải là số hữu hạn lớn hơn 0.")
+        if num_assets <= 0:
+            raise ValueError("num_assets phải lớn hơn 0.")
+        self.initial_capital = float(initial_capital)
         self.num_assets = num_assets
         self.reset()
         
     def reset(self):
         """Khôi phục danh mục về trạng thái ban đầu (100% Tiền mặt)."""
         self.portfolio_value = float(self.initial_capital)
-        self.peak_value = float(self.initial_capital)
         
         # weights có kích thước N + 1. Vị trí cuối cùng [-1] là Tiền mặt (Cash).
         # Khởi tạo: 0% cổ phiếu, 100% tiền mặt.
@@ -40,15 +43,18 @@ class PortfolioState:
             new_value: Tổng giá trị danh mục mới.
             new_weights: Tỷ trọng mới của danh mục (kích thước N+1).
         """
-        if new_value < 0:
-            raise ValueError("Giá trị danh mục không thể âm.")
-            
+        if not np.isfinite(new_value) or new_value < 0:
+            raise ValueError("Giá trị danh mục phải hữu hạn và không âm.")
+        weights = np.asarray(new_weights, dtype=np.float64)
+        if weights.shape != (self.num_assets + 1,):
+            raise ValueError("new_weights phải có kích thước num_assets + 1.")
+        if not np.all(np.isfinite(weights)):
+            raise ValueError("new_weights phải chứa các giá trị hữu hạn.")
+        if np.any(weights < -1e-7) or not np.isclose(np.sum(weights), 1.0, atol=1e-5):
+            raise ValueError("new_weights phải không âm và có tổng bằng 1.")
+
         self.portfolio_value = float(new_value)
-        self.weights = np.copy(new_weights)
-        
-        # Cập nhật giá trị đỉnh (để sau này tính Max Drawdown)
-        if self.portfolio_value > self.peak_value:
-            self.peak_value = self.portfolio_value
+        self.weights = weights.astype(np.float32)
 
     @property
     def cash_weight(self) -> float:

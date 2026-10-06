@@ -43,3 +43,7 @@ class TestRebalanceEngine:
         expected = np.array([0.5, 0.5])
         np.testing.assert_array_almost_equal(projected, expected)
         assert np.isclose(np.sum(projected), 1.0)
+
+    def test_project_rejects_nonfinite_weights(self):
+        with pytest.raises(ValueError, match="hữu hạn"):
+            RebalanceEngine.project_weights(np.array([0.5, np.nan]))

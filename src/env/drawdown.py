@@ -9,6 +9,8 @@ Công thức:
     Drawdown_t = (V_t - Peak_t) / Peak_t
     Maximum Drawdown (MDD) = min(Drawdown_t)
 """
+import math
+
 
 class DrawdownTracker:
     """Công cụ theo dõi sụt giảm giá trị tài sản so với đỉnh lịch sử."""
@@ -19,8 +21,8 @@ class DrawdownTracker:
         
     def reset(self, initial_value: float):
         """Khởi tạo lại trạng thái (thường dùng khi Env reset)."""
-        if initial_value <= 0:
-            raise ValueError("Vốn khởi điểm phải lớn hơn 0.")
+        if not math.isfinite(initial_value) or initial_value <= 0:
+            raise ValueError("Vốn khởi điểm phải hữu hạn và lớn hơn 0.")
             
         self.peak_value = float(initial_value)
         self.max_drawdown = 0.0
@@ -37,6 +39,9 @@ class DrawdownTracker:
         Returns:
             current_drawdown: Tỷ lệ sụt giảm hiện tại (<= 0).
         """
+        if not math.isfinite(current_value) or current_value < 0:
+            raise ValueError("Giá trị danh mục phải hữu hạn và không âm.")
+
         # Nếu danh mục lập đỉnh mới, cập nhật Peak
         if current_value > self.peak_value:
             self.peak_value = float(current_value)

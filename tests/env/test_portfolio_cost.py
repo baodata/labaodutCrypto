@@ -47,3 +47,18 @@ class TestTransactionCostEngine:
         # Cost = 0.001 * 2.0 = 0.002 (0.2%)
         cost = engine.compute_cost_rate(target_weights, drifted_weights)
         assert np.isclose(cost, 0.002)
+
+    def test_cash_funded_purchase_charges_only_risky_asset_turnover(self):
+        engine = TransactionCostEngine(cost_rate=0.001)
+
+        drifted_weights = np.array([0.0, 0.0, 1.0])
+        target_weights = np.array([0.5, 0.5, 0.0])
+
+        assert np.isclose(engine.compute_cost_rate(target_weights, drifted_weights), 0.001)
+
+    def test_nonfinite_weights_are_rejected(self):
+        engine = TransactionCostEngine()
+        with pytest.raises(ValueError, match="hữu hạn"):
+            engine.compute_cost_rate(
+                np.array([np.nan, 0.0, 1.0]), np.array([0.0, 0.0, 1.0])
+            )

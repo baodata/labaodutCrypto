@@ -63,7 +63,9 @@ class BuyAndHoldBaseline:
         
         # Mua vào ngày 0
         target_weights = self.get_initial_weights(self.num_assets)
-        tc_initial = self.c * np.sum(np.abs(target_weights - current_weights))
+        tc_initial = self.c * np.sum(
+            np.abs(target_weights[:-1] - current_weights[:-1])
+        )
         
         current_weights = target_weights
         

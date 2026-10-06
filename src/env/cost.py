@@ -18,7 +18,9 @@ class TransactionCostEngine:
         Args:
             cost_rate (c): Tỷ lệ phí giao dịch mặc định (ví dụ 0.001 = 0.1%).
         """
-        self.c = cost_rate
+        if not np.isfinite(cost_rate) or cost_rate < 0:
+            raise ValueError("cost_rate phải hữu hạn và không âm.")
+        self.c = float(cost_rate)
         
     def compute_drifted_weights(
         self, 
@@ -61,7 +63,8 @@ class TransactionCostEngine:
         """
         Tính Tỷ lệ Phí giao dịch (TC_t) cho lệnh tái cân bằng.
         
-        Công thức: TC_t = c * sum(|w_{i,t} - w̃_i|)
+        Công thức: TC_t = c * sum_{i=1..N}(|w_{i,t} - w̃_i|); cash là nguồn tiền,
+        không phải một chân giao dịch tính phí riêng.
         
         Args:
             target_weights: Tỷ trọng đích do AI quyết định (w_{t}).
@@ -70,8 +73,17 @@ class TransactionCostEngine:
         Returns:
             TC_t (Phần trăm tài sản bị mất vì phí giao dịch).
         """
-        # Tổng mức độ xáo trộn danh mục (Turnover)
-        turnover = np.sum(np.abs(target_weights - drifted_weights))
+        target_weights = np.asarray(target_weights, dtype=np.float64)
+        drifted_weights = np.asarray(drifted_weights, dtype=np.float64)
+        if target_weights.ndim != 1 or target_weights.shape != drifted_weights.shape:
+            raise ValueError("target_weights và drifted_weights phải là vector cùng kích thước.")
+        if target_weights.size < 2:
+            raise ValueError("Weights phải chứa ít nhất một tài sản và tiền mặt.")
+        if not np.all(np.isfinite(target_weights)) or not np.all(np.isfinite(drifted_weights)):
+            raise ValueError("Weights phải chứa các giá trị hữu hạn.")
+
+        # Turnover counts traded risky assets once; the cash leg is their funding source.
+        turnover = np.sum(np.abs(target_weights[:-1] - drifted_weights[:-1]))
         
         # Phí giao dịch tỷ lệ thuận với Turnover
         return float(self.c * turnover)

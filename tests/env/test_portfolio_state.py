@@ -6,7 +6,6 @@ def test_portfolio_state_initialization():
     state = PortfolioState(initial_capital=100000.0, num_assets=24)
     
     assert state.portfolio_value == 100000.0
-    assert state.peak_value == 100000.0
     assert len(state.weights) == 25
     assert state.cash_weight == 1.0
     assert np.all(state.asset_weights == 0.0)
@@ -21,14 +20,21 @@ def test_portfolio_state_update():
     state.update(99000.0, new_weights)
     
     assert state.portfolio_value == 99000.0
-    assert state.peak_value == 100000.0 # Peak không đổi vì 99k < 100k
-    assert state.cash_weight == 0.2
-    assert state.cash_value == 19800.0
-    assert state.assets_value == 79200.0
+    assert state.weights.dtype == np.float32
+    assert np.isclose(state.cash_weight, 0.2)
+    assert np.isclose(state.cash_value, 19800.0)
+    assert np.isclose(state.assets_value, 79200.0)
     
     # Cập nhật lần 2, giá trị tăng vọt lên 110000
     new_weights_2 = np.array([0.4, 0.4, 0.2])
     state.update(110000.0, new_weights_2)
     
     assert state.portfolio_value == 110000.0
-    assert state.peak_value == 110000.0 # Peak tăng lên
+
+def test_portfolio_state_rejects_nonfinite_values():
+    state = PortfolioState(initial_capital=100000.0, num_assets=2)
+
+    with pytest.raises(ValueError, match="hữu hạn"):
+        state.update(float("nan"), np.array([0.5, 0.3, 0.2]))
+    with pytest.raises(ValueError, match="hữu hạn"):
+        state.update(100000.0, np.array([float("nan"), 0.0, 1.0]))

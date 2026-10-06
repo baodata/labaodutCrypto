@@ -26,17 +26,20 @@ class RebalanceEngine:
         Returns:
             Mảng tỷ trọng hợp lệ, tổng đúng bằng 1.0.
         """
-        # Bước 1: Long-only (chặn các giá trị âm)
-        w_proj = np.maximum(weights, 0.0)
-        
-        w_sum = np.sum(w_proj)
-        
-        # Bước 2: Chuẩn hóa để tổng = 1
-        if w_sum > 1e-8:
-            w_proj = w_proj / w_sum
+        raw_weights = np.asarray(weights, dtype=np.float64)
+        if raw_weights.ndim != 1 or raw_weights.size < 2:
+            raise ValueError("weights phải là vector chứa ít nhất một tài sản và tiền mặt.")
+        if not np.all(np.isfinite(raw_weights)):
+            raise ValueError("weights phải chứa các giá trị hữu hạn.")
+
+        # Normalize after scaling by the maximum to avoid overflow for large finite inputs.
+        nonnegative = np.maximum(raw_weights, 0.0)
+        scale = float(np.max(nonnegative))
+        if scale > 0.0:
+            scaled = nonnegative / scale
+            projected = scaled / np.sum(scaled)
         else:
-            # Trường hợp fallback an toàn: Tự động phòng thủ bằng 100% tiền mặt
-            w_proj = np.zeros_like(w_proj)
-            w_proj[-1] = 1.0
-            
-        return w_proj
+            projected = np.zeros_like(nonnegative)
+            projected[-1] = 1.0
+
+        return projected.astype(np.float32)

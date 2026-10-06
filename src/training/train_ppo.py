@@ -132,57 +132,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def observation_vector(
-    obs: dict[str, np.ndarray], env: TradingEnv, lookback: int
-) -> np.ndarray:
-    """Flatten the last lookback days of engineered features and portfolio state."""
-    history_source = getattr(env, "history_tensor", env.market_tensor)
-    current_step = int(getattr(env, "history_start_index", 0)) + int(env.current_step)
-    start = max(0, current_step - lookback + 1)
-    history = history_source.tensor[start : current_step + 1]
-    if len(history) < lookback:
-        padding = np.zeros(
-            (lookback - len(history), *history.shape[1:]), dtype=np.float32
-        )
-        history = np.concatenate((padding, history), axis=0)
+def observation_vector(obs: dict[str, np.ndarray]) -> np.ndarray:
+    """Flatten the lookback and portfolio state declared by TradingEnv."""
     return np.concatenate(
         (
-            np.asarray(history, dtype=np.float32).reshape(-1),
+            np.asarray(obs["market_history"], dtype=np.float32).reshape(-1),
             np.asarray(obs["portfolio_weights"], dtype=np.float32).reshape(-1),
             np.asarray(obs["cash_ratio"], dtype=np.float32).reshape(-1),
         )
     )
 
 
-def blend_action(
-    policy_action: np.ndarray,
-    obs: dict[str, np.ndarray],
-    action_alpha: float,
-) -> np.ndarray:
-    """Move gradually from current holdings toward the policy target."""
-    current_weights = np.concatenate(
-        (obs["portfolio_weights"], obs["cash_ratio"])
-    ).astype(np.float32)
-    blended = (1.0 - action_alpha) * current_weights + action_alpha * policy_action
-    return blended.astype(np.float32)
-
-
 def action_for_model(
     model: SimplexActorCritic,
     obs: dict[str, np.ndarray],
-    env: TradingEnv,
-    lookback: int,
-    action_alpha: float,
     deterministic: bool = False,
 ) -> np.ndarray:
     device = next(model.parameters()).device
     state = torch.as_tensor(
-        observation_vector(obs, env, lookback), dtype=torch.float32, device=device
+        observation_vector(obs), dtype=torch.float32, device=device
     )
     with torch.no_grad():
         action, _, _ = model.act(state, deterministic=deterministic)
-    policy_action = action.detach().cpu().numpy().astype(np.float32)
-    return blend_action(policy_action, obs, action_alpha)
+    return action.detach().cpu().numpy().astype(np.float32)
 
 
 def open_price_matrix(processed_data: dict[str, pd.DataFrame], tickers: list[str]) -> np.ndarray:
@@ -210,33 +182,31 @@ def create_env(
     history_tensor: MarketDataTensor | None = None,
     history_start_index: int = 0,
     reward_baseline: str = "none",
+    lookback_window: int = 1,
+    action_alpha: float = 1.0,
 ) -> TradingEnv:
-    env = TradingEnv(
+    return TradingEnv(
         market_tensor=tensor,
         open_prices=open_prices,
         config_path=str(env_config),
         reward_beta=reward_beta,
         reward_baseline=reward_baseline,
+        history_tensor=history_tensor,
+        history_start_index=history_start_index,
+        lookback_window=lookback_window,
+        action_alpha=action_alpha,
     )
-    env.history_tensor = history_tensor if history_tensor is not None else tensor
-    env.history_start_index = history_start_index
-    return env
 
 
 def evaluate_policy(
     model: SimplexActorCritic,
     env: TradingEnv,
-    lookback: int,
-    action_alpha: float,
 ) -> BacktestResult:
     model.eval()
     return DeterministicBacktester(env).run_agent(
         lambda obs: action_for_model(
             model,
             obs,
-            env,
-            lookback=lookback,
-            action_alpha=action_alpha,
             deterministic=True,
         )
     )
@@ -466,10 +436,11 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
             reward_beta,
             history_tensor=scaled_full_tensor,
             history_start_index=val_history_start,
+            reward_baseline=args.reward_baseline,
+            lookback_window=lookback,
+            action_alpha=args.action_alpha,
         )
-        baseline_result = evaluate_policy(
-            model, val_env, lookback=lookback, action_alpha=args.action_alpha
-        )
+        baseline_result = evaluate_policy(model, val_env)
         baseline_metrics = metric_summary(
             baseline_result,
             risk_free_rate_annual=float(env_config["risk_free_rate"]),
@@ -491,6 +462,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         if np.isfinite(baseline_score):
             best_score = float(baseline_score)
             best_validation_metrics = baseline_metrics
+            recent_validation_scores = [float(baseline_score)]
             logger.save_checkpoint(
                 0,
                 model,
@@ -544,6 +516,8 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                     history_tensor=train_tensor,
                     history_start_index=start,
                     reward_baseline=args.reward_baseline,
+                    lookback_window=lookback,
+                    action_alpha=args.action_alpha,
                 )
                 obs, _ = episode_env.reset(
                     seed=args.seed + epoch * args.episodes_per_update + episode_index
@@ -551,16 +525,13 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 episode_reward = 0.0
                 done = False
                 while not done:
-                    obs_vector = observation_vector(obs, episode_env, lookback)
+                    obs_vector = observation_vector(obs)
                     state = torch.as_tensor(obs_vector, dtype=torch.float32, device=device)
                     with torch.no_grad():
                         policy_action, log_prob, value = model.act(state)
                     policy_action_np = policy_action.cpu().numpy().astype(np.float32)
-                    executed_action = blend_action(
-                        policy_action_np, obs, args.action_alpha
-                    )
                     next_obs, reward, terminated, truncated, _ = episode_env.step(
-                        executed_action
+                        policy_action_np
                     )
                     # Store the sampled action and its log-probability; blending is a
                     # deterministic part of the action mapping into the environment.
@@ -580,7 +551,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 if start + length >= len(train_tensor.dates):
                     last_value = 0.0
                 else:
-                    last_vector = observation_vector(obs, episode_env, lookback)
+                    last_vector = observation_vector(obs)
                     last_state = torch.as_tensor(
                         last_vector, dtype=torch.float32, device=device
                     )
@@ -604,9 +575,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 batch_size=batch_size,
             )
 
-            val_result = evaluate_policy(
-                model, val_env, lookback=lookback, action_alpha=args.action_alpha
-            )
+            val_result = evaluate_policy(model, val_env)
             val_metrics = metric_summary(
                 val_result,
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
@@ -765,8 +734,21 @@ def evaluate_test(
         context["reward_beta"],
         history_tensor=context["scaled_full_tensor"],
         history_start_index=context["test_history_start"],
+        reward_baseline=args.reward_baseline,
+        lookback_window=context["lookback"],
+        action_alpha=context["action_alpha"],
     )
     backtester = DeterministicBacktester(test_env)
+    baseline_env = create_env(
+        context["test_tensor"],
+        context["test_open"],
+        args.env_config,
+        context["reward_beta"],
+        history_tensor=context["scaled_full_tensor"],
+        history_start_index=context["test_history_start"],
+        lookback_window=context["lookback"],
+    )
+    baseline_backtester = DeterministicBacktester(baseline_env)
     n_assets = len(context["tickers"])
     env_config = context["env_config"]
     results = {
@@ -774,13 +756,10 @@ def evaluate_test(
             lambda obs: action_for_model(
                 model,
                 obs,
-                test_env,
-                lookback=context["lookback"],
-                action_alpha=context["action_alpha"],
                 deterministic=True,
             )
         ),
-        "Equal Weight (1/N)": backtester.run_strategy(
+        "Equal Weight (1/N)": baseline_backtester.run_strategy(
             EqualWeightBaseline(
                 open_prices=context["test_open"],
                 num_assets=n_assets,
@@ -788,7 +767,7 @@ def evaluate_test(
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
             )
         ),
-        "Buy & Hold": backtester.run_strategy(
+        "Buy & Hold": baseline_backtester.run_strategy(
             BuyAndHoldBaseline(
                 open_prices=context["test_open"],
                 num_assets=n_assets,
@@ -796,7 +775,7 @@ def evaluate_test(
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
             )
         ),
-        "Cash": backtester.run_strategy(
+        "Cash": baseline_backtester.run_strategy(
             CashBaseline(
                 num_days=len(context["test_tensor"].dates) - 2,
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),

@@ -68,7 +68,10 @@ class EqualWeightBaseline:
             asset_returns = np.where(p0 > 0, (p1 - p0) / p0, 0.0)
             
             # Khớp tỷ trọng (Giao dịch)
-            tc = self.c * np.sum(np.abs(target_weights - current_weights))
+            turnover = np.sum(
+                np.abs(target_weights[:-1] - current_weights[:-1])
+            )
+            tc = self.c * turnover
             
             # Lợi nhuận gộp danh mục
             gross_return = np.sum(target_weights[:-1] * asset_returns) + target_weights[-1] * self.rf_daily
