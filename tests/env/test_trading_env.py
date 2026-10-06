@@ -69,3 +69,23 @@ class TestTradingEnv:
         
         # Vốn mới = 100800 * 1.01 = 101808
         assert np.isclose(env.portfolio.portfolio_value, 101808.0)
+
+    def test_equal_weight_reward_baseline_only_changes_training_reward(self, mock_data):
+        market_tensor, open_prices = mock_data
+        for step in range(1, len(open_prices)):
+            open_prices[step] = open_prices[step - 1] * 1.01
+
+        raw_env = TradingEnv(market_tensor, open_prices, reward_baseline="none")
+        excess_env = TradingEnv(
+            market_tensor, open_prices, reward_baseline="equal_weight"
+        )
+        raw_env.reset(seed=3)
+        excess_env.reset(seed=3)
+        cash_action = np.array([0.0, 0.0, 0.0, 1.0])
+
+        _, raw_reward, _, _, raw_info = raw_env.step(cash_action)
+        _, excess_reward, _, _, excess_info = excess_env.step(cash_action)
+
+        assert np.isclose(excess_info["benchmark_return"], 0.01)
+        assert np.isclose(raw_info["net_return"], excess_info["net_return"])
+        assert np.isclose(raw_reward - excess_reward, 1.0)

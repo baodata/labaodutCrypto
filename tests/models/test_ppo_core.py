@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions.normal import Normal
+from src.models.actor_critic import SimplexActorCritic
 from src.training.ppo_core import discount_cumsum, PPOBuffer, PPOUpdater
 
 def test_discount_cumsum():
@@ -87,3 +88,69 @@ def test_ppo_updater_reduces_loss():
     assert new_loss_v < old_loss_v, f"Value loss did not decrease: {old_loss_v} -> {new_loss_v}"
     assert 'LossPi' in stats
     assert 'LossV' in stats
+    assert 'ExplainedVar' in stats
+    assert 'FirstKL' in stats
+    assert 'StopKL' in stats
+    assert stats['NumMinibatchesAttempted'] == stats['NumMinibatches']
+
+
+def test_dirichlet_act_and_evaluate_have_matching_log_probabilities():
+    torch.manual_seed(7)
+    model = SimplexActorCritic(observation_dim=8, action_dim=4, hidden_dim=16)
+    obs = torch.randn(64, 8)
+
+    with torch.no_grad():
+        actions, old_logp, _ = model.act(obs)
+        new_logp, _, _ = model.evaluate(obs, actions)
+        log_ratio = new_logp - old_logp
+        initial_kl = (((torch.exp(log_ratio) - 1.0) - log_ratio).mean()).item()
+
+    assert torch.allclose(new_logp, old_logp, atol=1e-6, rtol=1e-6)
+    assert abs(initial_kl) < 1e-6
+
+
+def test_ppo_learns_clear_synthetic_positive_asset_signal():
+    """A stationary asset with a clear positive reward should gain allocation."""
+    torch.manual_seed(17)
+    np.random.seed(17)
+    model = SimplexActorCritic(observation_dim=1, action_dim=3, hidden_dim=32)
+    optimizer = torch.optim.Adam(model.parameters(), lr=3e-3)
+    updater = PPOUpdater(target_kl=0.05, entropy_coef=0.0)
+    obs_batch = torch.ones(128, 1)
+
+    with torch.no_grad():
+        initial_action = model.act(torch.ones(1), deterministic=True)[0]
+    initial_weight = float(initial_action[0])
+
+    for _ in range(25):
+        buffer = PPOBuffer(
+            max_size=len(obs_batch), obs_dim=1, act_dim=3, gamma=0.0, lam=0.0
+        )
+        with torch.no_grad():
+            actions, log_probs, values = model.act(obs_batch)
+        action_np = actions.numpy()
+        # Asset 0 earns 1% per step; asset 1 and cash earn zero.
+        rewards = action_np[:, 0]
+        for index in range(len(obs_batch)):
+            buffer.store(
+                obs_batch[index].numpy(),
+                action_np[index],
+                float(rewards[index]),
+                float(values[index]),
+                float(log_probs[index]),
+            )
+        buffer.finish_path(last_val=0.0)
+        updater.update(
+            model,
+            optimizer,
+            buffer.get(),
+            train_iters=4,
+            batch_size=len(obs_batch),
+        )
+
+    with torch.no_grad():
+        final_action = model.act(torch.ones(1), deterministic=True)[0]
+    final_weight = float(final_action[0])
+
+    assert final_weight > initial_weight + 0.25
+    assert final_weight > 0.65

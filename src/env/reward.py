@@ -22,19 +22,26 @@ class RewardEngine:
         self.beta = float(beta)
         self.scaling_factor = float(scaling_factor)
         
-    def compute_reward(self, gross_return: float, transaction_cost: float) -> float:
+    def compute_reward(
+        self,
+        gross_return: float,
+        transaction_cost: float,
+        benchmark_return: float = 0.0,
+    ) -> float:
         """
         Tính phần thưởng cho PPO Agent.
-        Công thức: Reward_t = (R_p,t - beta * TC_t) * scaling_factor
+        Công thức: Reward_t = (R_p,t - baseline_t - beta * TC_t) * scaling_factor
         
         Args:
             gross_return (R_p,t): Lợi nhuận gộp.
             transaction_cost (TC_t): Phần trăm phí giao dịch bị mất do xáo trộn.
+            benchmark_return: Lợi nhuận tham chiếu bị trừ khỏi reward, không ảnh hưởng
+                đến lợi nhuận tài khoản thực tế.
             
         Returns:
             Điểm phần thưởng (Float) đã scale.
         """
-        raw_reward = gross_return - (self.beta * transaction_cost)
+        raw_reward = gross_return - benchmark_return - (self.beta * transaction_cost)
         return float(raw_reward * self.scaling_factor)
         
     def compute_net_return(self, gross_return: float, transaction_cost: float) -> float:

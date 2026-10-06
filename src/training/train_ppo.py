@@ -54,6 +54,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ppo-iters", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=None)
     parser.add_argument("--episodes-per-update", type=int, default=8)
+    parser.add_argument(
+        "--target-kl",
+        type=float,
+        default=None,
+        help="Ghi đè target_kl trong configs/model.yaml.",
+    )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=None,
+        help="Ghi đè learning_rate trong configs/model.yaml.",
+    )
     parser.add_argument("--window-min-days", type=int, default=126)
     parser.add_argument("--window-max-days", type=int, default=252)
     parser.add_argument("--lookback", type=int, default=None)
@@ -79,6 +91,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=None,
         help="Penalty multiplier for transaction costs; defaults to configs/env.yaml.",
+    )
+    parser.add_argument(
+        "--reward-baseline",
+        choices=("none", "equal_weight"),
+        default="none",
+        help="Optional equal-weight excess-return reward baseline for PPO training.",
     )
     parser.add_argument(
         "--selection-metric",
@@ -191,12 +209,14 @@ def create_env(
     reward_beta: float,
     history_tensor: MarketDataTensor | None = None,
     history_start_index: int = 0,
+    reward_baseline: str = "none",
 ) -> TradingEnv:
     env = TradingEnv(
         market_tensor=tensor,
         open_prices=open_prices,
         config_path=str(env_config),
         reward_beta=reward_beta,
+        reward_baseline=reward_baseline,
     )
     env.history_tensor = history_tensor if history_tensor is not None else tensor
     env.history_start_index = history_start_index
@@ -302,6 +322,14 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         raise ValueError("--min-epochs không được lớn hơn --epochs.")
     if not 0.0 < args.action_alpha <= 1.0:
         raise ValueError("--action-alpha phải thuộc (0, 1].")
+    if args.target_kl is not None and (
+        not np.isfinite(args.target_kl) or args.target_kl <= 0
+    ):
+        raise ValueError("--target-kl phải là số hữu hạn lớn hơn 0.")
+    if args.learning_rate is not None and (
+        not np.isfinite(args.learning_rate) or args.learning_rate <= 0
+    ):
+        raise ValueError("--learning-rate phải là số hữu hạn lớn hơn 0.")
     if args.device.startswith("cuda") and not torch.cuda.is_available():
         raise RuntimeError("CUDA được chọn nhưng không khả dụng.")
 
@@ -365,10 +393,20 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
     action_dim = n_assets + 1
     model = SimplexActorCritic(obs_dim, action_dim, hidden_dim=args.hidden_dim).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=float(rl_config["learning_rate"]))
+    learning_rate = (
+        float(rl_config["learning_rate"])
+        if args.learning_rate is None
+        else float(args.learning_rate)
+    )
+    target_kl = (
+        float(rl_config.get("target_kl", 0.01))
+        if args.target_kl is None
+        else float(args.target_kl)
+    )
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     updater = PPOUpdater(
         clip_ratio=float(rl_config.get("clip_ratio", 0.2)),
-        target_kl=float(rl_config.get("target_kl", 0.01)),
+        target_kl=target_kl,
         value_loss_coef=float(rl_config.get("value_loss_coef", 0.5)),
         entropy_coef=float(rl_config.get("entropy_coef", 0.01)),
         max_grad_norm=float(rl_config.get("max_grad_norm", 0.5)),
@@ -392,6 +430,9 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         return {
             "epoch": epoch,
             "reward_beta": reward_beta,
+            "reward_baseline": args.reward_baseline,
+            "target_kl": target_kl,
+            "learning_rate": learning_rate,
             "validation_metrics": {
                 name: float(value) for name, value in val_metrics.items()
             },
@@ -413,7 +454,8 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
     print(
         f"[3/6] Tối đa {args.epochs} updates, {args.episodes_per_update} cửa sổ/update "
         f"({window_min}-{window_max} phiên); action_alpha={args.action_alpha:g}, "
-        f"beta={reward_beta:g}."
+        f"beta={reward_beta:g}, reward_baseline={args.reward_baseline}, "
+        f"target_kl={target_kl:g}, lr={learning_rate:g}."
     )
     try:
         # Keep an untrained validation reference as a checkpoint fallback.
@@ -501,6 +543,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                     reward_beta,
                     history_tensor=train_tensor,
                     history_start_index=start,
+                    reward_baseline=args.reward_baseline,
                 )
                 obs, _ = episode_env.reset(
                     seed=args.seed + epoch * args.episodes_per_update + episode_index
@@ -582,11 +625,16 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 "train_reward_std": float(np.std(episode_rewards)),
                 "policy_loss": float(update_stats["LossPi"]),
                 "value_loss": float(update_stats["LossV"]),
+                "explained_variance": float(update_stats["ExplainedVar"]),
                 "entropy": float(update_stats["Entropy"]),
                 "kl": float(update_stats["KL"]),
+                "kl_first": float(update_stats["FirstKL"]),
+                "kl_max": float(update_stats["MaxKL"]),
+                "kl_stop": float(update_stats["StopKL"]),
                 "clip_fraction": float(update_stats["ClipFrac"]),
                 "ppo_epochs_completed": float(update_stats["StopIter"]),
                 "ppo_minibatches_completed": float(update_stats["NumMinibatches"]),
+                "ppo_minibatches_attempted": float(update_stats["NumMinibatchesAttempted"]),
                 "ppo_stopped_early": float(update_stats["StoppedEarly"]),
                 "validation_score": float(score),
                 "validation_smoothed_score": smoothed_score,
@@ -605,11 +653,16 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                     "Train/RewardStd": float(np.std(episode_rewards)),
                     "Train/PolicyLoss": float(update_stats["LossPi"]),
                     "Train/ValueLoss": float(update_stats["LossV"]),
+                    "Train/ExplainedVariance": float(update_stats["ExplainedVar"]),
                     "Train/Entropy": float(update_stats["Entropy"]),
                     "Train/KL": float(update_stats["KL"]),
+                    "Train/KLFirst": float(update_stats["FirstKL"]),
+                    "Train/KLMax": float(update_stats["MaxKL"]),
+                    "Train/KLStop": float(update_stats["StopKL"]),
                     "Train/ClipFraction": float(update_stats["ClipFrac"]),
                     "Train/PPOEpochsCompleted": float(update_stats["StopIter"]),
                     "Train/PPOMinibatchesCompleted": float(update_stats["NumMinibatches"]),
+                    "Train/PPOMinibatchesAttempted": float(update_stats["NumMinibatchesAttempted"]),
                     "Train/StoppedEarly": float(update_stats["StoppedEarly"]),
                     "Validation/CumulativeReturn": val_metrics["cumulative_return"],
                     "Validation/Profit": val_metrics["profit"],
@@ -645,14 +698,20 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 f"  epoch {epoch:03d}/{args.epochs} "
                 f"| reward={np.mean(episode_rewards):.3f}±{np.std(episode_rewards):.3f} "
                 f"| policy loss={update_stats['LossPi']:.4f} "
+                f"| value loss={update_stats['LossV']:.4f} "
+                f"| EV={update_stats['ExplainedVar']:.3f} "
                 f"| val return={val_metrics['cumulative_return']:.2%} "
                 f"| val profit={val_metrics['profit']:+,.2f} "
                 f"| val Sharpe={val_metrics['sharpe_ratio']:.3f} "
                 f"| val turnover={val_metrics['total_turnover']:.2f} "
                 f"| entropy={update_stats['Entropy']:.4f} "
                 f"| KL={update_stats['KL']:.5f} "
+                f"| KLfirst={update_stats['FirstKL']:.2g} "
+                f"| KLmax={update_stats['MaxKL']:.5f} "
+                f"| KLstop={update_stats['StopKL']:.5f} "
                 f"| clipfrac={update_stats['ClipFrac']:.3f} "
-                f"| PPO={update_stats['NumMinibatches']} minibatches/"
+                f"| PPO={update_stats['NumMinibatches']}/"
+                f"{update_stats['NumMinibatchesAttempted']} minibatches/"
                 f"{update_stats['StopIter']} epochs "
                 f"| val MDD={val_metrics['max_drawdown']:.2%}"
             )

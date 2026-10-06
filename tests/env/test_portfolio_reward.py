@@ -50,6 +50,19 @@ class TestRewardEngine:
         
         assert np.isclose(reward, 1.0)
         assert np.isclose(net, 0.010)
+
+    def test_reward_can_subtract_an_action_independent_benchmark(self):
+        engine = RewardEngine(beta=1.0, scaling_factor=100.0)
+
+        reward = engine.compute_reward(
+            gross_return=0.012,
+            transaction_cost=0.002,
+            benchmark_return=0.01,
+        )
+
+        assert np.isclose(reward, 0.0)
+        # The benchmark changes training reward only, never account returns.
+        assert np.isclose(engine.compute_net_return(0.012, 0.002), 0.010)
         
     def test_negative_reward(self):
         """Khi lỗ và mất phí, reward phải âm sâu."""

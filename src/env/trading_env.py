@@ -29,6 +29,7 @@ class TradingEnv(gym.Env):
         open_prices: np.ndarray,
         config_path: str = "configs/env.yaml",
         reward_beta: float | None = None,
+        reward_baseline: str = "none",
     ):
         """
         Khởi tạo môi trường.
@@ -47,6 +48,9 @@ class TradingEnv(gym.Env):
             if not np.isfinite(reward_beta) or reward_beta < 0:
                 raise ValueError("reward_beta phải là số hữu hạn không âm.")
             self.config["reward_beta"] = float(reward_beta)
+        if reward_baseline not in {"none", "equal_weight"}:
+            raise ValueError("reward_baseline phải là 'none' hoặc 'equal_weight'.")
+        self.reward_baseline = reward_baseline
             
         self.market_tensor = market_tensor
         self.open_prices = open_prices
@@ -162,7 +166,14 @@ class TradingEnv(gym.Env):
         self.drawdown_tracker.update(new_value)
         
         # 7. Tính Reward thưởng cho Agent (có shaping)
-        reward = self.reward_engine.compute_reward(gross_return, cost_rate)
+        benchmark_return = (
+            float(np.mean(asset_returns))
+            if self.reward_baseline == "equal_weight"
+            else 0.0
+        )
+        reward = self.reward_engine.compute_reward(
+            gross_return, cost_rate, benchmark_return=benchmark_return
+        )
         
         # Tiến lên ngày mới
         self.current_step += 1
@@ -174,6 +185,7 @@ class TradingEnv(gym.Env):
         info["turnover"] = turnover
         info["transaction_cost"] = transaction_cost
         info["reward"] = reward
+        info["benchmark_return"] = benchmark_return
         
         terminated = (self.current_step >= self.T - 2)
         truncated = False

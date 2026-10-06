@@ -72,6 +72,7 @@ class PPOBuffer:
             obs=self.obs_buf,
             act=self.act_buf,
             ret=self.ret_buf,
+            val=self.val_buf,
             adv=self.adv_buf,
             logp=self.logp_buf
         )
@@ -121,8 +122,29 @@ class PPOUpdater:
         stats = {"policy_loss": [], "value_loss": [], "entropy": [], "kl": [], "clip_frac": []}
         weights = []
         minibatches_completed = 0
+        minibatches_attempted = 0
         epochs_completed = 0
         stopped_early = False
+        first_kl = float("nan")
+        stop_kl = float("nan")
+        max_kl = float("nan")
+
+        # Explained variance uses the critic predictions collected alongside the
+        # rollout, before this update changes the model. This makes the metric
+        # comparable across PPO epochs and avoids an extra full-batch forward pass.
+        old_values = buffer_data.get("val")
+        if old_values is None:
+            with torch.no_grad():
+                old_values = model.evaluate(obs, act)[2].reshape(-1)
+        ret_var = torch.var(ret.reshape(-1), unbiased=False)
+        if ret_var.item() > 1e-12:
+            explained_variance = (
+                1.0
+                - torch.var(ret.reshape(-1) - old_values.reshape(-1), unbiased=False)
+                / ret_var
+            ).item()
+        else:
+            explained_variance = float("nan")
 
         for epoch in range(train_iters):
             permutation = torch.randperm(sample_count, device=obs.device)
@@ -148,10 +170,15 @@ class PPOUpdater:
                 with torch.no_grad():
                     approx_kl = (((ratio - 1.0) - log_ratio).mean()).item()
                     clip_frac = (torch.abs(ratio - 1.0) > self.clip_ratio).float().mean().item()
+                minibatches_attempted += 1
+                if minibatches_attempted == 1:
+                    first_kl = approx_kl
+                max_kl = approx_kl if not np.isfinite(max_kl) else max(max_kl, approx_kl)
 
                 # Do not apply a minibatch update that already exceeds the KL guard.
                 if approx_kl > 1.5 * self.target_kl:
                     stopped_early = True
+                    stop_kl = approx_kl
                     break
 
                 optimizer.zero_grad()
@@ -184,7 +211,12 @@ class PPOUpdater:
             "Entropy": weighted_mean("entropy"),
             "KL": weighted_mean("kl"),
             "ClipFrac": weighted_mean("clip_frac"),
+            "ExplainedVar": float(explained_variance),
+            "FirstKL": float(first_kl),
+            "StopKL": float(stop_kl),
+            "MaxKL": float(max_kl),
             "StopIter": epochs_completed,
             "NumMinibatches": minibatches_completed,
+            "NumMinibatchesAttempted": minibatches_attempted,
             "StoppedEarly": float(stopped_early),
         }
