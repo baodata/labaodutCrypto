@@ -20,12 +20,21 @@ class TrainerLogger:
         for tag, value in metrics.items():
             self.writer.add_scalar(tag, value, step)
             
-    def save_checkpoint(self, step: int, model: torch.nn.Module, optimizer: torch.optim.Optimizer, current_reward: float):
+    def save_checkpoint(
+        self,
+        step: int,
+        model: torch.nn.Module,
+        optimizer: torch.optim.Optimizer,
+        current_reward: float,
+        selection_metric: str = "reward",
+    ):
         checkpoint = {
             'step': step,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'reward': current_reward
+            'reward': current_reward,
+            'selection_score': current_reward,
+            'selection_metric': selection_metric,
         }
         torch.save(checkpoint, self.checkpoint_dir / f"checkpoint_step_{step}.pth")
         

@@ -25,6 +25,8 @@ from src.models.adapters import GNN_ActorCritic, ObservationAdapter, ActionAdapt
 from src.graph.multi_relation_graph import MultiRelationGraphBuilder
 from src.training.logger import TrainerLogger
 from src.env.trading_env import TradingEnv
+from src.evaluation.backtester import DeterministicBacktester
+from src.evaluation.metrics import FinancialMetrics
 
 def load_configs():
     project_root = Path(__file__).resolve().parent.parent.parent
@@ -63,6 +65,10 @@ def main():
     scaler = MarketFeatureScaler()
     scaler.fit(split.train)
     market_tensor = scaler.transform(split.train)
+    val_tensor = scaler.transform(split.val)
+    correlation_history = np.concatenate(
+        (market_tensor.tensor[:, :, 0], val_tensor.tensor[:, :, 0]), axis=0
+    )
     scaler.save(project_root / "data/processed/scaler_params.json")
     print(split.summary())
 
@@ -81,13 +87,20 @@ def main():
 
     date_to_index = {str(date): i for i, date in enumerate(full_market_tensor.dates)}
     train_indices = [date_to_index[str(date)] for date in split.train.dates]
+    val_indices = [date_to_index[str(date)] for date in split.val.dates]
     open_prices = full_open_prices[train_indices]
+    val_open_prices = full_open_prices[val_indices]
             
     # 3. KHỞI TẠO CÔNG CỤ
     print("[2] Khởi tạo TradingEnv trên tập train đã tách theo thời gian...")
     env = TradingEnv(
         market_tensor=market_tensor,
         open_prices=open_prices,
+        config_path=str(project_root / "configs/env.yaml"),
+    )
+    val_env = TradingEnv(
+        market_tensor=val_tensor,
+        open_prices=val_open_prices,
         config_path=str(project_root / "configs/env.yaml"),
     )
     
@@ -99,13 +112,17 @@ def main():
     model = GNN_ActorCritic(gnn_encoder=gat, hidden_dim=out_dim)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     
-    logger = TrainerLogger(log_dir="logs/real_training", checkpoint_dir="models/checkpoints")
+    logger = TrainerLogger(
+        log_dir=str(project_root / "logs/real_training"),
+        checkpoint_dir=str(project_root / "models/checkpoints"),
+    )
     
     # 4. VÒNG LẶP HUẤN LUYỆN
     EPOCHS = 50
     print(f"\n🚀 BẮT ĐẦU HUẤN LUYỆN {EPOCHS} EPOCHS...")
     
     for epoch in range(1, EPOCHS + 1):
+        model.train()
         obs, info = env.reset()
         epoch_loss = 0.0
         
@@ -146,11 +163,62 @@ def main():
             if terminated:
                 break
                 
-        avg_loss = epoch_loss / T_days
-        logger.log_metrics(epoch, {"Loss/Epoch": avg_loss, "Portfolio/FinalValue": info['portfolio_value']})
-        logger.save_checkpoint(epoch, model, optimizer, current_reward=info['portfolio_value'])
-        
-        print(f"🔥 Epoch {epoch:02d}/{EPOCHS} | Tài khoản: ${info['portfolio_value']:,.2f} | Lỗ TB: {avg_loss:.4f} | Drawdown: {info['max_drawdown']*100:.2f}%")
+        avg_loss = epoch_loss / max(1, T_days - 2)
+
+        # Đánh giá policy hiện tại trên validation, không cập nhật gradient.
+        # Correlation validation có thể dùng lịch sử train trước ngày val đầu tiên,
+        # sau đó chỉ dùng feature return đến timestep hiện tại.
+        model.eval()
+        val_backtester = DeterministicBacktester(val_env)
+
+        def validation_policy(val_obs, val_info):
+            val_step = int(val_info["step"])
+            history_end = T_days + val_step + 1
+            start_idx = max(0, history_end - 60)
+            corr_window = correlation_history[start_idx:history_end]
+            obs_corr = np.corrcoef(corr_window.T)
+            obs_corr = np.nan_to_num(obs_corr, nan=0.0, posinf=0.0, neginf=0.0)
+
+            x, edge_index, edge_weight = obs_adapter.process(val_obs["market_state"], obs_corr)
+            with torch.no_grad():
+                action_logits, _ = model(x, edge_index, edge_weight)
+                return F.softmax(action_logits, dim=0).cpu().numpy()
+
+        val_result = val_backtester.run_strategy(validation_policy)
+        val_metrics = FinancialMetrics(
+            daily_net_returns=val_result.daily_net_returns,
+            risk_free_rate_annual=float(env_cfg["environment"]["risk_free_rate"]),
+            daily_turnover=val_result.daily_turnover,
+            daily_costs=val_result.daily_costs,
+        ).summary_dict()
+
+        logger.log_metrics(
+            epoch,
+            {
+                "Loss/Epoch": avg_loss,
+                "Train/PortfolioValue": info["portfolio_value"],
+                "Validation/CumulativeReturn": val_metrics["cumulative_return"],
+                "Validation/AnnualizedReturn": val_metrics["annualized_return"],
+                "Validation/Sharpe": val_metrics["sharpe_ratio"],
+                "Validation/MaxDrawdown": val_metrics["max_drawdown"],
+                "Validation/PortfolioValue": val_result.portfolio_values[-1],
+            },
+        )
+        # TrainerLogger's best checkpoint is selected using this validation-only score.
+        logger.save_checkpoint(
+            epoch,
+            model,
+            optimizer,
+            current_reward=val_metrics["sharpe_ratio"],
+            selection_metric="validation_sharpe",
+        )
+
+        print(
+            f"🔥 Epoch {epoch:02d}/{EPOCHS} | Train=${info['portfolio_value']:,.2f} "
+            f"| Train loss={avg_loss:.4f} | Val return={val_metrics['cumulative_return']:.2%} "
+            f"| Val Sharpe={val_metrics['sharpe_ratio']:.3f} "
+            f"| Val MDD={val_metrics['max_drawdown']:.2%}"
+        )
             
     logger.close()
     print("\n✅ HUẤN LUYỆN HOÀN TẤT. CHÚC MỪNG BẠN!")
