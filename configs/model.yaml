@@ -23,4 +23,5 @@ rl_agent:
   target_kl: 0.01                # Dừng sớm cập nhật nếu policy lệch quá xa
   gae_lambda: 0.95               # Hệ số GAE-Lambda
   value_loss_coef: 0.5           # Trọng số critic loss
+  value_clip_range: null         # Mặc định tắt; nếu bật, dùng ngưỡng riêng theo thang return
   max_grad_norm: 0.5             # Cắt gradient để ổn định cập nhật

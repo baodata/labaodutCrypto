@@ -127,6 +127,34 @@ _Mục tiêu: Mạng GNN nhận đồ thị và trả về vector đặc trưng 
 
 ---
 
+### 🏁 SPRINT 4.5: Kiên cố Kiến trúc đồ thị & GNN — Chống Market Correlation Spike
+
+_Lý do tách sprint: Sau khi phân tích kỹ, kiến trúc hiện tại (Threshold cố định + GATv2 thuần) có nguy cơ **Over-smoothing** nghiêm trọng trong giai đoạn thị trường khủng hoảng (market correlation spike) do đồ thị tiệm cận **Fully Connected Graph**. Các ticket dưới đây là các "bản vá kiến trúc" (architectural hardening) bắt buộc trước khi đưa vào vòng lặp RL._
+
+- [x] **[GRAPH-006] Nâng cấp Graph Builder: Thêm chế độ k-NN và Dynamic Threshold (P0) `[MỐC B]`**
+  - _Tệp đã nâng cấp:_ `src/graph/builder.py`
+  - _Vấn đề giải quyết:_ Với `mode="threshold"` cố định (baseline gốc), khi thị trường hoảng loạn (VD: COVID-2020, VNIndex crash), tương quan Pearson giữa các mã đồng loạt tăng lên $\approx 1.0$. Hầu hết cặp cổ phiếu đều vượt ngưỡng $0.5$, biến đồ thị thành gần như **Fully Connected**. GATv2 sau đó phân bổ Attention gần đều cho mọi hàng xóm → Over-smoothing → mất khả năng phân biệt tài sản.
+  - _Giải pháp đã cài đặt:_
+    - `mode="knn"` **(KHUYẾN NGHỊ):** Mỗi node chỉ kết nối với đúng `top_k` hàng xóm có `|corr|` cao nhất. Đảm bảo đồ thị luôn thưa ổn định bất kể thị trường.
+    - `mode="dynamic_threshold"`: Ngưỡng tự điều chỉnh: $\text{threshold}_t = \mu(|corr|) + \alpha \cdot \sigma(|corr|)$. Khi thị trường spike, $\mu$ tăng → ngưỡng tự tăng theo → lọc bỏ cạnh "giả tạo".
+  - _Hàm:_ `generate_correlation_edges(corr_matrix, mode="knn", top_k=5)`.
+  - _Unit test:_ Chạy `pytest tests/test_graph.py` — kiểm tra số cạnh đầu ra bằng $N \times K$ cho mode knn.
+
+- [x] **[GNN-005] Nâng cấp GATv2 Encoder: Thêm Residual Connections & Entropy Regularization (P0) `[MỐC B]`**
+  - _Tệp đã nâng cấp:_ `src/models/gnn/gat_encoder.py`
+  - _Vấn đề giải quyết:_ Kể cả khi đồ thị đã được kiểm soát độ thưa, input features của các cổ phiếu trong giai đoạn khủng hoảng vẫn rất giống nhau (cùng giảm sàn, RSI đỏ rực). GATv2 do đó vẫn có thể học được Attention gần đồng đều → Over-smoothing ở cấp độ đặc trưng.
+  - _Giải pháp đã cài đặt:_
+    1. **Residual Connections** (tham số `residual_alpha`): $\mathbf{h}_i^{(l+1)} = (1-\alpha)\cdot\text{GATv2}(\mathbf{h}_i^{(l)}) + \alpha \cdot \mathbf{W}\mathbf{h}_i^{(l)}$. Giữ lại "bản sắc riêng" của mỗi cổ phiếu sau khi tổng hợp thông tin hàng xóm. Mặc định: $\alpha = 0.5$.
+    2. **Entropy Regularization Loss** (hàm `compute_attention_entropy_loss`): $\mathcal{L}_{\text{ent}} = -\frac{1}{|E|}\sum_{(i,j)\in E} \alpha_{ij} \log \alpha_{ij}$. Ép GATv2 chọn ra một số ít cạnh trọng yếu (sharp attention) thay vì chia đều. Đưa vào tổng Loss: $\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{RL}} + \lambda_{\text{ent}} \cdot \mathcal{L}_{\text{ent}}$ (với $\lambda_{\text{ent}} \approx 0.01$).
+  - _Sử dụng trong training:_
+    ```python
+    emb, (att_idx, att_alpha) = encoder(x, edge_index, edge_weight, return_attention_weights=True)
+    loss_ent = compute_attention_entropy_loss(att_alpha)
+    loss_total = loss_rl + 0.01 * loss_ent
+    ```
+
+---
+
 ### 🏁 SPRINT 5: Triển khai Mô hình Học tăng cường Đơn tác tử (Single-Agent PPO Baseline)
 
 _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi phát triển lên đa tác tử._

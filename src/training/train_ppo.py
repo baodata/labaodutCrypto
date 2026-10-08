@@ -19,6 +19,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 import torch
+from torch import nn
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -32,7 +33,7 @@ from src.evaluation.baselines import BuyAndHoldBaseline, CashBaseline, EqualWeig
 from src.evaluation.metrics import FinancialMetrics
 from src.features.pipeline import FeaturePipeline
 from src.features.scaler import MarketFeatureScaler
-from src.models.actor_critic import SimplexActorCritic
+from src.models.actor_critic import build_actor_critic
 from src.training.logger import TrainerLogger
 from src.training.ppo_core import PPOBuffer, PPOUpdater
 from src.utils.data_types import MarketDataTensor
@@ -66,6 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Ghi đè learning_rate trong configs/model.yaml.",
     )
+    parser.add_argument(
+        "--value-clip-range",
+        type=float,
+        default=None,
+        help="Ngưỡng riêng cho value clipping; mặc định tắt nếu YAML để null.",
+    )
     parser.add_argument("--window-min-days", type=int, default=126)
     parser.add_argument("--window-max-days", type=int, default=252)
     parser.add_argument("--lookback", type=int, default=None)
@@ -79,6 +86,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--patience", type=int, default=10)
     parser.add_argument("--selection-window", type=int, default=5)
     parser.add_argument("--hidden-dim", type=int, default=128)
+    parser.add_argument(
+        "--encoder",
+        choices=("mlp", "lstm", "gru"),
+        default="gru",
+        help="Loại encoder: gru mặc định; cũng hỗ trợ lstm và mlp (flatten baseline).",
+    )
+    parser.add_argument("--rnn-layers", type=int, default=1, help="Số lớp RNN (lstm/gru).")
+    parser.add_argument("--rnn-dropout", type=float, default=0.0, help="Dropout giữa RNN layers (khi rnn_layers>1).")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
         "--seeds",
@@ -133,7 +148,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def observation_vector(obs: dict[str, np.ndarray]) -> np.ndarray:
-    """Flatten the lookback and portfolio state declared by TradingEnv."""
+    """Serialize market history and portfolio state into PPO's fixed-width buffer.
+
+    Với RNN, actor-critic tách phần lịch sử trở lại [L,N,F] trước khi encode;
+    thứ tự thời gian được giữ nguyên.
+    """
     return np.concatenate(
         (
             np.asarray(obs["market_history"], dtype=np.float32).reshape(-1),
@@ -144,17 +163,17 @@ def observation_vector(obs: dict[str, np.ndarray]) -> np.ndarray:
 
 
 def action_for_model(
-    model: SimplexActorCritic,
+    model: nn.Module,
     obs: dict[str, np.ndarray],
     deterministic: bool = False,
 ) -> np.ndarray:
+    """Evaluate model action from observation dict."""
     device = next(model.parameters()).device
-    state = torch.as_tensor(
-        observation_vector(obs), dtype=torch.float32, device=device
-    )
     with torch.no_grad():
+        state = torch.as_tensor(observation_vector(obs), dtype=torch.float32, device=device)
         action, _, _ = model.act(state, deterministic=deterministic)
     return action.detach().cpu().numpy().astype(np.float32)
+
 
 
 def open_price_matrix(processed_data: dict[str, pd.DataFrame], tickers: list[str]) -> np.ndarray:
@@ -199,7 +218,7 @@ def create_env(
 
 
 def evaluate_policy(
-    model: SimplexActorCritic,
+    model: nn.Module,
     env: TradingEnv,
 ) -> BacktestResult:
     model.eval()
@@ -223,7 +242,27 @@ def metric_summary(
         daily_costs=result.daily_costs,
     ).summary_dict()
     summary["profit"] = float(result.portfolio_values[-1] - result.portfolio_values[0])
+    summary["final_value"] = float(result.portfolio_values[-1])
     return summary
+
+
+def evaluate_equal_weight(
+    env: TradingEnv,
+    open_prices: np.ndarray,
+    num_assets: int,
+    transaction_cost_rate: float,
+    risk_free_rate_annual: float,
+) -> dict[str, float]:
+    """Evaluate the unsmoothed 1/N reference through the same trading engine."""
+    result = DeterministicBacktester(env).run_strategy(
+        EqualWeightBaseline(
+            open_prices=open_prices,
+            num_assets=num_assets,
+            transaction_cost_rate=transaction_cost_rate,
+            risk_free_rate_annual=risk_free_rate_annual,
+        )
+    )
+    return metric_summary(result, risk_free_rate_annual)
 
 
 def prepare_data(args: argparse.Namespace, reward_beta: float):
@@ -281,7 +320,7 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     )
 
 
-def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]:
+def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     if args.epochs <= 0 or args.ppo_iters <= 0 or args.episodes_per_update <= 0:
         raise ValueError("--epochs, --ppo-iters và --episodes-per-update phải lớn hơn 0.")
     if args.hidden_dim <= 0:
@@ -334,6 +373,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         tickers,
     ) = prepare_data(args, reward_beta)
     full_date_index = {str(date): index for index, date in enumerate(full_tensor.dates)}
+    train_history_start = full_date_index[str(split.train.dates[0])]
     val_history_start = full_date_index[str(split.val.dates[0])]
     test_history_start = full_date_index[str(split.test.dates[0])]
 
@@ -361,7 +401,26 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
     n_assets, n_features = train_tensor.tensor.shape[1:]
     obs_dim = lookback * n_assets * n_features + n_assets + 1
     action_dim = n_assets + 1
-    model = SimplexActorCritic(obs_dim, action_dim, hidden_dim=args.hidden_dim).to(device)
+    encoder = getattr(args, "encoder", "gru")
+    if encoder not in {"mlp", "lstm", "gru"}:
+        raise ValueError("--encoder phải là 'mlp', 'lstm' hoặc 'gru'.")
+    rnn_layers = int(getattr(args, "rnn_layers", 1))
+    rnn_dropout = float(getattr(args, "rnn_dropout", 0.0))
+    if rnn_layers <= 0:
+        raise ValueError("--rnn-layers phải lớn hơn 0.")
+    if not np.isfinite(rnn_dropout) or not 0.0 <= rnn_dropout < 1.0:
+        raise ValueError("--rnn-dropout phải hữu hạn và thuộc [0, 1).")
+    model_config = {
+        "encoder": encoder,
+        "n_assets": n_assets,
+        "n_features": n_features,
+        "lookback": lookback,
+        "action_dim": action_dim,
+        "hidden_dim": args.hidden_dim,
+        "rnn_layers": rnn_layers,
+        "rnn_dropout": rnn_dropout,
+    }
+    model = build_actor_critic(**model_config).to(device)
 
     learning_rate = (
         float(rl_config["learning_rate"])
@@ -373,13 +432,26 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         if args.target_kl is None
         else float(args.target_kl)
     )
+    value_clip_range = (
+        rl_config.get("value_clip_range")
+        if args.value_clip_range is None
+        else args.value_clip_range
+    )
+    if value_clip_range is not None:
+        value_clip_range = float(value_clip_range)
+        if not np.isfinite(value_clip_range) or value_clip_range <= 0:
+            raise ValueError("--value-clip-range phải là None hoặc số hữu hạn lớn hơn 0.")
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=args.epochs, eta_min=1e-6
+    )
     updater = PPOUpdater(
         clip_ratio=float(rl_config.get("clip_ratio", 0.2)),
         target_kl=target_kl,
         value_loss_coef=float(rl_config.get("value_loss_coef", 0.5)),
         entropy_coef=float(rl_config.get("entropy_coef", 0.01)),
         max_grad_norm=float(rl_config.get("max_grad_norm", 0.5)),
+        value_clip_range=value_clip_range,
     )
 
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -403,6 +475,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
             "reward_baseline": args.reward_baseline,
             "target_kl": target_kl,
             "learning_rate": learning_rate,
+            "value_clip_range": value_clip_range,
             "validation_metrics": {
                 name: float(value) for name, value in val_metrics.items()
             },
@@ -410,6 +483,12 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
             "action_dim": action_dim,
             "hidden_dim": args.hidden_dim,
             "lookback": lookback,
+            "encoder": encoder,
+            "model_config": model_config.copy(),
+            "n_assets": n_assets,
+            "n_features": n_features,
+            "rnn_layers": rnn_layers if encoder in {"lstm", "gru"} else None,
+            "rnn_dropout": rnn_dropout if encoder in {"lstm", "gru"} else None,
             "action_alpha": args.action_alpha,
             "tickers": tickers,
             "feature_names": full_tensor.feature_names,
@@ -418,16 +497,39 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         }
 
     print(
-        f"[2/6] PPO MLP: obs={obs_dim} (lookback={lookback}), actions={action_dim}, "
-        f"device={device}, minibatch={batch_size}."
+        f"[2/6] PPO {encoder.upper()} encoder: "
+        + (f"obs={obs_dim} (flatten)" if encoder == "mlp" else f"[{lookback}, {n_assets}, {n_features}]→h_{args.hidden_dim}")
+        + f", actions={action_dim}, device={device}, minibatch={batch_size}."
     )
     print(
         f"[3/6] Tối đa {args.epochs} updates, {args.episodes_per_update} cửa sổ/update "
         f"({window_min}-{window_max} phiên); action_alpha={args.action_alpha:g}, "
         f"beta={reward_beta:g}, reward_baseline={args.reward_baseline}, "
-        f"target_kl={target_kl:g}, lr={learning_rate:g}."
+        f"target_kl={target_kl:g}, lr={learning_rate:g}, "
+        f"value_clip={'off' if value_clip_range is None else value_clip_range}."
     )
     try:
+        train_eval_env = create_env(
+            train_tensor,
+            train_open,
+            args.env_config,
+            reward_beta,
+            history_tensor=scaled_full_tensor,
+            history_start_index=train_history_start,
+            reward_baseline=args.reward_baseline,
+            lookback_window=lookback,
+            action_alpha=args.action_alpha,
+        )
+        train_baseline_env = create_env(
+            train_tensor,
+            train_open,
+            args.env_config,
+            reward_beta,
+            history_tensor=scaled_full_tensor,
+            history_start_index=train_history_start,
+            lookback_window=lookback,
+            action_alpha=1.0,
+        )
         # Keep an untrained validation reference as a checkpoint fallback.
         val_env = create_env(
             val_tensor,
@@ -439,6 +541,52 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
             reward_baseline=args.reward_baseline,
             lookback_window=lookback,
             action_alpha=args.action_alpha,
+        )
+        val_baseline_env = create_env(
+            val_tensor,
+            val_open,
+            args.env_config,
+            reward_beta,
+            history_tensor=scaled_full_tensor,
+            history_start_index=val_history_start,
+            lookback_window=lookback,
+            action_alpha=1.0,
+        )
+        equal_weight_train_metrics = evaluate_equal_weight(
+            train_baseline_env,
+            train_open,
+            n_assets,
+            float(env_config["transaction_cost_rate"]),
+            float(env_config["risk_free_rate"]),
+        )
+        equal_weight_val_metrics = evaluate_equal_weight(
+            val_baseline_env,
+            val_open,
+            n_assets,
+            float(env_config["transaction_cost_rate"]),
+            float(env_config["risk_free_rate"]),
+        )
+        logger.log_metrics(
+            0,
+            {
+                "Train/EqualWeightCumulativeReturn": equal_weight_train_metrics[
+                    "cumulative_return"
+                ],
+                "Train/EqualWeightSharpe": equal_weight_train_metrics["sharpe_ratio"],
+                "Validation/EqualWeightCumulativeReturn": equal_weight_val_metrics[
+                    "cumulative_return"
+                ],
+                "Validation/EqualWeightSharpe": equal_weight_val_metrics[
+                    "sharpe_ratio"
+                ],
+            },
+        )
+        print(
+            "  1/N reference | "
+            f"train return={equal_weight_train_metrics['cumulative_return']:.2%}, "
+            f"Sharpe={equal_weight_train_metrics['sharpe_ratio']:.3f} | "
+            f"val return={equal_weight_val_metrics['cumulative_return']:.2%}, "
+            f"Sharpe={equal_weight_val_metrics['sharpe_ratio']:.3f}"
         )
         baseline_result = evaluate_policy(model, val_env)
         baseline_metrics = metric_summary(
@@ -474,6 +622,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         print(
             f"  untrained validation reference | return={baseline_metrics['cumulative_return']:.2%} "
             f"| profit={baseline_metrics['profit']:+,.2f} "
+            f"| total=${baseline_metrics['final_value']:,.2f} "
             f"| Sharpe={baseline_metrics['sharpe_ratio']:.3f} "
             f"| turnover={baseline_metrics['total_turnover']:.2f}"
         )
@@ -552,15 +701,12 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                     last_value = 0.0
                 else:
                     last_vector = observation_vector(obs)
-                    last_state = torch.as_tensor(
-                        last_vector, dtype=torch.float32, device=device
-                    )
+                    last_state = torch.as_tensor(last_vector, dtype=torch.float32, device=device)
                     with torch.no_grad():
-                        _, _, last_value_tensor = model.act(
-                            last_state, deterministic=True
-                        )
+                        _, _, last_value_tensor = model.act(last_state, deterministic=True)
                     last_value = float(last_value_tensor.item())
                 buffer.finish_path(last_val=last_value)
+
                 episode_rewards.append(episode_reward)
 
             batch = {
@@ -574,7 +720,13 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 train_iters=args.ppo_iters,
                 batch_size=batch_size,
             )
+            scheduler.step()
 
+            train_eval_result = evaluate_policy(model, train_eval_env)
+            train_eval_metrics = metric_summary(
+                train_eval_result,
+                risk_free_rate_annual=float(env_config["risk_free_rate"]),
+            )
             val_result = evaluate_policy(model, val_env)
             val_metrics = metric_summary(
                 val_result,
@@ -588,6 +740,21 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
             recent_validation_scores.append(float(score))
             recent_validation_scores = recent_validation_scores[-args.selection_window :]
             smoothed_score = float(np.mean(recent_validation_scores))
+            train_sharpe_delta_1n = (
+                train_eval_metrics["sharpe_ratio"]
+                - equal_weight_train_metrics["sharpe_ratio"]
+            )
+            train_return_delta_1n = (
+                train_eval_metrics["cumulative_return"]
+                - equal_weight_train_metrics["cumulative_return"]
+            )
+            val_sharpe_delta_1n = (
+                val_metrics["sharpe_ratio"] - equal_weight_val_metrics["sharpe_ratio"]
+            )
+            val_return_delta_1n = (
+                val_metrics["cumulative_return"]
+                - equal_weight_val_metrics["cumulative_return"]
+            )
             training_row = {
                 "epoch": float(epoch),
                 "train_reward_mean": float(np.mean(episode_rewards)),
@@ -605,11 +772,26 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 "ppo_minibatches_completed": float(update_stats["NumMinibatches"]),
                 "ppo_minibatches_attempted": float(update_stats["NumMinibatchesAttempted"]),
                 "ppo_stopped_early": float(update_stats["StoppedEarly"]),
+                "train_cumulative_return": train_eval_metrics["cumulative_return"],
+                "train_profit": train_eval_metrics["profit"],
+                "train_sharpe": train_eval_metrics["sharpe_ratio"],
+                "train_1n_cumulative_return": equal_weight_train_metrics[
+                    "cumulative_return"
+                ],
+                "train_1n_sharpe": equal_weight_train_metrics["sharpe_ratio"],
+                "train_return_delta_1n": train_return_delta_1n,
+                "train_sharpe_delta_1n": train_sharpe_delta_1n,
                 "validation_score": float(score),
                 "validation_smoothed_score": smoothed_score,
                 "validation_cumulative_return": val_metrics["cumulative_return"],
                 "validation_profit": val_metrics["profit"],
                 "validation_sharpe": val_metrics["sharpe_ratio"],
+                "validation_1n_cumulative_return": equal_weight_val_metrics[
+                    "cumulative_return"
+                ],
+                "validation_1n_sharpe": equal_weight_val_metrics["sharpe_ratio"],
+                "validation_return_delta_1n": val_return_delta_1n,
+                "validation_sharpe_delta_1n": val_sharpe_delta_1n,
                 "validation_max_drawdown": val_metrics["max_drawdown"],
                 "validation_turnover": val_metrics["total_turnover"],
                 "validation_portfolio_value": float(val_result.portfolio_values[-1]),
@@ -633,12 +815,29 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                     "Train/PPOMinibatchesCompleted": float(update_stats["NumMinibatches"]),
                     "Train/PPOMinibatchesAttempted": float(update_stats["NumMinibatchesAttempted"]),
                     "Train/StoppedEarly": float(update_stats["StoppedEarly"]),
+                    "Train/CumulativeReturn": train_eval_metrics["cumulative_return"],
+                    "Train/Profit": train_eval_metrics["profit"],
+                    "Train/Sharpe": train_eval_metrics["sharpe_ratio"],
+                    "Train/EqualWeightSharpe": equal_weight_train_metrics["sharpe_ratio"],
+                    "Train/EqualWeightCumulativeReturn": equal_weight_train_metrics[
+                        "cumulative_return"
+                    ],
+                    "Train/SharpeDeltaVs1N": train_sharpe_delta_1n,
+                    "Train/ReturnDeltaVs1N": train_return_delta_1n,
                     "Validation/CumulativeReturn": val_metrics["cumulative_return"],
                     "Validation/Profit": val_metrics["profit"],
                     "Validation/Sharpe": val_metrics["sharpe_ratio"],
                     "Validation/MaxDrawdown": val_metrics["max_drawdown"],
                     "Validation/Turnover": val_metrics["total_turnover"],
                     "Validation/PortfolioValue": val_result.portfolio_values[-1],
+                    "Validation/EqualWeightSharpe": equal_weight_val_metrics[
+                        "sharpe_ratio"
+                    ],
+                    "Validation/EqualWeightCumulativeReturn": equal_weight_val_metrics[
+                        "cumulative_return"
+                    ],
+                    "Validation/SharpeDeltaVs1N": val_sharpe_delta_1n,
+                    "Validation/ReturnDeltaVs1N": val_return_delta_1n,
                     "Validation/SmoothedScore": smoothed_score,
                 },
             )
@@ -669,9 +868,18 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 f"| policy loss={update_stats['LossPi']:.4f} "
                 f"| value loss={update_stats['LossV']:.4f} "
                 f"| EV={update_stats['ExplainedVar']:.3f} "
+                f"| train return={train_eval_metrics['cumulative_return']:.2%} "
+                f"| train profit={train_eval_metrics['profit']:+,.2f} "
+                f"| train total={train_eval_metrics['final_value']:,.2f} "
+                f"| train Sharpe={train_eval_metrics['sharpe_ratio']:.3f} "
+                f"(Δ1/N {train_sharpe_delta_1n:+.3f}) "
+                f"| train return Δ1/N={train_return_delta_1n:+.2%} "
                 f"| val return={val_metrics['cumulative_return']:.2%} "
                 f"| val profit={val_metrics['profit']:+,.2f} "
+                f"| val total={val_metrics['final_value']:,.2f} "
                 f"| val Sharpe={val_metrics['sharpe_ratio']:.3f} "
+                f"(Δ1/N {val_sharpe_delta_1n:+.3f}) "
+                f"| val return Δ1/N={val_return_delta_1n:+.2%} "
                 f"| val turnover={val_metrics['total_turnover']:.2f} "
                 f"| entropy={update_stats['Entropy']:.4f} "
                 f"| KL={update_stats['KL']:.5f} "
@@ -682,6 +890,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
                 f"| PPO={update_stats['NumMinibatches']}/"
                 f"{update_stats['NumMinibatchesAttempted']} minibatches/"
                 f"{update_stats['StopIter']} epochs "
+                f"| lr={scheduler.get_last_lr()[0]:.2e} "
                 f"| val MDD={val_metrics['max_drawdown']:.2%}"
             )
             if args.patience > 0 and epoch >= args.min_epochs:
@@ -698,6 +907,12 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
         raise RuntimeError("Không tạo được checkpoint: validation score không hữu hạn.")
     pd.DataFrame(training_rows).to_csv(args.training_log, index=False)
     checkpoint = torch.load(args.checkpoint, map_location=device)
+    saved_model_config = checkpoint.get("model_config")
+    if saved_model_config is not None and saved_model_config != model_config:
+        raise ValueError(
+            "Checkpoint architecture không khớp với model vừa tạo: "
+            f"saved={saved_model_config}, current={model_config}"
+        )
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
     print(
@@ -723,7 +938,7 @@ def train(args: argparse.Namespace) -> tuple[SimplexActorCritic, dict[str, Any]]
 
 def evaluate_test(
     args: argparse.Namespace,
-    model: SimplexActorCritic,
+    model: nn.Module,
     context: dict[str, Any],
 ) -> pd.DataFrame:
     print("[4/6] Chạy checkpoint tốt nhất trên test out-of-sample...")
@@ -739,6 +954,8 @@ def evaluate_test(
         action_alpha=context["action_alpha"],
     )
     backtester = DeterministicBacktester(test_env)
+    # Baselines provide their own target weights; alpha=1 makes each target
+    # take effect immediately and keeps PPO smoothing out of their metrics.
     baseline_env = create_env(
         context["test_tensor"],
         context["test_open"],
@@ -747,6 +964,7 @@ def evaluate_test(
         history_tensor=context["scaled_full_tensor"],
         history_start_index=context["test_history_start"],
         lookback_window=context["lookback"],
+        action_alpha=1.0,
     )
     baseline_backtester = DeterministicBacktester(baseline_env)
     n_assets = len(context["tickers"])

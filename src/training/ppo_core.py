@@ -84,12 +84,20 @@ class PPOUpdater:
     """
     def __init__(self, clip_ratio: float = 0.2, target_kl: float = 0.01, 
                  value_loss_coef: float = 0.5, entropy_coef: float = 0.01,
-                 max_grad_norm: float = 0.5):
+                 max_grad_norm: float = 0.5,
+                 value_clip_range: float | None = None):
+        if value_clip_range is not None and (
+            not np.isfinite(value_clip_range) or value_clip_range <= 0
+        ):
+            raise ValueError("value_clip_range phải là None hoặc số hữu hạn lớn hơn 0.")
         self.clip_ratio = clip_ratio
         self.target_kl = target_kl
         self.value_loss_coef = value_loss_coef
         self.entropy_coef = entropy_coef
         self.max_grad_norm = max_grad_norm
+        self.value_clip_range = (
+            None if value_clip_range is None else float(value_clip_range)
+        )
 
     def update(
         self,
@@ -155,15 +163,35 @@ class PPOUpdater:
                 minibatch_adv = adv[indices]
                 minibatch_old_logp = old_logp[indices]
 
+                minibatch_old_val = old_values[indices].reshape(-1)
+
                 # Model.evaluate returns log probability, entropy, and value.
                 log_prob, entropy, value = model.evaluate(minibatch_obs, minibatch_act)
+                value = value.reshape(-1)
+
                 log_ratio = log_prob - minibatch_old_logp
                 ratio = torch.exp(log_ratio)
                 clipped_ratio = torch.clamp(
                     ratio, 1 - self.clip_ratio, 1 + self.clip_ratio
                 )
                 loss_pi = -torch.minimum(ratio * minibatch_adv, clipped_ratio * minibatch_adv).mean()
-                loss_v = ((value.reshape(-1) - minibatch_ret.reshape(-1)) ** 2).mean()
+
+                unclipped_v = (value - minibatch_ret.reshape(-1)) ** 2
+                if self.value_clip_range is None:
+                    # Value clipping is off by default: returns can have a
+                    # different scale from the policy-probability clip ratio.
+                    loss_v = unclipped_v.mean()
+                else:
+                    clipped_v_val = minibatch_old_val + torch.clamp(
+                        value - minibatch_old_val,
+                        -self.value_clip_range,
+                        self.value_clip_range,
+                    )
+                    clipped_v = (
+                        clipped_v_val - minibatch_ret.reshape(-1)
+                    ) ** 2
+                    loss_v = torch.max(unclipped_v, clipped_v).mean()
+
                 ent = entropy.mean()
                 loss = loss_pi + self.value_loss_coef * loss_v - self.entropy_coef * ent
 

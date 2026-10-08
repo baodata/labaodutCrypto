@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import torch
 import torch.nn as nn
 from torch.distributions.normal import Normal
@@ -92,6 +93,53 @@ def test_ppo_updater_reduces_loss():
     assert 'FirstKL' in stats
     assert 'StopKL' in stats
     assert stats['NumMinibatchesAttempted'] == stats['NumMinibatches']
+
+
+class FixedOutputActorCritic(nn.Module):
+    """Small PPO-compatible model to make critic clipping behavior explicit."""
+
+    def __init__(self, value: float):
+        super().__init__()
+        self.log_prob = nn.Parameter(torch.tensor(0.0))
+        self.value = nn.Parameter(torch.tensor(value))
+
+    def evaluate(self, obs, act):
+        batch_size = len(obs)
+        return (
+            self.log_prob.expand(batch_size),
+            torch.zeros(batch_size),
+            self.value.expand(batch_size),
+        )
+
+
+def _value_clip_loss(value_clip_range):
+    model = FixedOutputActorCritic(value=1.0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.0)
+    updater = PPOUpdater(
+        target_kl=100.0,
+        entropy_coef=0.0,
+        clip_ratio=0.2,
+        value_clip_range=value_clip_range,
+    )
+    batch = {
+        "obs": torch.zeros(2, 1),
+        "act": torch.zeros(2, 2),
+        "ret": torch.ones(2),
+        "val": torch.zeros(2),
+        "adv": torch.ones(2),
+        "logp": torch.zeros(2),
+    }
+    stats = updater.update(model, optimizer, batch, train_iters=1)
+    return stats["LossV"]
+
+
+def test_value_clipping_is_disabled_by_default_and_uses_its_own_range():
+    # Current V=1 already matches the target. Policy clip_ratio=0.2 must not
+    # force critic updates to stay within +/-0.2 of the old value (0).
+    assert _value_clip_loss(None) == pytest.approx(0.0)
+    # When explicitly enabled, the independent value range clips to 0.1,
+    # yielding (1 - 0.1)^2 = 0.81.
+    assert _value_clip_loss(0.1) == pytest.approx(0.81)
 
 
 def test_dirichlet_act_and_evaluate_have_matching_log_probabilities():
