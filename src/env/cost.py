@@ -8,6 +8,35 @@ do hành động tái cân bằng danh mục của AI.
 """
 import numpy as np
 
+
+def resolve_transaction_cost_components(
+    environment_config: dict,
+) -> tuple[float, float, float]:
+    """Return (commission, slippage, total) rates from env configuration.
+
+    New configs specify the two components directly. Older configs that only
+    define transaction_cost_rate remain supported as a single all-in rate.
+    """
+    has_components = (
+        "transaction_fee_pct" in environment_config
+        or "slippage_pct" in environment_config
+    )
+    if has_components:
+        commission = float(environment_config.get("transaction_fee_pct", 0.0))
+        slippage = float(environment_config.get("slippage_pct", 0.0))
+    else:
+        commission = float(environment_config.get("transaction_cost_rate", 0.001))
+        slippage = 0.0
+
+    if (
+        not np.isfinite(commission)
+        or not np.isfinite(slippage)
+        or commission < 0.0
+        or slippage < 0.0
+    ):
+        raise ValueError("transaction fee và slippage phải hữu hạn, không âm.")
+    return commission, slippage, commission + slippage
+
 class TransactionCostEngine:
     """Động cơ tính toán chi phí giao dịch dựa trên mức độ Turnover."""
     

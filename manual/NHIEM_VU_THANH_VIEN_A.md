@@ -131,7 +131,7 @@ _Mục tiêu: Đóng gói toàn bộ đặc trưng vào tensor và chia Train/Va
 
 - [x] **[FEAT-006] Đóng gói toàn bộ Feature Pipeline (P0)**
   - _Tệp đã tạo:_ `src/features/pipeline.py`, `tests/test_pipeline.py`
-  - _Nội dung:_ Gộp 6 đặc trưng `[return, volatility_20d, rsi_14, macd, macd_signal, volume_norm]`, đúc `MarketDataTensor` $[T, N, F]$ và xuất ra `data/processed/features.parquet` (4.0 MB). 4/4 unit tests pass.
+  - _Nội dung:_ Gộp 20 đặc trưng kỹ thuật, tương đối cắt ngang, động lượng và rủi ro vào `MarketDataTensor` $[T, N, F]$. SPY chỉ làm chuỗi tham chiếu cho excess return/beta, không nằm trong action space.
 
 - [x] **[SPLIT-001] Phân chia Train / Validation / Test theo thời gian (P0)**
   - _Tệp đã tạo:_ `src/data/split.py`, `tests/test_split.py`

@@ -18,7 +18,7 @@ Mục đích:
 4. Tương thích hoàn hảo với:
    - pd.Series: Chuỗi lợi suất đơn lẻ.
    - pd.DataFrame: Ma trận lợi suất đa tài sản [T, N] hoặc bảng OHLCV.
-   - dict[str, pd.DataFrame]: Từ điển dữ liệu toàn bộ vũ trụ 25 mã cổ phiếu.
+   - dict[str, pd.DataFrame]: Từ điển nhiều chuỗi OHLCV theo ticker.
 """
 
 import math

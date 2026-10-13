@@ -14,7 +14,17 @@ class PPOBuffer:
     """
     Bộ đệm lưu trữ quỹ đạo (trajectory) cho một epoch của huấn luyện PPO.
     """
-    def __init__(self, max_size: int, obs_dim: int, act_dim: int, gamma: float = 0.99, lam: float = 0.95):
+    def __init__(
+        self,
+        max_size: int,
+        obs_dim: int,
+        act_dim: int,
+        gamma: float = 0.99,
+        lam: float = 0.95,
+        graph_dim: int | None = None,
+        graph_lookback: int = 1,
+        graph_relations: int = 1,
+    ):
         self.obs_buf = np.zeros((max_size, obs_dim), dtype=np.float32)
         self.act_buf = np.zeros((max_size, act_dim), dtype=np.float32)
         self.adv_buf = np.zeros(max_size, dtype=np.float32)
@@ -22,11 +32,40 @@ class PPOBuffer:
         self.ret_buf = np.zeros(max_size, dtype=np.float32)
         self.val_buf = np.zeros(max_size, dtype=np.float32)
         self.logp_buf = np.zeros(max_size, dtype=np.float32)
+        if graph_dim is not None and (
+            graph_dim <= 0 or graph_lookback <= 0 or graph_relations <= 0
+        ):
+            raise ValueError("graph_dim, graph_lookback và graph_relations phải lớn hơn 0.")
+        self.graph_adjacency_history_buf = (
+            np.zeros(
+                (max_size, graph_lookback, graph_relations, graph_dim, graph_dim),
+                dtype=np.float32,
+            )
+            if graph_dim is not None
+            else None
+        )
+        self.graph_edge_mask_history_buf = (
+            np.zeros(
+                (max_size, graph_lookback, graph_relations, graph_dim, graph_dim),
+                dtype=np.float32,
+            )
+            if graph_dim is not None
+            else None
+        )
         
         self.gamma, self.lam = gamma, lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, max_size
 
-    def store(self, obs: np.ndarray, act: np.ndarray, rew: float, val: float, logp: float):
+    def store(
+        self,
+        obs: np.ndarray,
+        act: np.ndarray,
+        rew: float,
+        val: float,
+        logp: float,
+        graph_adjacency_history: np.ndarray | None = None,
+        graph_edge_mask_history: np.ndarray | None = None,
+    ):
         """
         Lưu trữ một bước chuyển (transition).
         """
@@ -36,6 +75,17 @@ class PPOBuffer:
         self.rew_buf[self.ptr] = rew
         self.val_buf[self.ptr] = val
         self.logp_buf[self.ptr] = logp
+        if self.graph_adjacency_history_buf is not None:
+            if graph_adjacency_history is None or graph_edge_mask_history is None:
+                raise ValueError("Graph buffer cần đủ graph history cho mọi bước.")
+            if graph_adjacency_history.shape != self.graph_adjacency_history_buf.shape[1:]:
+                raise ValueError("graph_adjacency_history sai shape trong PPOBuffer.")
+            if graph_edge_mask_history.shape != self.graph_edge_mask_history_buf.shape[1:]:
+                raise ValueError("graph_edge_mask_history sai shape trong PPOBuffer.")
+            self.graph_adjacency_history_buf[self.ptr] = graph_adjacency_history
+            self.graph_edge_mask_history_buf[self.ptr] = graph_edge_mask_history
+        elif graph_adjacency_history is not None or graph_edge_mask_history is not None:
+            raise ValueError("Khởi tạo PPOBuffer với graph_dim để lưu graph data.")
         self.ptr += 1
 
     def finish_path(self, last_val: float = 0.0):
@@ -76,6 +126,9 @@ class PPOBuffer:
             adv=self.adv_buf,
             logp=self.logp_buf
         )
+        if self.graph_adjacency_history_buf is not None:
+            data["graph_adjacency_history"] = self.graph_adjacency_history_buf
+            data["graph_edge_mask_history"] = self.graph_edge_mask_history_buf
         return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in data.items()}
 
 class PPOUpdater:
@@ -143,7 +196,14 @@ class PPOUpdater:
         old_values = buffer_data.get("val")
         if old_values is None:
             with torch.no_grad():
-                old_values = model.evaluate(obs, act)[2].reshape(-1)
+                if "graph_adjacency_history" in buffer_data:
+                    graph = {
+                        "adjacency_history": buffer_data["graph_adjacency_history"],
+                        "edge_mask_history": buffer_data["graph_edge_mask_history"],
+                    }
+                    old_values = model.evaluate(obs, act, graph=graph)[2].reshape(-1)
+                else:
+                    old_values = model.evaluate(obs, act)[2].reshape(-1)
         ret_var = torch.var(ret.reshape(-1), unbiased=False)
         if ret_var.item() > 1e-12:
             explained_variance = (
@@ -166,7 +226,16 @@ class PPOUpdater:
                 minibatch_old_val = old_values[indices].reshape(-1)
 
                 # Model.evaluate returns log probability, entropy, and value.
-                log_prob, entropy, value = model.evaluate(minibatch_obs, minibatch_act)
+                if "graph_adjacency_history" in buffer_data:
+                    minibatch_graph = {
+                        "adjacency_history": buffer_data["graph_adjacency_history"][indices],
+                        "edge_mask_history": buffer_data["graph_edge_mask_history"][indices],
+                    }
+                    log_prob, entropy, value = model.evaluate(
+                        minibatch_obs, minibatch_act, graph=minibatch_graph
+                    )
+                else:
+                    log_prob, entropy, value = model.evaluate(minibatch_obs, minibatch_act)
                 value = value.reshape(-1)
 
                 log_ratio = log_prob - minibatch_old_logp

@@ -17,7 +17,7 @@ Mục đích:
 3. Hỗ trợ xử lý đa định dạng:
    - pd.Series: Chuỗi giá một cổ phiếu.
    - pd.DataFrame: Ma trận giá [T, N] hoặc bảng OHLCV.
-   - dict[str, pd.DataFrame]: Danh mục toàn bộ 25 mã cổ phiếu.
+   - dict[str, pd.DataFrame]: Nhiều chuỗi OHLCV, mỗi DataFrame ứng với một mã.
 4. Kiểm soát giai đoạn khởi động (warm-up) với tùy chọn fill_zero=True.
 """
 

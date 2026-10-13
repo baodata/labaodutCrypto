@@ -131,3 +131,50 @@ class FinancialMetrics:
         table = "\n".join(lines)
         print(table)
         return table
+
+
+def block_bootstrap_excess_returns(
+    strategy_returns: np.ndarray,
+    benchmark_returns: np.ndarray,
+    block_size: int = 5,
+    num_samples: int = 2000,
+    seed: int = 42,
+) -> dict[str, float]:
+    """
+    Circular Block Bootstrap (CBB) trên chuỗi excess return hàng ngày (strategy - benchmark).
+    
+    Returns dict gồm:
+        mean_excess_annualized: Lợi nhuận vượt trội trung bình năm hóa.
+        std_excess_annualized: Sai số chuẩn của excess return năm hóa.
+        ci_lower_95: Cận dưới khoảng tin cậy 95%.
+        ci_upper_95: Cận trên khoảng tin cậy 95%.
+        p_value_excess_le_0: Tỷ lệ mẫu bootstrap có excess return <= 0 (p-value 1 phía).
+    """
+    strategy_returns = np.asarray(strategy_returns, dtype=np.float64)
+    benchmark_returns = np.asarray(benchmark_returns, dtype=np.float64)
+    excess = strategy_returns - benchmark_returns
+    T = len(excess)
+    if T < block_size or block_size <= 0:
+        raise ValueError("T phải lớn hơn block_size.")
+    
+    rng = np.random.default_rng(seed)
+    num_blocks = int(np.ceil(T / block_size))
+    circular_excess = np.concatenate([excess, excess[:block_size]])
+    
+    boot_means = []
+    for _ in range(num_samples):
+        start_indices = rng.integers(0, T, size=num_blocks)
+        sampled_blocks = [circular_excess[i : i + block_size] for i in start_indices]
+        sample = np.concatenate(sampled_blocks)[:T]
+        boot_means.append(np.mean(sample))
+        
+    boot_means = np.array(boot_means)
+    annualized_means = boot_means * 252.0
+    
+    return {
+        "mean_excess_annualized": float(np.mean(annualized_means)),
+        "std_excess_annualized": float(np.std(annualized_means)),
+        "ci_lower_95": float(np.percentile(annualized_means, 2.5)),
+        "ci_upper_95": float(np.percentile(annualized_means, 97.5)),
+        "p_value_excess_le_0": float(np.mean(annualized_means <= 0.0)),
+    }

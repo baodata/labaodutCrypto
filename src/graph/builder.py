@@ -70,8 +70,15 @@ def generate_correlation_edges(
         edge_index: Tensor kích thước [2, E], kiểu torch.long
         edge_weight: Tensor kích thước [E], kiểu torch.float32
     """
-    # Thay thế các giá trị NaN bằng 0 để an toàn
-    corr_matrix = np.nan_to_num(corr_matrix, nan=0.0)
+    corr_matrix = np.asarray(corr_matrix, dtype=np.float64)
+    if corr_matrix.ndim != 2 or corr_matrix.shape[0] != corr_matrix.shape[1]:
+        raise ValueError("corr_matrix phải là ma trận vuông hai chiều.")
+    if not isinstance(top_k, (int, np.integer)) or top_k <= 0:
+        raise ValueError("top_k phải là số nguyên dương.")
+    finite_mask = np.isfinite(corr_matrix)
+    # Keep missing rolling-correlation pairs distinguishable from true zeros;
+    # otherwise early warm-up rows would acquire arbitrary k-NN edges.
+    corr_matrix = np.where(finite_mask, corr_matrix, 0.0)
 
     N = corr_matrix.shape[0]
     sources = []
@@ -86,7 +93,7 @@ def generate_correlation_edges(
                     weight = corr_matrix[i, j]
                     # Chỉ giữ các cạnh có độ lớn tương quan >= threshold
                     # (Dùng abs() nếu bạn cho rằng tương quan ngược chiều cũng là 1 mối liên hệ mạnh)
-                    if abs(weight) >= threshold:
+                    if finite_mask[i, j] and abs(weight) >= threshold:
                         sources.append(i)
                         targets.append(j)
                         weights.append(weight)
@@ -95,13 +102,18 @@ def generate_correlation_edges(
     elif mode == "knn":
         # Đặt đường chéo về -inf để tránh node tự kết nối với chính nó
         abs_corr = np.abs(corr_matrix.copy())
+        abs_corr[~finite_mask] = -np.inf
         np.fill_diagonal(abs_corr, -np.inf)
 
-        k = min(top_k, N - 1)  # Không thể có nhiều hàng xóm hơn số node - 1
+        k = min(top_k, max(0, N - 1))  # Không thể có nhiều hàng xóm hơn số node - 1
 
         for i in range(N):
-            # Lấy K chỉ số có giá trị |corr| cao nhất (không tính chính nó)
-            top_k_indices = np.argpartition(abs_corr[i], -k)[-k:]
+            # Stable ordering makes tied/near-tied correlations reproducible.
+            valid_indices = np.flatnonzero(np.isfinite(abs_corr[i]))
+            if not len(valid_indices) or not k:
+                continue
+            order = np.argsort(-abs_corr[i, valid_indices], kind="stable")
+            top_k_indices = valid_indices[order[: min(k, len(valid_indices))]]
             for j in top_k_indices:
                 weight = corr_matrix[i, j]
                 sources.append(i)
@@ -114,7 +126,7 @@ def generate_correlation_edges(
 
         # Lấy các giá trị ngoài đường chéo (off-diagonal) để tính thống kê
         mask = ~np.eye(N, dtype=bool)
-        off_diag_values = abs_corr[mask]
+        off_diag_values = abs_corr[mask & finite_mask]
 
         if len(off_diag_values) == 0:
             pass  # Không có dữ liệu, thoát sớm
@@ -128,7 +140,7 @@ def generate_correlation_edges(
                 for j in range(N):
                     if i != j:
                         weight = corr_matrix[i, j]
-                        if abs(weight) >= adaptive_threshold:
+                        if finite_mask[i, j] and abs(weight) >= adaptive_threshold:
                             sources.append(i)
                             targets.append(j)
                             weights.append(weight)

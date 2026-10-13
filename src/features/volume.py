@@ -19,7 +19,7 @@ Mục đích:
 4. Hỗ trợ xử lý đa định dạng:
    - pd.Series: Chuỗi khối lượng của 1 cổ phiếu.
    - pd.DataFrame: Ma trận khối lượng [T, N] hoặc bảng OHLCV.
-   - dict[str, pd.DataFrame]: Danh mục 25 mã cổ phiếu.
+   - dict[str, pd.DataFrame]: Nhiều chuỗi OHLCV, mỗi DataFrame ứng với một mã.
 """
 
 from typing import Union, TypeVar, cast

@@ -107,7 +107,7 @@ def test_end_to_end_train_val_test_pipeline():
     if not raw_dir.exists():
         pytest.skip("data/raw directory not found, skipping end-to-end test.")
 
-    # 1. Pipeline tính 6 đặc trưng
+    # 1. Pipeline tính các feature hiện hành
     pipeline = FeaturePipeline()
     _, full_tensor = pipeline.run_from_raw(raw_dir=raw_dir, export_parquet=True)
 

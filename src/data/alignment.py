@@ -212,12 +212,15 @@ class CalendarAligner:
         self,
         raw_dir: Path | str,
         file_pattern: str = "*.parquet",
+        tickers: list[str] | None = None,
     ) -> AlignmentResult:
         """Load, validate, and align all asset files from a raw directory.
 
         Args:
             raw_dir: Path to directory containing raw asset files.
             file_pattern: Glob pattern to match files (e.g. '*.parquet' or '*.csv').
+            tickers: Optional allowlist. When provided, load exactly these tickers
+                and ignore other files (such as a benchmark stored beside assets).
 
         Returns:
             AlignmentResult.
@@ -230,16 +233,45 @@ class CalendarAligner:
         if not files:
             raise FileNotFoundError(f"No files matching '{file_pattern}' found in {dir_path}")
 
-        data_dict: dict[str, pd.DataFrame] = {}
+        requested_tickers = None
+        if tickers is not None:
+            requested_tickers = [str(ticker).strip().upper() for ticker in tickers]
+            if not requested_tickers or any(not ticker for ticker in requested_tickers):
+                raise ValueError("tickers phải là danh sách không rỗng gồm các mã hợp lệ.")
+            if len(set(requested_tickers)) != len(requested_tickers):
+                raise ValueError("tickers chứa mã trùng lặp.")
+
+        requested_set = set(requested_tickers) if requested_tickers is not None else None
+        loaded_data: dict[str, pd.DataFrame] = {}
         for file_path in files:
             ticker = file_path.stem.upper()
+            if requested_set is not None and ticker not in requested_set:
+                continue
             if file_path.suffix == ".parquet":
                 df = pd.read_parquet(file_path)
             elif file_path.suffix == ".csv":
                 df = pd.read_csv(file_path)
             else:
                 continue
-            data_dict[ticker] = df
+            if ticker in loaded_data:
+                raise ValueError(f"Tìm thấy nhiều file dữ liệu cho ticker '{ticker}'.")
+            loaded_data[ticker] = df
+
+        if requested_tickers is not None:
+            missing_tickers = [ticker for ticker in requested_tickers if ticker not in loaded_data]
+            if missing_tickers:
+                raise FileNotFoundError(
+                    "Thiếu file dữ liệu cho các ticker trong assets.yaml: "
+                    + ", ".join(missing_tickers)
+                )
+            data_dict = {ticker: loaded_data[ticker] for ticker in requested_tickers}
+        else:
+            data_dict = loaded_data
+
+        if not data_dict:
+            raise FileNotFoundError(
+                f"Không tìm thấy file dữ liệu hợp lệ cho danh sách ticker trong {dir_path}"
+            )
 
         return self.align(data_dict)
 

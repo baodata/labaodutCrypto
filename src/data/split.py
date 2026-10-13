@@ -6,11 +6,11 @@ Ticket: SPLIT-001 (P0 - Thành viên A)
 Sprint: 3
 
 Mục đích:
-1. Phân chia tập dữ liệu thành 3 pha độc lập theo dòng thời gian thực tế:
+1. Phân chia dữ liệu thành 3 khoảng theo trật tự thời gian:
    - Tập Huấn luyện (Train):      2015-01-01 -> 2021-12-31 (~7 năm)
    - Tập Thẩm định (Validation):  2022-01-01 -> 2023-12-31 (2 năm, tuning & early stopping)
-   - Tập Kiểm thử (Test / OOS):   2024-01-01 -> 2025-12-31 (2 năm, out-of-sample)
-2. Quy tắc sống còn (Golden Rule) trong Quantitative Finance:
+   - Tập Test lịch sử:            2024-01-01 -> 2025-12-31
+2. Quy tắc trật tự thời gian (không bảo đảm test độc lập nếu kết quả đã được xem):
    - TUYỆT ĐỐI KHÔNG dùng hàm xáo trộn ngẫu nhiên (e.g. train_test_split(shuffle=True)).
    - Luôn đảm bảo trật tự nhân quả: max(train_date) < min(val_date) < min(test_date).
 3. Hỗ trợ phân chia đa định dạng:
@@ -45,7 +45,7 @@ class SplitResult(Generic[T]):
             "Temporal Data Split Summary:",
             f"  - Train: {self.dates_info.get('train_range')}",
             f"  - Validation: {self.dates_info.get('val_range')}",
-            f"  - Test (Out-of-Sample): {self.dates_info.get('test_range')}",
+            f"  - Test (selected period; independence not implied): {self.dates_info.get('test_range')}",
         ]
         return "\n".join(lines)
 
@@ -56,6 +56,8 @@ class TemporalSplitter:
     DEFAULT_TRAIN_END: str = "2021-12-31"
     DEFAULT_VAL_START: str = "2022-01-01"
     DEFAULT_VAL_END: str = "2023-12-31"
+    # 2024–2025 đã được xem qua nhiều vòng phân tích: đây là giai đoạn test
+    # lịch sử để khám phá, không còn là holdout độc lập.
     DEFAULT_TEST_START: str = "2024-01-01"
 
     def __init__(

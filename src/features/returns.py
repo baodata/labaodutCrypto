@@ -16,7 +16,7 @@ Mục đích:
 3. Hỗ trợ xử lý linh hoạt đa định dạng:
    - pd.Series: Một chuỗi giá đơn lẻ.
    - pd.DataFrame: Bảng giá đa tài sản [T, N] hoặc bảng OHLCV của 1 mã.
-   - dict[str, pd.DataFrame]: Từ điển dữ liệu toàn bộ vũ trụ 25 mã cổ phiếu.
+   - dict[str, pd.DataFrame]: Từ điển nhiều chuỗi giá theo ticker.
 4. Kiểm soát chặt chẽ giá trị khởi tạo tại t=0 (fill_zero=True điền 0.0, hoặc giữ np.nan).
 5. Đảm bảo độ chính xác số học cao (sai số < 10^-8).
 """

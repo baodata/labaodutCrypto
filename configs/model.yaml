@@ -5,23 +5,27 @@
 gnn:
   # Cấu hình Mạng Nơ-ron Đồ thị (Bộ não Low-Level)
   architecture: "GAT"            # Chọn "GCN" (Cơ bản) hoặc "GAT" (Chú ý - Mốc B)
-  in_channels: 6                 # Kích thước đầu vào (6 features từ Pipeline của A)
+  in_channels: 20                # Hiện có 20 feature; model lấy kích thước thật từ tensor
   hidden_channels: 64            # Số lượng nơ-ron ở lớp ẩn
   out_channels: 32               # Số chiều của Vector Nhúng đầu ra [N, 32]
   heads: 4                       # Số lượng "con mắt" Attention (Chỉ dùng cho GAT)
-  dropout: 0.2                   # Tỷ lệ tắt nơ-ron ngẫu nhiên để chống học vẹt (Overfitting)
+  dropout: 0.2                   # Tham số encoder; policy PPO dùng dropout=0 để giữ log-prob nhất quán
+  correlation_window: 60         # Số phiên close-to-close dùng cho graph tại mỗi ngày t
   threshold_corr: 0.5            # Ngưỡng tạo cạnh Tương quan động
+  graph_mode: "knn"              # Giữ độ thưa ổn định giữa các trạng thái thị trường
+  top_k: 6                       # Số hàng xóm tương quan mạnh nhất mỗi mã
 
 rl_agent:
   # Cấu hình Thuật toán Học Tăng Cường (PPO)
   algorithm: "PPO"               # Thuật toán Proximal Policy Optimization
   learning_rate: 0.0003          # Tốc độ học (3e-4 là chuẩn vàng của PPO)
-  gamma: 0.99                    # Hệ số chiết khấu tương lai (Tầm nhìn dài hạn)
+  gamma: 0.95                   # Credit assignment ngắn hơn cho reward theo ngày
   clip_ratio: 0.2                # Giới hạn cập nhật policy để AI không bị "sốc"
   batch_size: 256                # Minibatch PPO sau khi gom nhiều cửa sổ train
   entropy_coef: 0.01             # Khuyến khích AI khám phá các chiến thuật mua bán mới mẻ
-  target_kl: 0.01                # Dừng sớm cập nhật nếu policy lệch quá xa
-  gae_lambda: 0.95               # Hệ số GAE-Lambda
+  target_kl: 0.03                # Không dừng quá sớm với Dirichlet nhiều chiều
+  gae_lambda: 0.95                # Hệ số GAE-Lambda
   value_loss_coef: 0.5           # Trọng số critic loss
   value_clip_range: null         # Mặc định tắt; nếu bật, dùng ngưỡng riêng theo thang return
   max_grad_norm: 0.5             # Cắt gradient để ổn định cập nhật
+  dirichlet_kappa: 200.0

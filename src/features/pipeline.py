@@ -15,8 +15,8 @@ Mục đích:
 2. Đúc thành đối tượng MarketDataTensor kích thước [T, N, F] theo đúng Data Contract
    cam kết với Thành viên B (src/utils/data_types.py):
    - Trục 0 (T): Số ngày giao dịch (2,765 ngày)
-   - Trục 1 (N): 25 tài sản (24 cổ phiếu + SPY benchmark)
-   - Trục 2 (F): 6 đặc trưng kỹ thuật chuẩn hóa
+   - Trục 1 (N): 24 cổ phiếu có thể giao dịch (SPY được giữ riêng làm benchmark)
+   - Trục 2 (F): feature kỹ thuật, động lượng, rủi ro và tương đối cắt ngang
 3. Xuất dữ liệu đã tinh chế ra tệp parquet tại data/processed/features.parquet.
 4. Tự động kiểm tra tính toàn vẹn (không có NaN, không có Inf) trước khi xuất xưởng.
 """
@@ -29,10 +29,14 @@ import pandas as pd
 
 from src.data.alignment import CalendarAligner
 from src.features.macd import MACDEngine
+from src.features.momentum import MOMENTUM_FEATURE_NAMES, calculate_momentum_features
+from src.features.relative import RELATIVE_FEATURE_NAMES, calculate_relative_features
+from src.features.risk import RISK_FEATURE_NAMES, calculate_risk_features
 from src.features.returns import ReturnsEngine
 from src.features.rsi import RSIEngine
 from src.features.volatility import VolatilityEngine
 from src.features.volume import VolumeEngine
+from src.utils.config import AssetsConfig
 from src.utils.data_types import MarketDataTensor
 
 
@@ -46,6 +50,9 @@ class FeaturePipeline:
         "macd",
         "macd_signal",
         "volume_norm",
+        *RELATIVE_FEATURE_NAMES,
+        *MOMENTUM_FEATURE_NAMES,
+        *RISK_FEATURE_NAMES,
     ]
 
     def __init__(
@@ -60,8 +67,10 @@ class FeaturePipeline:
         volume_window: int = 20,
         price_col: str = "close",
         volume_col: str = "volume",
+        assets_config_path: str = "configs/assets.yaml",
     ) -> None:
         """Khởi tạo FeaturePipeline với các tham số cấu hình."""
+        self.assets_config_path = assets_config_path
         self.returns_engine = ReturnsEngine(return_type=return_type, price_col=price_col, fill_zero=True)
         self.vol_engine = VolatilityEngine(window=vol_window, annualized=False, return_col="return", fill_zero=True)
         self.rsi_engine = RSIEngine(period=rsi_period, scaled=rsi_scaled, fill_na=True, price_col=price_col)
@@ -71,7 +80,7 @@ class FeaturePipeline:
         self.volume_engine = VolumeEngine(window=volume_window, fill_zero=True, volume_col=volume_col)
 
     def process_asset(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Tính toán toàn bộ 6 đặc trưng cho một DataFrame cổ phiếu."""
+        """Tính feature đơn mã; feature cắt ngang được hoàn thiện trong process_all."""
         df_out = df.copy()
 
         # 1. Return
@@ -91,6 +100,29 @@ class FeaturePipeline:
         # 6. Volume Norm
         df_out["volume_norm"] = self.volume_engine.calculate(df_out)
 
+        close = pd.to_numeric(df_out[self.returns_engine.price_col], errors="coerce")
+        high_col = next((c for c in df_out.columns if str(c).lower() == "high"), None)
+        low_col = next((c for c in df_out.columns if str(c).lower() == "low"), None)
+        if high_col is None or low_col is None:
+            raise ValueError("OHLC cần có cột High và Low để tính Parkinson volatility và ATR.")
+        high = pd.to_numeric(df_out[high_col], errors="coerce")
+        low = pd.to_numeric(df_out[low_col], errors="coerce")
+        single_asset_features = pd.concat(
+            [
+                calculate_momentum_features(close),
+                calculate_risk_features(close, high, low),
+            ],
+            axis=1,
+        )
+        df_out[single_asset_features.columns] = single_asset_features
+
+        # Neutral standalone defaults; process_all replaces them using the full universe.
+        for feature in RELATIVE_FEATURE_NAMES:
+            df_out[feature] = 0.5 if feature.startswith("xs_rank_") else 0.0
+        for feature in self.FEATURE_NAMES:
+            values = pd.to_numeric(df_out[feature], errors="coerce")
+            df_out[feature] = values.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
         return df_out
 
     def process_all(
@@ -103,11 +135,20 @@ class FeaturePipeline:
             aligned_data: Từ điển {ticker: DataFrame OHLCV}.
 
         Returns:
-            Từ điển {ticker: DataFrame đã có đủ 6 cột đặc trưng}.
+            Từ điển {ticker: DataFrame đã có đủ feature; SPY chỉ là chuỗi tham chiếu}.
         """
         processed_data: dict[str, pd.DataFrame] = {}
         for ticker, df in aligned_data.items():
             processed_data[ticker] = self.process_asset(df)
+
+        relative_features = calculate_relative_features(
+            processed_data,
+            AssetsConfig(self.assets_config_path).get_benchmark_ticker(),
+        )
+        for ticker, features in relative_features.items():
+            processed_data[ticker][list(RELATIVE_FEATURE_NAMES)] = features[
+                list(RELATIVE_FEATURE_NAMES)
+            ]
         return processed_data
 
     def build_market_data_tensor(
@@ -118,7 +159,7 @@ class FeaturePipeline:
         """Đúc dữ liệu đã tinh chế thành MarketDataTensor [T, N, F].
 
         Args:
-            processed_data: Từ điển {ticker: DataFrame có đủ 6 đặc trưng}.
+            processed_data: Từ điển {ticker: DataFrame có đủ FEATURE_NAMES}.
             tickers_order: Thứ tự cụ thể của N mã cổ phiếu (mặc định lấy sorted keys).
 
         Returns:
@@ -127,8 +168,30 @@ class FeaturePipeline:
         if not processed_data:
             raise ValueError("processed_data không được rỗng.")
 
-        tickers = tickers_order or sorted(processed_data.keys())
-        first_df = processed_data[tickers[0]]
+        benchmark_ticker = AssetsConfig(self.assets_config_path).get_benchmark_ticker().upper()
+        normalized_data = {str(ticker).upper(): frame for ticker, frame in processed_data.items()}
+        if len(normalized_data) != len(processed_data):
+            raise ValueError("processed_data chứa ticker trùng lặp sau chuẩn hóa chữ hoa.")
+        tickers = (
+            [str(ticker).upper() for ticker in tickers_order]
+            if tickers_order is not None
+            else sorted(
+                ticker for ticker in normalized_data
+                if ticker != benchmark_ticker
+            )
+        )
+        if not tickers:
+            raise ValueError("Không có tài sản giao dịch để đưa vào MarketDataTensor.")
+        if benchmark_ticker in tickers:
+            raise ValueError(
+                f"'{benchmark_ticker}' là benchmark và không được nằm trong MarketDataTensor/action space."
+            )
+        missing_tickers = [ticker for ticker in tickers if ticker not in normalized_data]
+        if missing_tickers:
+            raise KeyError(
+                "Thiếu dữ liệu feature cho ticker: " + ", ".join(missing_tickers)
+            )
+        first_df = normalized_data[tickers[0]]
         dates = [str(d.date()) if hasattr(d, "date") else str(d) for d in first_df.index]
 
         num_timesteps = len(dates)
@@ -139,7 +202,7 @@ class FeaturePipeline:
         tensor_data = np.zeros((num_timesteps, num_assets, num_features), dtype=np.float32)
 
         for n_idx, ticker in enumerate(tickers):
-            df = processed_data[ticker]
+            df = normalized_data[ticker]
             if len(df) != num_timesteps:
                 raise ValueError(
                     f"Số dòng của ticker '{ticker}' ({len(df)}) không khớp với T={num_timesteps}."
@@ -163,9 +226,12 @@ class FeaturePipeline:
         self,
         processed_data: dict[str, pd.DataFrame],
     ) -> pd.DataFrame:
-        """Chuyển đổi dữ liệu tinh chế thành bảng phẳng Multi-index (Date, Ticker)."""
+        """Xuất feature của tài sản giao dịch; benchmark chỉ dùng tính feature tham chiếu."""
         records = []
+        benchmark = AssetsConfig(self.assets_config_path).get_benchmark_ticker().upper()
         for ticker, df in processed_data.items():
+            if str(ticker).upper() == benchmark:
+                continue
             sub_df = df[self.FEATURE_NAMES].copy()
             sub_df["ticker"] = ticker
             sub_df["date"] = sub_df.index
@@ -203,9 +269,18 @@ class FeaturePipeline:
         export_parquet: bool = True,
         output_file: Union[Path, str] = "data/processed/features.parquet",
     ) -> Tuple[dict[str, pd.DataFrame], MarketDataTensor]:
-        """Thực thi toàn bộ quy trình: Căn chỉnh lịch -> Tính 6 đặc trưng -> Đúc Tensor -> Xuất tệp."""
+        """Căn lịch, tính feature, tạo tensor; SPY là tham chiếu ngoài action space."""
         aligner = CalendarAligner(method="intersection")
-        alignment_res = aligner.align_from_directory(raw_dir)
+        assets_config = AssetsConfig(self.assets_config_path)
+        tradable_tickers = assets_config.get_tickers()
+        benchmark_ticker = assets_config.get_benchmark_ticker()
+        requested_tickers = list(tradable_tickers)
+        if benchmark_ticker.upper() not in {ticker.upper() for ticker in requested_tickers}:
+            requested_tickers.append(benchmark_ticker)
+        alignment_res = aligner.align_from_directory(
+            raw_dir,
+            tickers=requested_tickers,
+        )
 
         processed_data = self.process_all(alignment_res.aligned_data)
         market_tensor = self.build_market_data_tensor(processed_data)

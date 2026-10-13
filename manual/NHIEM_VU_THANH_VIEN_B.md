@@ -159,25 +159,23 @@ _Lý do tách sprint: Sau khi phân tích kỹ, kiến trúc hiện tại (Thres
 
 _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi phát triển lên đa tác tử._
 
-- [ ] **[MODEL-001] Xây dựng Adapter chuyển đổi Observation & Action (P0)**
-  - _Tệp cần tạo:_ `src/models/adapter.py`
+- [x] **[MODEL-001] Xây dựng Adapter chuyển đổi Observation & Action (P0)**
+  - _Tệp thực hiện:_ `src/models/actor_critic.py`, `src/training/train_ppo.py`
   - _Nội dung:_
-    - Chuyển đổi trạng thái từ môi trường của A thành tensor đầu vào cho mạng Actor-Critic.
-    - Hỗ trợ nạp trực tiếp feature đã tính từ OHLCV `[N, F]` mà không cần qua GNN (`raw_features` nghĩa là trước GNN, không phải dữ liệu OHLCV thô).
-    - Áp dụng lớp Softmax ở đầu ra của Actor để đảm bảo tổng trọng số luôn bằng 1 và không âm:
-      $$w_i = \frac{e^{z_i}}{\sum_{j} e^{z_j}}$$
+    - Chuyển đổi trạng thái từ môi trường thành tensor đầu vào cho mạng Actor-Critic (hỗ trợ cả MLP và Recurrent GRU/LSTM tự động unflatten qua `_unflatten_obs`).
+    - Hỗ trợ nạp trực tiếp feature đã tính và chuẩn hóa `[L, N, F]` mà không cần qua GNN (`raw_features` chuẩn bị mốc baseline).
+    - Đầu ra Actor sử dụng phân phối Dirichlet trên không gian Simplex (thay thế Softmax đơn thuần), đảm bảo nghiêm ngặt $\sum w_i + w_{cash} = 1$ và $w_i \ge 0$.
 
-- [ ] **[BASE-004] Cùng Thành viên A lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)**
-  - _Tệp cùng thực hiện:_ `src/training/single_agent_ppo.py`, `scripts/train_single_agent.py`
+- [x] **[BASE-004] Cùng Thành viên A lập trình và huấn luyện Single-Agent PPO (P0 - Chung A+B)**
+  - _Tệp thực hiện:_ `src/training/ppo_core.py`, `src/models/actor_critic.py`, `src/training/train_ppo.py`
   - _Phần việc của B:_
-    - Thiết kế kiến trúc mạng Actor-Critic (MLP).
-    - Cài đặt thuật toán PPO Clip Objective, Value Loss, Entropy Bonus.
-    - Đảm bảo đầu ra qua hàm Softmax tuân thủ ràng buộc $\sum w_i + w_{cash} = 1$.
-    - Cùng A huấn luyện trên feature đã tính và chuẩn hóa (KHÔNG dùng GNN) để thiết lập mốc chuẩn đối chứng tối thiểu cho Ablation Study.
+    - Thiết kế kiến trúc mạng Actor-Critic (`SimplexActorCritic`, `GRUActorCritic`, `LSTMActorCritic`).
+    - Cài đặt thuật toán PPO Clip Objective, Value Function Clipping (PPO2 style), Entropy Bonus, và GAE-Lambda.
+    - Cùng A huấn luyện trên feature đã tính và chuẩn hóa (KHÔNG dùng GNN), áp dụng CosineAnnealingLR để thiết lập mốc chuẩn đối chứng tối thiểu cho Ablation Study.
 
-- [ ] **[TRAIN-001] Xây dựng bộ ghi log huấn luyện & Lưu Checkpoint (P0)**
-  - _Tệp cần tạo:_ `src/training/checkpoint.py`, `src/utils/logger.py`
-  - _Nội dung:_ Tự động lưu checkpoint mô hình có lợi nhuận/Sharpe tốt nhất trên tập Validation. Ghi log training loss, reward qua TensorBoard.
+- [x] **[TRAIN-001] Xây dựng bộ ghi log huấn luyện & Lưu Checkpoint (P0)**
+  - _Tệp thực hiện:_ `src/training/logger.py`, `src/training/train_ppo.py`
+  - _Nội dung:_ Tự động lưu checkpoint mô hình có Sharpe/Reward tốt nhất trên tập Validation (`best_model.pth`). Ghi log training metrics và TensorBoard qua `TrainerLogger`.
 
 > 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: Dữ liệu processed $\rightarrow$ Trading Environment $\rightarrow$ PPO (A+B) $\rightarrow$ Backtest $\rightarrow$ Xuất bảng metrics so sánh với Equal Weight & Cash. Không chỉ là từng module chạy riêng lẻ!
 
@@ -187,8 +185,12 @@ _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi ph�
 
 _Mục tiêu: Chia việc ra quyết định cho nhiều Agent chuyên trách theo từng nhóm ngành._
 
-- [ ] **[GNN-004] Tích hợp Dynamic Graph vào quá trình huấn luyện theo thời gian (P1)**
-  - _Nội dung:_ Tại mỗi timestep $t$, nạp đúng đồ thị của ngày $t$ vào GNN để cập nhật embedding trước khi đưa vào Agent.
+- [x] **[GNN-004] Tích hợp Dynamic Graph vào quá trình huấn luyện theo thời gian (P1)**
+  - _Tệp thực hiện:_ `src/graph/dynamic_graph.py`, `src/env/trading_env.py`, `src/models/actor_critic.py`, `src/training/ppo_core.py`, `src/training/train_ppo.py`
+  - _Nội dung:_ Tại mỗi timestep $t$, tính rolling correlation từ close-to-close returns chỉ đến ngày $t$, ghép cạnh ngành, rồi căn graph theo cùng lịch với feature tensor. Environment đưa đủ adjacency và edge mask của lookback vào observation; PPO lưu toàn bộ graph history của từng transition và dùng lại graph đó trong minibatch update. `DynamicGraphActorCritic` chạy GCN/GAT riêng ở mỗi ngày, đưa embedding của từng mã qua GRU theo thời gian, rồi dùng learned attention pooling cho trạng thái toàn danh mục.
+  - _Đồ thị:_ Mặc định dùng k-NN với cửa sổ tương quan 60 phiên và $k=5$, tránh số cạnh biến động mạnh theo ngưỡng tương quan cố định. Có thể đổi `graph_mode`/`top_k` trong `configs/model.yaml`.
+  - _Chạy:_ `python -m src.training.train_ppo --encoder gnn` (mặc định lấy GAT, GRU thời gian và tham số graph từ `configs/model.yaml`); có thể chọn `--gnn-architecture gcn`.
+  - _Căn thời gian:_ Graph của observation ngày $t$ chỉ dùng returns lịch sử đến ngày $t$; action được thực hiện từ Open($t+1$), không dùng dữ liệu tương lai. Cấu hình graph được lưu trong checkpoint metadata.
 
 - [ ] **[MARL-001] Thiết kế ranh giới và phân công Agent theo Sector (P0 - Chung)**
   - Chia hệ thống thành các Low-Level Sector Agents:

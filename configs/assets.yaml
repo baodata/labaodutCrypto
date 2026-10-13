@@ -17,6 +17,9 @@
 #      (tránh rủi ro thiếu dữ liệu / IPO muộn).
 #   4. Phân bổ trên 5 nhóm ngành (sectors) phục vụ Multi-Agent RL.
 # Tổng số tài sản: 24 cổ phiếu thuộc 5 nhóm ngành + benchmark SPY.
+# CẢNH BÁO NGHIÊN CỨU: đây là universe cố định được chọn ở hiện tại, không phải
+# universe point-in-time. Dùng danh sách này ngược về 2015 có survivorship/selection
+# bias; cần constituent snapshots lịch sử và dữ liệu delisted để ước lượng thị trường.
 # ==============================================================================
 
 version: "1.0"

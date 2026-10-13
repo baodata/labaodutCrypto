@@ -8,7 +8,7 @@ Mô-đun bao gồm:
 - rsi: Tính toán chỉ báo Wilder Relative Strength Index (RSI-14) (FEAT-003).
 - macd: Tính toán chỉ báo Moving Average Convergence Divergence (FEAT-004).
 - volume: Chuẩn hóa khối lượng giao dịch qua Log1p và Rolling Z-score (FEAT-005).
-- pipeline: Hợp nhất toàn bộ 6 đặc trưng và đúc MarketDataTensor [T, N, F] (FEAT-006).
+- pipeline: Hợp nhất feature kỹ thuật, tương đối, động lượng và rủi ro rồi đúc MarketDataTensor [T, N, F] (FEAT-006).
 - scaler: Chuẩn hóa Z-score độc quyền chỉ học trên tập Train (SPLIT-002).
 """
 
