@@ -36,6 +36,7 @@ from src.features.scaler import MarketFeatureScaler
 from src.models.actor_critic import build_actor_critic
 from src.training.logger import TrainerLogger
 from src.training.ppo_core import PPOBuffer, PPOUpdater
+from src.utils.config import AssetsConfig
 from src.utils.data_types import MarketDataTensor
 
 
@@ -47,10 +48,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/model.yaml")
     parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
-    parser.add_argument("--train-end", default=TemporalSplitter.DEFAULT_TRAIN_END)
-    parser.add_argument("--val-start", default=TemporalSplitter.DEFAULT_VAL_START)
-    parser.add_argument("--val-end", default=TemporalSplitter.DEFAULT_VAL_END)
-    parser.add_argument("--test-start", default=TemporalSplitter.DEFAULT_TEST_START)
+    parser.add_argument(
+        "--assets-config",
+        type=Path,
+        default=PROJECT_ROOT / "configs/assets.yaml",
+        help="Đường dẫn file cấu hình vũ trụ cổ phiếu và phân chia dữ liệu (mặc định: configs/assets.yaml).",
+    )
+    parser.add_argument(
+        "--train-end",
+        default=None,
+        help="Mốc kết thúc tập train (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--val-start",
+        default=None,
+        help="Mốc bắt đầu tập validation (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--val-end",
+        default=None,
+        help="Mốc kết thúc tập validation (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--test-start",
+        default=None,
+        help="Mốc bắt đầu tập test/OOS (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--ppo-iters", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=None)
@@ -88,12 +111,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument(
         "--encoder",
-        choices=("mlp", "lstm", "gru"),
+        choices=("mlp", "lstm", "gru", "gcn", "gat"),
         default="gru",
-        help="Loại encoder: gru mặc định; cũng hỗ trợ lstm và mlp (flatten baseline).",
+        help="Loại encoder: gru mặc định; cũng hỗ trợ lstm, mlp (baseline), gat (Graph Attention) và gcn.",
     )
     parser.add_argument("--rnn-layers", type=int, default=1, help="Số lớp RNN (lstm/gru).")
     parser.add_argument("--rnn-dropout", type=float, default=0.0, help="Dropout giữa RNN layers (khi rnn_layers>1).")
+    parser.add_argument("--gnn-heads", type=int, default=4, help="Số head attention cho GAT (mặc định 4).")
+    parser.add_argument("--gnn-dropout", type=float, default=0.0, help="Dropout cho GNN (mặc định 0.0 cho PPO).")
+    parser.add_argument("--gnn-knn", type=int, default=5, help="Số hàng xóm k-NN cho Dynamic Graph (mặc định 5).")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument(
         "--seeds",
@@ -279,12 +305,52 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         export_parquet=True,
         output_file=args.processed_output,
     )
-    split = TemporalSplitter(
-        train_end=args.train_end,
-        val_start=args.val_start,
-        val_end=args.val_end,
-        test_start=args.test_start,
-    ).split_market_data_tensor(full_tensor)
+    # Phân chia dữ liệu theo thứ tự ưu tiên: CLI > configs/assets.yaml > Tự động tỷ lệ
+    train_end = args.train_end
+    val_start = args.val_start
+    val_end = args.val_end
+    test_start = args.test_start
+
+    assets_config_path = getattr(args, "assets_config", PROJECT_ROOT / "configs/assets.yaml")
+    if Path(assets_config_path).exists():
+        assets_cfg = AssetsConfig(str(assets_config_path))
+        cfg_splits = assets_cfg.get_split_dates()
+        train_end = train_end or cfg_splits.get("train_end")
+        val_start = val_start or cfg_splits.get("val_start")
+        val_end = val_end or cfg_splits.get("val_end")
+        test_start = test_start or cfg_splits.get("test_start")
+
+    # Kiểm tra tính tương thích giữa mốc split và dải ngày thực tế của full_tensor
+    tensor_start = pd.Timestamp(full_tensor.dates[0])
+    tensor_end = pd.Timestamp(full_tensor.dates[-1])
+
+    need_auto = False
+    if not (train_end and val_start and val_end and test_start):
+        need_auto = True
+    else:
+        t_end = pd.Timestamp(train_end)
+        v_start = pd.Timestamp(val_start)
+        v_end = pd.Timestamp(val_end)
+        t_start = pd.Timestamp(test_start)
+        if not (tensor_start <= t_end < v_start <= v_end < t_start <= tensor_end):
+            need_auto = True
+
+    if need_auto:
+        print(
+            f"[CẢNH BÁO] Các mốc split ({train_end}, {val_start}, {val_end}, {test_start}) "
+            f"không khớp với dải ngày dữ liệu thực tế ({tensor_start.date()} -> {tensor_end.date()}). "
+            f"Hệ thống tự động phân chia theo tỷ lệ 70% Train / 15% Val / 15% Test."
+        )
+        splitter = TemporalSplitter.from_dates(full_tensor.dates, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15)
+    else:
+        splitter = TemporalSplitter(
+            train_end=train_end,
+            val_start=val_start,
+            val_end=val_end,
+            test_start=test_start,
+        )
+
+    split = splitter.split_market_data_tensor(full_tensor)
 
     scaler = MarketFeatureScaler()
     scaler.fit(split.train)
@@ -402,10 +468,13 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     obs_dim = lookback * n_assets * n_features + n_assets + 1
     action_dim = n_assets + 1
     encoder = getattr(args, "encoder", "gru")
-    if encoder not in {"mlp", "lstm", "gru"}:
-        raise ValueError("--encoder phải là 'mlp', 'lstm' hoặc 'gru'.")
+    if encoder not in {"mlp", "lstm", "gru", "gcn", "gat"}:
+        raise ValueError("--encoder phải là 'mlp', 'lstm', 'gru', 'gcn' hoặc 'gat'.")
     rnn_layers = int(getattr(args, "rnn_layers", 1))
     rnn_dropout = float(getattr(args, "rnn_dropout", 0.0))
+    gnn_heads = int(getattr(args, "gnn_heads", 4))
+    gnn_dropout = float(getattr(args, "gnn_dropout", 0.1))
+    gnn_knn = int(getattr(args, "gnn_knn", 5))
     if rnn_layers <= 0:
         raise ValueError("--rnn-layers phải lớn hơn 0.")
     if not np.isfinite(rnn_dropout) or not 0.0 <= rnn_dropout < 1.0:
@@ -419,6 +488,10 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         "hidden_dim": args.hidden_dim,
         "rnn_layers": rnn_layers,
         "rnn_dropout": rnn_dropout,
+        "gnn_heads": gnn_heads,
+        "gnn_dropout": gnn_dropout,
+        "gnn_knn": gnn_knn,
+        "tickers": tickers,
     }
     model = build_actor_critic(**model_config).to(device)
 
@@ -489,6 +562,9 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "n_features": n_features,
             "rnn_layers": rnn_layers if encoder in {"lstm", "gru"} else None,
             "rnn_dropout": rnn_dropout if encoder in {"lstm", "gru"} else None,
+            "gnn_heads": gnn_heads if encoder == "gat" else None,
+            "gnn_dropout": gnn_dropout if encoder in {"gat", "gcn"} else None,
+            "gnn_knn": gnn_knn if encoder in {"gat", "gcn"} else None,
             "action_alpha": args.action_alpha,
             "tickers": tickers,
             "feature_names": full_tensor.feature_names,
@@ -498,7 +574,15 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
 
     print(
         f"[2/6] PPO {encoder.upper()} encoder: "
-        + (f"obs={obs_dim} (flatten)" if encoder == "mlp" else f"[{lookback}, {n_assets}, {n_features}]→h_{args.hidden_dim}")
+        + (
+            f"obs={obs_dim} (flatten)"
+            if encoder == "mlp"
+            else (
+                f"Dynamic Graph GNN (k-NN={gnn_knn}, D={args.hidden_dim})"
+                if encoder in {"gat", "gcn"}
+                else f"[{lookback}, {n_assets}, {n_features}]→h_{args.hidden_dim}"
+            )
+        )
         + f", actions={action_dim}, device={device}, minibatch={batch_size}."
     )
     print(
@@ -863,22 +947,23 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 epochs_without_improvement += 1
 
             print(
-                f"  epoch {epoch:03d}/{args.epochs} "
-                f"| reward={np.mean(episode_rewards):.3f}±{np.std(episode_rewards):.3f} "
+                f"--------------------------------------------------------------------"
+                f"\n epoch {epoch:03d}/{args.epochs} "
+                f"\n| reward={np.mean(episode_rewards):.3f}±{np.std(episode_rewards):.3f} "
                 f"| policy loss={update_stats['LossPi']:.4f} "
                 f"| value loss={update_stats['LossV']:.4f} "
                 f"| EV={update_stats['ExplainedVar']:.3f} "
-                f"| train return={train_eval_metrics['cumulative_return']:.2%} "
+                f"\n| train return={train_eval_metrics['cumulative_return']:.2%} "
                 f"| train profit={train_eval_metrics['profit']:+,.2f} "
                 f"| train total={train_eval_metrics['final_value']:,.2f} "
                 f"| train Sharpe={train_eval_metrics['sharpe_ratio']:.3f} "
-                f"(Δ1/N {train_sharpe_delta_1n:+.3f}) "
+                f"\n(Δ1/N {train_sharpe_delta_1n:+.3f}) "# đây là delta Sharpe so với 1/N để so sánh với baseline
                 f"| train return Δ1/N={train_return_delta_1n:+.2%} "
                 f"| val return={val_metrics['cumulative_return']:.2%} "
                 f"| val profit={val_metrics['profit']:+,.2f} "
                 f"| val total={val_metrics['final_value']:,.2f} "
                 f"| val Sharpe={val_metrics['sharpe_ratio']:.3f} "
-                f"(Δ1/N {val_sharpe_delta_1n:+.3f}) "
+                f"\n(Δ1/N {val_sharpe_delta_1n:+.3f}) " # đây là delta Sharpe so với 1/N
                 f"| val return Δ1/N={val_return_delta_1n:+.2%} "
                 f"| val turnover={val_metrics['total_turnover']:.2f} "
                 f"| entropy={update_stats['Entropy']:.4f} "

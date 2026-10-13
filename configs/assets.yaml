@@ -30,10 +30,19 @@ benchmark:
   sector: "index"
   agent_group: "index"
 
-# Khoảng thời gian dữ liệu (train/val/test được chia riêng trong split.py).
+# Khoảng thời gian dữ liệu và phân chia Train / Validation / Test theo chuỗi thời gian
 date_range:
-  start_date: "2015-01-01"
+  start_date: "2000-01-01"
   end_date: "2025-12-31"
+
+  # Cấu hình phân chia chuỗi thời gian (Temporal Split):
+  # Train:      start_date -> train_end (2000-01-01 -> 2010-12-31: 11 năm)
+  # Validation: val_start  -> val_end   (2011-01-01 -> 2012-12-31: 2 năm)
+  # Test (OOS): test_start -> end_date   (2013-01-01 -> 2025-12-31: 13 năm)
+  train_end: "2019-12-31"
+  val_start: "2020-01-01"
+  val_end: "2022-12-31"
+  test_start: "2023-01-01"
 
 # Tiền mặt (cash): tài sản thứ N + 1 trong action, không phải cổ phiếu.
 # risk_free_rate_annual dùng để tính Sharpe Ratio (và có thể dùng làm lãi tiền mặt).

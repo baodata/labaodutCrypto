@@ -63,6 +63,7 @@ data/processed/*
 experiments/*
 !experiments/.gitkeep
 runs/
+logs/
 *.pt
 *.pth
 *.onnx
