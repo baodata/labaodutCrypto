@@ -170,6 +170,16 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=PROJECT_ROOT / "data/processed/scaler_params.json",
     )
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="Tên định danh cho chiến lược PPO trong file metrics (mặc định: tự sinh từ cấu hình).",
+    )
+    parser.add_argument(
+        "--overwrite-metrics",
+        action="store_true",
+        help="Ghi đè hoàn toàn file metrics thay vì ghi nối tiếp (append).",
+    )
     return parser
 
 
@@ -1021,6 +1031,54 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     }
 
 
+def save_or_append_metrics(
+    metrics_path: Path,
+    new_metrics: pd.DataFrame,
+    overwrite: bool = False,
+) -> pd.DataFrame:
+    """Lưu bảng metrics vào CSV:
+    - Nếu file đã tồn tại và overwrite=False: Giữ nguyên các hàng baseline (1/N, Buy & Hold, Cash)
+      ở trên cùng, giữ lại các mô hình PPO cũ đã chạy trước đó, và ghi nối tiếp (hoặc cập nhật)
+      kết quả của mô hình PPO mới.
+    - Đảm bảo 3 hàng baseline luôn đứng ở đầu file CSV.
+    """
+    baseline_names = ["Equal Weight (1/N)", "Buy & Hold", "Cash"]
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if overwrite or not metrics_path.exists():
+        combined_df = new_metrics.copy()
+    else:
+        try:
+            existing_df = pd.read_csv(metrics_path, index_col=0)
+            # Lấy baseline từ new_metrics nếu có, hoặc từ existing_df
+            base_df = new_metrics.loc[[b for b in baseline_names if b in new_metrics.index]]
+            if base_df.empty:
+                base_df = existing_df.loc[[b for b in baseline_names if b in existing_df.index]]
+
+            # Lấy các mô hình PPO đã lưu trước đó (loại bỏ baseline, loại bỏ 'PPO' cũ và PPO đang chạy)
+            curr_ppo_names = [idx for idx in new_metrics.index if idx not in baseline_names]
+            old_ppos = existing_df.loc[
+                [idx for idx in existing_df.index if idx not in baseline_names and idx not in curr_ppo_names and idx != "PPO"]
+            ]
+
+            # Lấy PPO của lượt chạy hiện tại
+            curr_ppos = new_metrics.loc[curr_ppo_names]
+
+            # Ghép lại bằng pd.concat
+            combined_df = pd.concat([base_df, old_ppos, curr_ppos], axis=0)
+        except Exception as e:
+            print(f"[CẢNH BÁO] Không thể đọc file metrics cũ ({e}), tạo file mới.")
+            combined_df = new_metrics.copy()
+
+    # Sắp xếp hàng: 3 baselines ở đầu tiên, theo sau là các PPO runs
+    top_rows = [b for b in baseline_names if b in combined_df.index]
+    other_rows = [r for r in combined_df.index if r not in baseline_names]
+    combined_df = combined_df.loc[top_rows + other_rows]
+
+    combined_df.to_csv(metrics_path)
+    return combined_df
+
+
 def evaluate_test(
     args: argparse.Namespace,
     model: nn.Module,
@@ -1054,14 +1112,19 @@ def evaluate_test(
     baseline_backtester = DeterministicBacktester(baseline_env)
     n_assets = len(context["tickers"])
     env_config = context["env_config"]
+
+    # Xác định tên định danh cho PPO run
+    ppo_label = getattr(args, "run_name", None)
+    if not ppo_label:
+        parts = [f"PPO ({args.encoder}", f"beta={context['reward_beta']}"]
+        if context["lookback"] != 20:
+            parts.append(f"w={context['lookback']}")
+        if args.seed != 7:
+            parts.append(f"seed={args.seed}")
+        ppo_label = ", ".join(parts) + ")"
+
+    # Thứ tự: 1/N, Buy & Hold, Cash ở đầu tiên, PPO theo sau
     results = {
-        "PPO": backtester.run_agent(
-            lambda obs: action_for_model(
-                model,
-                obs,
-                deterministic=True,
-            )
-        ),
         "Equal Weight (1/N)": baseline_backtester.run_strategy(
             EqualWeightBaseline(
                 open_prices=context["test_open"],
@@ -1084,19 +1147,80 @@ def evaluate_test(
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
             )
         ),
+        ppo_label: backtester.run_agent(
+            lambda obs: action_for_model(
+                model,
+                obs,
+                deterministic=True,
+            )
+        ),
     }
-    metrics = backtester.compare(
+
+    new_metrics = backtester.compare(
         results,
         risk_free_rate_annual=float(env_config["risk_free_rate"]),
     )
-    metrics["profit"] = pd.Series(
+    new_metrics["profit"] = pd.Series(
         {
             name: float(result.portfolio_values[-1] - result.portfolio_values[0])
             for name, result in results.items()
         }
     )
-    args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(args.metrics_output)
+
+    # Ghi lại các thông số cấu hình môi trường và mô hình
+    meta_info = {
+        "Equal Weight (1/N)": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "1.0",
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "Buy & Hold": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "1.0",
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "Cash": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "-",
+            "cost_rate": "0.0",
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        ppo_label: {
+            "encoder": str(args.encoder),
+            "reward_beta": str(context["reward_beta"]),
+            "lookback": str(context["lookback"]),
+            "action_alpha": str(context["action_alpha"]),
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": str(args.seed),
+        },
+    }
+    meta_cols = ["encoder", "reward_beta", "lookback", "action_alpha", "cost_rate", "risk_free_rate", "seed"]
+    for col in meta_cols:
+        new_metrics[col] = [meta_info[s][col] for s in new_metrics.index]
+
+    # Đưa các cột cấu hình ra phía trước các cột tài chính
+    perf_cols = [c for c in new_metrics.columns if c not in meta_cols]
+    new_metrics = new_metrics[meta_cols + perf_cols]
+
+    # Lưu và ghi tiếp (append) vào file metrics
+    metrics = save_or_append_metrics(
+        args.metrics_output,
+        new_metrics,
+        overwrite=getattr(args, "overwrite_metrics", False),
+    )
+
     print("[5/6] Metrics test (profit và costs theo đơn vị tiền tài khoản):")
     print(metrics.to_string(float_format=lambda value: f"{value:.6f}"))
     print(f"[6/6] Đã lưu metrics: {args.metrics_output}")
