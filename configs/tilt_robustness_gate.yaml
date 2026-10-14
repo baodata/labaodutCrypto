@@ -1,0 +1,44 @@
+# Frozen before the historical robustness run. This is a research gate,
+# not a claim of independent confirmation: RSI/momentum candidates were
+# previously explored on the 2022-2023 validation interval.
+candidate:
+  rebalance_every_sessions: 5
+  cash_ratio: 0.04
+  action_alpha: 0.25
+  initial_action_alpha: 1.0  # Full first allocation at next open, including fees.
+  tilt_fraction_of_1n: 1.0
+  no_trade_l1: 0.0
+  rsi_orientation: momentum
+  score_weights:
+    mom_12_1_rank: 0.5
+    rsi_14_rank: 0.5
+
+periods:
+  - name: 2016-2017
+    start: "2016-01-04"
+    end: "2017-12-29"
+  - name: 2018-2019
+    start: "2018-01-02"
+    end: "2019-12-31"
+  - name: 2020-2021
+    start: "2020-01-02"
+    end: "2021-12-31"
+  - name: 2022-2023-development
+    start: "2022-01-03"
+    end: "2023-12-29"
+
+baselines:
+  - name: weekly_equal_weight
+    rebalance_every_sessions: 5
+  - name: monthly_equal_weight
+    rebalance_every_sessions: 21
+
+acceptance_gate:
+  minimum_positive_periods: 3
+  minimum_annualized_net_excess_return: 0.02
+  block_bootstrap_size_sessions: 20
+  bootstrap_replicates: 10000
+  confidence_level: 0.95
+  minimum_bootstrap_lower_bound_annualized_excess: 0.0
+  minimum_mean_sharpe_delta: 0.0
+  maximum_mean_drawdown_degradation: 0.02

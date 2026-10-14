@@ -80,7 +80,7 @@ def test_scaler_save_load_json(tmp_path: Path, synthetic_train_test_data: tuple[
 def test_scaler_on_market_data_tensor():
     """Kiểm tra scaler hoạt động mượt mà trên MarketDataTensor [T, N, F]."""
     tensor_data = np.random.normal(loc=5.0, scale=2.0, size=(100, 3, 4)).astype(np.float32)
-    dates = [f"2024-01-{i+1:02d}" for i in range(100)]
+    dates = pd.bdate_range("2024-01-01", periods=100).strftime("%Y-%m-%d").tolist()
     tickers = ["AAPL", "MSFT", "NVDA"]
     feature_names = ["ret", "vol", "rsi", "norm_vol"]
 

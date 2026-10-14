@@ -38,7 +38,8 @@ class DeterministicBacktester:
         Chạy một chiến lược cố định qua toàn bộ episode.
         
         Args:
-            strategy_fn: Hàm nhận (obs, info) và trả về action [N+1].
+            strategy_fn: Hàm nhận (obs, info), trả vector [N+1] hoặc PortfolioOrder
+                để giữ cổ phiếu hoặc ghi đè alpha cho riêng một lệnh rebalance.
         """
         obs, info = self.env.reset()
         

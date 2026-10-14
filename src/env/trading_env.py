@@ -15,6 +15,7 @@ import numpy as np
 import yaml
 
 from src.env.portfolio import PortfolioState
+from src.env.orders import PortfolioOrder
 from src.env.returns import PortfolioReturnEngine
 from src.env.rebalance import RebalanceEngine
 from src.env.cost import TransactionCostEngine, resolve_transaction_cost_components
@@ -24,7 +25,7 @@ from src.utils.data_types import MarketDataTensor
 
 
 @lru_cache(maxsize=16)
-def _load_environment_config(config_path: str) -> dict:
+def _load_environment_config(config_path: str, modified_ns: int, file_size: int) -> dict:
     with open(config_path, "r", encoding="utf-8") as stream:
         return yaml.safe_load(stream)["environment"]
 
@@ -47,6 +48,7 @@ class TradingEnv(gym.Env):
         graph_edge_mask_sequence: np.ndarray | None = None,
         graph_start_index: int = 0,
         close_prices: np.ndarray | None = None,
+        environment_config: dict | None = None,
     ):
         """
         Khởi tạo môi trường.
@@ -62,7 +64,11 @@ class TradingEnv(gym.Env):
         super(TradingEnv, self).__init__()
         
         config_key = str(Path(config_path).resolve())
-        self.config = dict(_load_environment_config(config_key))
+        if environment_config is None:
+            stat = Path(config_key).stat()
+            self.config = dict(_load_environment_config(config_key, stat.st_mtime_ns, stat.st_size))
+        else:
+            self.config = dict(environment_config)
         if reward_beta is not None:
             if not np.isfinite(reward_beta) or reward_beta < 0:
                 raise ValueError("reward_beta phải là số hữu hạn không âm.")
@@ -125,6 +131,11 @@ class TradingEnv(gym.Env):
             raise ValueError("history_start_index phải là số nguyên không âm.")
         if history_start_index + self.T > len(self.history_tensor.dates):
             raise ValueError("market_tensor vượt quá vùng chỉ số của history_tensor.")
+        if not np.array_equal(
+            np.asarray(self.market_tensor.dates, dtype="datetime64[ns]"),
+            np.asarray(self.history_tensor.dates[history_start_index:history_start_index + self.T], dtype="datetime64[ns]"),
+        ):
+            raise ValueError("Dates của market_tensor không khớp history slice; kiểm tra history_start_index.")
         self.history_start_index = int(history_start_index)
         if lookback_window <= 0:
             raise ValueError("lookback_window phải lớn hơn 0.")
@@ -190,6 +201,7 @@ class TradingEnv(gym.Env):
                 shape=(self.lookback_window, self.N, self.F),
                 dtype=np.float32,
             ),
+            "history_mask": spaces.MultiBinary(self.lookback_window),
             "portfolio_weights": spaces.Box(low=0.0, high=1.0, shape=(self.N,), dtype=np.float32),
             "cash_ratio": spaces.Box(low=0.0, high=1.0, shape=(1,), dtype=np.float32)
         })
@@ -240,6 +252,7 @@ class TradingEnv(gym.Env):
         history_index = self.history_start_index + self.current_step
         history_start = max(0, history_index - self.lookback_window + 1)
         history = self.history_tensor.tensor[history_start : history_index + 1]
+        history_mask = np.arange(self.lookback_window) >= self.lookback_window - len(history)
         if len(history) < self.lookback_window:
             padding = np.zeros(
                 (self.lookback_window - len(history), self.N, self.F),
@@ -251,6 +264,7 @@ class TradingEnv(gym.Env):
                 self.market_tensor.tensor[self.current_step], dtype=np.float32
             ),
             "market_history": np.asarray(history, dtype=np.float32),
+            "history_mask": history_mask,
             "portfolio_weights": np.asarray(
                 self.portfolio.asset_weights, dtype=np.float32
             ),
@@ -295,42 +309,52 @@ class TradingEnv(gym.Env):
         self,
         action: np.ndarray,
         current_weights: np.ndarray | None = None,
+        action_alpha: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Return the capped policy target and the final blended execution target."""
+        action = np.asarray(action, dtype=np.float64)
+        if action.shape != (self.N + 1,):
+            raise ValueError("Action phải có shape [N + 1], gồm cổ phiếu và tiền mặt.")
+        alpha = self.action_alpha if action_alpha is None else float(action_alpha)
+        if not np.isfinite(alpha) or not 0.0 < alpha <= 1.0:
+            raise ValueError("action_alpha phải hữu hạn và thuộc (0, 1].")
         policy_target = self.rebalance_engine.project_weights(
             action, max_asset_weight=self.max_asset_weight
         )
         if current_weights is None:
             current_weights = self.portfolio.weights
         blended_target = (
-            (1.0 - self.action_alpha) * np.asarray(current_weights, dtype=np.float64)
-            + self.action_alpha * policy_target
+            (1.0 - alpha) * np.asarray(current_weights, dtype=np.float64)
+            + alpha * policy_target
         )
         execution_target = self.rebalance_engine.project_weights(
             blended_target, max_asset_weight=self.max_asset_weight
         )
         return policy_target, execution_target
         
-    def step(self, action: np.ndarray):
+    def step(self, action: np.ndarray | PortfolioOrder):
         """
         Timeline nhân quả: quyết định tại Close[t], khớp tại Open[t+1],
         đánh dấu danh mục tại Close[t+1]. Danh mục cũ chịu return qua đêm;
         danh mục mới chịu return trong phiên. Observation tiếp theo và NAV
         vì vậy cùng thuộc Close[t+1].
+
+        PortfolioOrder.hold() giữ nguyên số cổ phiếu qua cả hai phân kỳ,
+        không tái cân bằng hoặc tính phí. Trần vị thế chỉ áp dụng khi đặt lệnh
+        rebalance, không ép giao dịch khi trọng số tự trôi trong một bước hold.
         """
         if self.current_step >= self.T - 1:
             return self._get_obs(), 0.0, False, True, self._get_info()
 
-        action = np.asarray(action)
-        if not np.all(np.isfinite(action)):
-            raise ValueError("Action phải chứa các giá trị hữu hạn.")
-            
-        # Blend from the portfolio state observed at Close[t], before any
-        # unobserved Close[t] -> Open[t+1] move.
+        hold = isinstance(action, PortfolioOrder) and action.target_weights is None
         current_weights = self.portfolio.weights.copy()
-        _, target_weights = self.project_action(
-            action, current_weights=current_weights
-        )
+        if not hold:
+            order_alpha = action.action_alpha if isinstance(action, PortfolioOrder) else None
+            target = action.target_weights if isinstance(action, PortfolioOrder) else action
+            # Rebalance targets are fixed at Close[t], before the unseen gap.
+            _, target_weights = self.project_action(
+                target, current_weights=current_weights, action_alpha=order_alpha
+            )
 
         t = self.current_step
         previous_value = self.portfolio.portfolio_value
@@ -347,10 +371,15 @@ class TradingEnv(gym.Env):
             current_weights, overnight_returns, subperiod_rf, overnight_gross
         )
 
-        # Execute at Open[t+1]; turnover/cost are measured against the
-        # overnight-drifted holdings and charged on the then-current NAV.
-        turnover = float(np.sum(np.abs(target_weights[:-1] - open_weights[:-1])))
-        cost_rate = self.cost_engine.compute_cost_rate(target_weights, open_weights)
+        # A hold keeps the overnight-drifted share quantities. Returning the
+        # previous close weights as a rebalance target would create a trade.
+        if hold:
+            target_weights = open_weights
+            turnover = 0.0
+            cost_rate = 0.0
+        else:
+            turnover = float(np.sum(np.abs(target_weights[:-1] - open_weights[:-1])))
+            cost_rate = self.cost_engine.compute_cost_rate(target_weights, open_weights)
         value_at_open = previous_value * (1.0 + overnight_gross)
         transaction_cost = value_at_open * cost_rate
         commission_cost = value_at_open * self.transaction_fee_pct * turnover
@@ -392,6 +421,8 @@ class TradingEnv(gym.Env):
         obs = self._get_obs()
         info = self._get_info()
         info["execution_date"] = str(self.market_tensor.dates[t + 1])
+        info["order_type"] = "hold" if hold else "rebalance"
+        info["execution_weights"] = np.asarray(target_weights, dtype=np.float32).copy()
         info["overnight_return"] = float(overnight_gross)
         info["intraday_return"] = float(intraday_gross)
         info["gross_return"] = float(gross_return)

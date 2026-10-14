@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
 
 
 @dataclass
@@ -34,6 +35,11 @@ class MarketDataTensor:
     tickers: List[str]          # Danh sách N mã tài sản theo đúng thứ tự trục 1
     feature_names: List[str]    # Danh sách F tên đặc trưng theo đúng thứ tự trục 2
     dates: List[str]            # Danh sách T mốc thời gian theo đúng thứ tự trục 0
+    warmup_sessions: int = 0    # Leading sessions before every feature is available.
+
+    @property
+    def feature_ready(self) -> np.ndarray:
+        return np.arange(len(self.dates)) >= self.warmup_sessions
 
     def validate(self) -> None:
         """Kiểm tra tính toàn vẹn của tensor."""
@@ -47,6 +53,15 @@ class MarketDataTensor:
             raise ValueError(f"Số lượng tickers ({len(self.tickers)}) không khớp với trục tài sản N={n}")
         if len(self.feature_names) != f:
             raise ValueError(f"Số lượng feature_names ({len(self.feature_names)}) không khớp với trục đặc trưng F={f}")
+        if min(t, n, f) <= 0:
+            raise ValueError("Các chiều T, N, F phải dương.")
+        if len(set(self.tickers)) != n or len(set(self.feature_names)) != f:
+            raise ValueError("Tickers và feature_names không được trùng lặp.")
+        dates = pd.DatetimeIndex(pd.to_datetime(self.dates))
+        if dates.hasnans or dates.has_duplicates or not dates.is_monotonic_increasing:
+            raise ValueError("Dates phải hợp lệ, tăng dần và không trùng lặp.")
+        if not isinstance(self.warmup_sessions, (int, np.integer)) or self.warmup_sessions < 0:
+            raise ValueError("warmup_sessions phải là số nguyên không âm.")
 
         if np.isnan(self.tensor).any():
             raise ValueError("Phát hiện NaN trong Feature Tensor!")

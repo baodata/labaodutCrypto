@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 from src.data.alignment import CalendarAligner
+from src.data.validator import DataValidator
 from src.features.macd import MACDEngine
 from src.features.momentum import MOMENTUM_FEATURE_NAMES, calculate_momentum_features
 from src.features.relative import RELATIVE_FEATURE_NAMES, calculate_relative_features
@@ -42,6 +43,7 @@ from src.utils.data_types import MarketDataTensor
 
 class FeaturePipeline:
     """Đường ống tính toán và đóng gói đặc trưng đa tài sản."""
+    WARMUP_SESSIONS = 252
 
     FEATURE_NAMES: List[str] = [
         "return",
@@ -71,6 +73,15 @@ class FeaturePipeline:
     ) -> None:
         """Khởi tạo FeaturePipeline với các tham số cấu hình."""
         self.assets_config_path = assets_config_path
+        self.parameters = {
+            "return_type": return_type, "vol_window": vol_window,
+            "rsi_period": rsi_period, "rsi_scaled": rsi_scaled,
+            "macd_fast": macd_fast, "macd_slow": macd_slow,
+            "macd_signal": macd_signal, "volume_window": volume_window,
+            "price_col": price_col, "volume_col": volume_col,
+            "warmup_sessions": self.WARMUP_SESSIONS,
+            "downside_volatility_definition": "sqrt_mean_squared_negative_returns_zero_threshold",
+        }
         self.returns_engine = ReturnsEngine(return_type=return_type, price_col=price_col, fill_zero=True)
         self.vol_engine = VolatilityEngine(window=vol_window, annualized=False, return_col="return", fill_zero=True)
         self.rsi_engine = RSIEngine(period=rsi_period, scaled=rsi_scaled, fill_na=True, price_col=price_col)
@@ -81,6 +92,7 @@ class FeaturePipeline:
 
     def process_asset(self, df: pd.DataFrame) -> pd.DataFrame:
         """Tính feature đơn mã; feature cắt ngang được hoàn thiện trong process_all."""
+        DataValidator().validate_dataframe(df).raise_if_invalid()
         df_out = df.copy()
 
         # 1. Return
@@ -138,7 +150,12 @@ class FeaturePipeline:
             Từ điển {ticker: DataFrame đã có đủ feature; SPY chỉ là chuỗi tham chiếu}.
         """
         processed_data: dict[str, pd.DataFrame] = {}
+        expected_index = None
         for ticker, df in aligned_data.items():
+            if expected_index is None:
+                expected_index = df.index
+            elif not df.index.equals(expected_index):
+                raise ValueError(f"Lịch giao dịch của {ticker} không khớp với các mã còn lại.")
             processed_data[ticker] = self.process_asset(df)
 
         relative_features = calculate_relative_features(
@@ -182,6 +199,8 @@ class FeaturePipeline:
         )
         if not tickers:
             raise ValueError("Không có tài sản giao dịch để đưa vào MarketDataTensor.")
+        if len(set(tickers)) != len(tickers):
+            raise ValueError("tickers_order chứa mã trùng lặp.")
         if benchmark_ticker in tickers:
             raise ValueError(
                 f"'{benchmark_ticker}' là benchmark và không được nằm trong MarketDataTensor/action space."
@@ -192,6 +211,8 @@ class FeaturePipeline:
                 "Thiếu dữ liệu feature cho ticker: " + ", ".join(missing_tickers)
             )
         first_df = normalized_data[tickers[0]]
+        if not isinstance(first_df.index, pd.DatetimeIndex) or not first_df.index.is_monotonic_increasing or not first_df.index.is_unique:
+            raise ValueError("Feature index phải là DatetimeIndex tăng dần, không trùng lặp.")
         dates = [str(d.date()) if hasattr(d, "date") else str(d) for d in first_df.index]
 
         num_timesteps = len(dates)
@@ -203,6 +224,8 @@ class FeaturePipeline:
 
         for n_idx, ticker in enumerate(tickers):
             df = normalized_data[ticker]
+            if not df.index.equals(first_df.index):
+                raise ValueError(f"Lịch giao dịch của {ticker} không khớp; không được gán feature theo vị trí.")
             if len(df) != num_timesteps:
                 raise ValueError(
                     f"Số dòng của ticker '{ticker}' ({len(df)}) không khớp với T={num_timesteps}."
@@ -218,6 +241,7 @@ class FeaturePipeline:
             tickers=tickers,
             feature_names=list(self.FEATURE_NAMES),
             dates=dates,
+            warmup_sessions=self.WARMUP_SESSIONS,
         )
         market_tensor.validate()
         return market_tensor

@@ -19,11 +19,62 @@ from torch.distributions import Dirichlet
 from torch.nn.utils.rnn import pack_padded_sequence
 
 
+def resolve_history_mask(mask, batch_size, lookback, device):
+    """Missing masks mean a complete history; never infer padding from features."""
+    if mask is None:
+        return torch.ones((batch_size, lookback), dtype=torch.bool, device=device)
+    mask = torch.as_tensor(mask, device=device)
+    if mask.ndim == 1 and mask.shape[0] == lookback:
+        mask = mask.unsqueeze(0).expand(batch_size, -1)
+    if mask.shape != (batch_size, lookback) or not bool(((mask == 0) | (mask == 1)).all()):
+        raise ValueError("history_mask phải có shape [L] hoặc [B,L], chỉ chứa 0/1.")
+    return mask.bool()
+
+
+def masked_recurrent_hidden(rnn, sequences, valid):
+    """Run only real timesteps, preserving order; empty histories have zero state."""
+    if bool(valid.all()):
+        _, hidden = rnn(sequences)
+        return (hidden[0] if isinstance(hidden, tuple) else hidden)[-1]
+    batch_size, length, width = sequences.shape
+    lengths = valid.sum(dim=1)
+    active = torch.nonzero(lengths > 0, as_tuple=False).flatten()
+    state = sequences.new_zeros((batch_size, rnn.hidden_size))
+    if active.numel() == 0:
+        return state
+    # Valid positions sort first while retaining their original time order.
+    positions = torch.arange(length, device=sequences.device).expand(batch_size, -1)
+    order = (positions + (~valid).long() * length).argsort(dim=1)
+    compact = sequences.gather(1, order[..., None].expand(-1, -1, width))
+    packed = pack_padded_sequence(compact[active], lengths[active].cpu(),
+                                  batch_first=True, enforce_sorted=False)
+    _, hidden = rnn(packed)
+    hidden = hidden[0] if isinstance(hidden, tuple) else hidden
+    return state.index_copy(0, active, hidden[-1])
+
+
 # ---------------------------------------------------------------------------
 # 1. MLP Baseline (Không thay đổi — giữ tương thích backward)
 # ---------------------------------------------------------------------------
 
-class SimplexActorCritic(nn.Module):
+class PolicyDiagnostics:
+    def distribution(self, obs: torch.Tensor, graph=None, history_mask=None) -> Dirichlet:
+        """Public distribution API shared by every encoder."""
+        kwargs = {"history_mask": history_mask} if history_mask is not None else {}
+        if graph is None:
+            return self._forward_distribution(obs, **kwargs)[0]
+        return self._forward_distribution(obs, graph, **kwargs)[0]
+
+    @torch.no_grad()
+    def diagnostics(self, obs: torch.Tensor, graph=None, history_mask=None) -> dict[str, float]:
+        distribution = self.distribution(obs, graph, history_mask)
+        return {
+            "concentration_mean": float(distribution.concentration.mean()),
+            "kappa_mean": float(distribution.concentration.sum(dim=-1).mean()),
+            "entropy": float(distribution.entropy().mean()),
+        }
+
+class SimplexActorCritic(PolicyDiagnostics, nn.Module):
     """PPO policy for raw market features and portfolio state.
 
     The actor uses a Dirichlet distribution, so every sampled action is
@@ -67,7 +118,7 @@ class SimplexActorCritic(nn.Module):
             nn.init.orthogonal_(self.actor_head.weight, gain=0.01)
             nn.init.zeros_(self.actor_head.bias)
 
-    def _forward_distribution(self, obs: torch.Tensor) -> tuple[Dirichlet, torch.Tensor]:
+    def _forward_distribution(self, obs: torch.Tensor, history_mask=None) -> tuple[Dirichlet, torch.Tensor]:
         if obs.ndim == 1:
             obs = obs.unsqueeze(0)
         actor_hidden = self.actor_trunk(obs)
@@ -83,7 +134,7 @@ class SimplexActorCritic(nn.Module):
         return Dirichlet(concentration), self.critic_head(critic_hidden).squeeze(-1)
 
     def act(
-        self, obs: torch.Tensor, deterministic: bool = False
+        self, obs: torch.Tensor, deterministic: bool = False, history_mask=None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return action, log probability, and value for one observation or a batch."""
         single_observation = obs.ndim == 1
@@ -97,7 +148,7 @@ class SimplexActorCritic(nn.Module):
         return action, log_prob, value
 
     def evaluate(
-        self, obs: torch.Tensor, actions: torch.Tensor
+        self, obs: torch.Tensor, actions: torch.Tensor, history_mask=None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """PPOUpdater interface: log probability, entropy, and state value."""
         distribution, value = self._forward_distribution(obs)
@@ -108,7 +159,7 @@ class SimplexActorCritic(nn.Module):
 # 2. Recurrent Base (LSTM / GRU)
 # ---------------------------------------------------------------------------
 
-class _RecurrentActorCritic(nn.Module):
+class _RecurrentActorCritic(PolicyDiagnostics, nn.Module):
     """Base class cho LSTM/GRU Actor-Critic.
 
     Kiến trúc 3 tầng:
@@ -152,6 +203,8 @@ class _RecurrentActorCritic(nn.Module):
             raise ValueError("action_dim phải lớn hơn 1 (bao gồm tiền mặt).")
         if hidden_dim <= 0:
             raise ValueError("hidden_dim phải lớn hơn 0.")
+        if dropout != 0.0:
+            raise ValueError("PPO LSTM/GRU yêu cầu dropout=0 để log-prob rollout/evaluate nhất quán.")
 
         self.n_assets = n_assets
         self.n_features = n_features
@@ -239,6 +292,7 @@ class _RecurrentActorCritic(nn.Module):
         self,
         market_history: torch.Tensor,
         portfolio_state: torch.Tensor,
+        history_mask=None,
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
         """Encode thành shared hidden vector.
 
@@ -258,12 +312,8 @@ class _RecurrentActorCritic(nn.Module):
         # Flatten không gian asset-feature: [B, L, N, F] → [B, L, N*F]
         rnn_input = market_history.reshape(B, L, N * F)
 
-        # Forward qua RNN — lấy hidden state tại bước cuối (t = L-1)
-        _, hidden = self.rnn(rnn_input)
-        if self.rnn_cell == "lstm":
-            h_t = hidden[0][-1]  # hidden[0]: h_n shape [num_layers, B, H] → lấy layer cuối
-        else:
-            h_t = hidden[-1]     # shape [num_layers, B, H] → lấy layer cuối
+        valid = resolve_history_mask(history_mask, B, L, market_history.device)
+        h_t = masked_recurrent_hidden(self.rnn, rnn_input, valid)
 
         # Concat h_t + portfolio_state → [B, H + N+1]
         combined = torch.cat([h_t, portfolio_state], dim=-1)
@@ -274,9 +324,10 @@ class _RecurrentActorCritic(nn.Module):
     def _forward_distribution(
         self,
         obs: torch.Tensor,
+        history_mask=None,
     ) -> tuple[Dirichlet, torch.Tensor]:
         market_history, portfolio_state = self._unflatten_obs(obs)
-        actor_hidden, critic_hidden, _ = self._encode(market_history, portfolio_state)
+        actor_hidden, critic_hidden, _ = self._encode(market_history, portfolio_state, history_mask)
         if self.dirichlet_kappa is not None:
             K = self.action_dim
             mean = torch.softmax(self.actor_head(actor_hidden), dim=-1)
@@ -293,10 +344,11 @@ class _RecurrentActorCritic(nn.Module):
         self,
         obs: torch.Tensor,
         deterministic: bool = False,
+        history_mask=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Return (action, log_prob, value)."""
         single = obs.ndim == 1
-        distribution, value = self._forward_distribution(obs)
+        distribution, value = self._forward_distribution(obs, history_mask=history_mask)
         action = distribution.mean if deterministic else distribution.sample()
         log_prob = distribution.log_prob(action)
         if single:
@@ -309,9 +361,10 @@ class _RecurrentActorCritic(nn.Module):
         self,
         obs: torch.Tensor,
         actions: torch.Tensor,
+        history_mask=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """PPO interface: (log_prob, entropy, value)."""
-        distribution, value = self._forward_distribution(obs)
+        distribution, value = self._forward_distribution(obs, history_mask=history_mask)
         return distribution.log_prob(actions), distribution.entropy(), value
 
 
@@ -381,7 +434,7 @@ class GRUActorCritic(_RecurrentActorCritic):
         )
 
 
-class DynamicGraphActorCritic(nn.Module):
+class DynamicGraphActorCritic(PolicyDiagnostics, nn.Module):
     """Spatio-temporal PPO actor-critic: daily GNN embeddings followed by a GRU."""
 
     def __init__(
@@ -502,7 +555,7 @@ class DynamicGraphActorCritic(nn.Module):
             nn.init.orthogonal_(self.cash_actor.weight, gain=0.01)
             nn.init.zeros_(self.cash_actor.bias)
 
-    def _unflatten(self, obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
+    def _unflatten(self, obs: torch.Tensor, history_mask=None) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, bool]:
         single = obs.ndim == 1
         if single:
             obs = obs.unsqueeze(0)
@@ -514,9 +567,7 @@ class DynamicGraphActorCritic(nn.Module):
         history = obs[:, :history_dim].reshape(
             batch_size, self.lookback, self.n_assets, self.n_features
         )
-        # Environment left-pads early histories with zeros. The mask lets the
-        # GRU skip those artificial frames instead of treating them as data.
-        valid_history = history.abs().sum(dim=(2, 3)) > 1e-12
+        valid_history = resolve_history_mask(history_mask, batch_size, self.lookback, history.device)
         portfolio_state = obs[:, history_dim:]
         return history, valid_history, portfolio_state, single
 
@@ -526,7 +577,9 @@ class DynamicGraphActorCritic(nn.Module):
         batch_size: int,
         device: torch.device,
         dtype: torch.dtype,
+        lookback: int | None = None,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        lookback = self.lookback if lookback is None else lookback
         if graph is None or "adjacency_history" not in graph or "edge_mask_history" not in graph:
             raise ValueError(
                 "DynamicGraphActorCritic cần adjacency_history và edge_mask_history."
@@ -540,7 +593,7 @@ class DynamicGraphActorCritic(nn.Module):
         elif adjacency.ndim == 4:
             if (
                 adjacency.shape[0] == batch_size
-                and adjacency.shape[1] == self.lookback
+                and adjacency.shape[1] == lookback
                 and adjacency.shape[2:] == (self.n_assets, self.n_assets)
             ):
                 # Legacy batched format [B, L, N, N].
@@ -552,7 +605,7 @@ class DynamicGraphActorCritic(nn.Module):
                 edge_mask = edge_mask.unsqueeze(0)
         expected_shape = (
             batch_size,
-            self.lookback,
+            lookback,
             adjacency.shape[2] if adjacency.ndim == 5 else -1,
             self.n_assets,
             self.n_assets,
@@ -596,13 +649,13 @@ class DynamicGraphActorCritic(nn.Module):
             )
 
         adjacency = adjacency.reshape(
-            batch_size * self.lookback,
+            batch_size * lookback,
             self.graph_relation_count,
             self.n_assets,
             self.n_assets,
         )
         edge_mask = edge_mask.reshape(
-            batch_size * self.lookback,
+            batch_size * lookback,
             self.graph_relation_count,
             self.n_assets,
             self.n_assets,
@@ -631,13 +684,34 @@ class DynamicGraphActorCritic(nn.Module):
             relation_edge_weights.append(edge_weight)
         return relation_edge_indices, relation_edge_weights
 
-    def _forward_distribution(
-        self,
-        obs: torch.Tensor,
-        graph: dict[str, torch.Tensor] | None,
-    ) -> tuple[Dirichlet, torch.Tensor, bool]:
-        history, valid_history, portfolio_state, single = self._unflatten(obs)
+    def encode_market(self, history, valid_history, graph):
         batch_size = history.shape[0]
+        if (
+            graph is not None and "day_index_history" in graph
+            and graph["adjacency_history"].ndim == 5
+            and graph["adjacency_history"].shape[2] == self.graph_relation_count
+        ):
+            # Repeated dates have identical market features/graphs and no
+            # dropout. Encode each date once within this differentiable batch;
+            # indexing below sums all repeated-date gradients into its encoder.
+            day_indices = graph["day_index_history"]
+            if day_indices.shape != (batch_size, self.lookback):
+                raise ValueError("day_index_history sai shape.")
+            unique_days, inverse = torch.unique(day_indices.reshape(-1), return_inverse=True)
+            count = day_indices.numel()
+            first_positions = torch.full((len(unique_days),), count, dtype=torch.long, device=history.device)
+            first_positions.scatter_reduce_(
+                0, inverse, torch.arange(count, device=history.device), reduce="amin"
+            )
+            adjacency = graph["adjacency_history"].reshape(count, self.graph_relation_count, self.n_assets, self.n_assets)
+            edge_mask = graph["edge_mask_history"].reshape_as(adjacency)
+            daily = self.encode_days(
+                history.reshape(count, self.n_assets, self.n_features)[first_positions],
+                adjacency[first_positions], edge_mask[first_positions],
+            )
+            return self.encode_temporal(
+                daily[inverse].reshape(batch_size, self.lookback, self.n_assets, -1), valid_history
+            )
         relation_edge_indices, relation_edge_weights = self._graph_batch(
             graph, batch_size, history.device, history.dtype
         )
@@ -658,33 +732,43 @@ class DynamicGraphActorCritic(nn.Module):
         node_embeddings = node_embeddings.reshape(
             batch_size, self.lookback, self.n_assets, -1
         )
-        node_embeddings = node_embeddings * valid_history[:, :, None, None].to(
-            node_embeddings.dtype
-        )
+        return self.encode_temporal(node_embeddings, valid_history)
 
-        # Move the left-padded valid sequence to the front, then use packed GRU
-        # sequences so the recurrent state only advances over real observations.
-        lengths = valid_history.sum(dim=1).clamp(min=1)
-        time_offsets = (self.lookback - lengths).unsqueeze(1)
-        compact_indices = (
-            time_offsets
-            + torch.arange(self.lookback, device=history.device).unsqueeze(0)
-        ).clamp(max=self.lookback - 1)
-        gather_indices = compact_indices[:, :, None, None].expand(
-            -1, -1, self.n_assets, node_embeddings.shape[-1]
-        )
-        compact_embeddings = torch.gather(node_embeddings, dim=1, index=gather_indices)
-        asset_sequences = compact_embeddings.permute(0, 2, 1, 3).reshape(
+    def encode_temporal(self, node_embeddings, valid_history):
+        batch_size = node_embeddings.shape[0]
+        valid = resolve_history_mask(valid_history, batch_size, self.lookback, node_embeddings.device)
+        asset_sequences = node_embeddings.permute(0, 2, 1, 3).reshape(
             batch_size * self.n_assets, self.lookback, -1
         )
-        packed_sequences = pack_padded_sequence(
-            asset_sequences,
-            lengths.repeat_interleave(self.n_assets).detach().cpu(),
-            batch_first=True,
-            enforce_sorted=False,
+        hidden = masked_recurrent_hidden(
+            self.temporal_encoder, asset_sequences, valid.repeat_interleave(self.n_assets, dim=0)
         )
-        _, final_hidden = self.temporal_encoder(packed_sequences)
-        asset_embeddings = final_hidden[-1].reshape(batch_size, self.n_assets, -1)
+        return hidden.reshape(batch_size, self.n_assets, -1)
+
+    def encode_days(self, features, adjacency, edge_mask):
+        """Encode independent dates once for a frozen rollout/evaluation policy."""
+        count = features.shape[0]
+        edges, weights = self._graph_batch(
+            {"adjacency_history": adjacency[:, None], "edge_mask_history": edge_mask[:, None]},
+            count, features.device, features.dtype, lookback=1,
+        )
+        nodes = features.reshape(count * self.n_assets, self.n_features)
+        relations = [encoder(nodes, edge, weight) for encoder, edge, weight in zip(self.graph_encoders, edges, weights)]
+        return self.relation_fusion(torch.cat(relations, dim=-1)).reshape(count, self.n_assets, -1)
+
+    def _forward_distribution(self, obs, graph, history_mask=None):
+        history, valid_history, portfolio_state, single = self._unflatten(obs, history_mask)
+        batch_size = history.shape[0]
+        if graph is not None and "market_embedding" in graph:
+            if torch.is_grad_enabled():
+                raise ValueError("Cached market embeddings chỉ dùng trong no_grad rollout/evaluation.")
+            asset_embeddings = graph["market_embedding"]
+            if asset_embeddings.ndim == 2:
+                asset_embeddings = asset_embeddings.unsqueeze(0)
+            if asset_embeddings.shape != (batch_size, self.n_assets, self.temporal_encoder.hidden_size):
+                raise ValueError("Cached market embedding sai shape.")
+        else:
+            asset_embeddings = self.encode_market(history, valid_history, graph)
 
         # Learned attention retains asset-specific information while forming
         # the shared market context used by the cash actor and critic.
@@ -732,8 +816,9 @@ class DynamicGraphActorCritic(nn.Module):
         obs: torch.Tensor,
         deterministic: bool = False,
         graph: dict[str, torch.Tensor] | None = None,
+        history_mask=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        distribution, value, single = self._forward_distribution(obs, graph)
+        distribution, value, single = self._forward_distribution(obs, graph, history_mask)
         action = distribution.mean if deterministic else distribution.sample()
         log_prob = distribution.log_prob(action)
         if single:
@@ -747,8 +832,9 @@ class DynamicGraphActorCritic(nn.Module):
         obs: torch.Tensor,
         actions: torch.Tensor,
         graph: dict[str, torch.Tensor] | None = None,
+        history_mask=None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        distribution, value, _ = self._forward_distribution(obs, graph)
+        distribution, value, _ = self._forward_distribution(obs, graph, history_mask)
         return distribution.log_prob(actions), distribution.entropy(), value
 
 

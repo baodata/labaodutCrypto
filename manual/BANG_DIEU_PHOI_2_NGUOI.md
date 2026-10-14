@@ -15,6 +15,7 @@
 > - Chi tiết của A: [NHIEM_VU_THANH_VIEN_A.md](file:///home/tuan/AI/AI_roject1/manual/NHIEM_VU_THANH_VIEN_A.md)
 > - Chi tiết của B: [NHIEM_VU_THANH_VIEN_B.md](file:///home/tuan/AI/AI_roject1/manual/NHIEM_VU_THANH_VIEN_B.md)
 > - **Quy chế 70/30 & Lộ trình 5 Level học AI:** [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md)
+> - **Backlog cải thiện định lượng (14/10/2026):** [TICKET_CAI_THIEN_DINH_LUONG.md](TICKET_CAI_THIEN_DINH_LUONG.md)
 
 ---
 
@@ -116,3 +117,19 @@ ADVANCED — NGHIÊN CỨU MỞ RỘNG (HƯỚNG TỚI BÀI BÁO KHOA HỌC)
 ## 5. Nguyên tắc nghiên cứu bất biến (The Ablation Backbone)
 
 $$\text{Equal Weight (1/N)} \longrightarrow \text{Single-Agent PPO} \longrightarrow \text{GCN / GAT} \longrightarrow \text{Sector MARL} \longrightarrow \text{Hierarchical MARL} \longrightarrow \text{H-MARL + GAT}$$
+
+## 6. Điều phối backlog cải thiện định lượng
+
+[Backlog QNT](TICKET_CAI_THIEN_DINH_LUONG.md) chia đề xuất normalization, graph denoising, risk/execution, alpha + allocator, distributional RL và validation thành **25 ticket**. Đây là phần bổ sung cho kế hoạch core ở trên; trạng thái và DoD của QNT được quản lý trong một file.
+
+| Đợt | A phụ trách chính | B phụ trách chính | Điểm bàn giao |
+|---|---|---|---|
+| G0 | QNT-002 protocol; QNT-003 signal gate | QNT-001 contract/masking; nền runner QNT-025 | Contract đã nghiệm thu, baseline/config/gate có hash |
+| G1 | QNT-004/005 normalization; QNT-006 covariance; QNT-009 walk-forward | QNT-007/008 shrinkage/residual graph; QNT-025 ablation | Risk bank causal, scaler/graph schema, kết quả từng fold |
+| G2 | QNT-010 vol target; QNT-011/012/013 liquidity/execution; QNT-014 DSR | Review/integrate model, buffer, checkpoint và runner | State reward/risk và target/execution dùng chung train/eval/live |
+| G3 | QNT-016 allocator thường | QNT-015 predictor; QNT-017/018 thiết kế + QP khả vi | Alpha horizon/units, constraints, distribution/log-prob/loss |
+| G4 | QNT-023 CVaR actor; QNT-024 CPCV | QNT-019/020/021 graph nâng cao; QNT-022 critic phân vị | Gate riêng, overhead budget và báo cáo quyết định |
+
+**Thứ tự đầu tiên:** B nghiệm thu QNT-001 → A đóng băng QNT-002 và làm QNT-003; B dựng runner. Sau đó A bàn giao QNT-006 cho B làm QNT-007. Owner chính có reviewer là người còn lại theo mô hình 70/30.
+
+Chỉ đưa thay đổi thành cấu hình mặc định khi đạt gate đã chốt. Kết quả FAIL vẫn là đầu ra nghiên cứu hợp lệ. Những hướng nâng cao không được dùng để trì hoãn nghiệm thu H-MARL core; test 2024–2025 tiếp tục được ghi nhận là giai đoạn đã khảo sát.

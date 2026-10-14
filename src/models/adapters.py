@@ -13,6 +13,7 @@ from torch_geometric.nn import global_mean_pool
 # 1. KIẾN TRÚC NÃO BỘ (ACTOR - CRITIC)
 # ==========================================
 class GNN_ActorCritic(nn.Module):
+    """Legacy snapshot model; use CheckpointPolicy for trained PPO inference."""
     def __init__(self, gnn_encoder: nn.Module, hidden_dim: int):
         super(GNN_ActorCritic, self).__init__()
         
@@ -65,6 +66,7 @@ class GNN_ActorCritic(nn.Module):
 # 2. CÁP DỊCH THUẬT (ADAPTERS)
 # ==========================================
 class ObservationAdapter:
+    """Legacy flattened-graph adapter; never use with DynamicGraphActorCritic."""
     def __init__(self, graph_builder):
         self.graph_builder = graph_builder
 
@@ -79,3 +81,6 @@ class ActionAdapter:
         # Nhận vào 25 Logits (N+1), xuất ra 25 tỷ trọng tổng bằng 100%
         weights = F.softmax(actor_logits, dim=0)
         return weights.detach().cpu().numpy()
+
+# Supported inference path for the current PPO checkpoints.
+from src.models.policy_adapter import CheckpointPolicy, relation_history_from_correlations

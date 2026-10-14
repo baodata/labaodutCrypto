@@ -15,6 +15,10 @@ import copy
 import sys
 import time
 import warnings
+import shutil
+import random
+import platform
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -34,14 +38,19 @@ from src.env.trading_env import TradingEnv
 from src.evaluation.backtester import BacktestResult, DeterministicBacktester
 from src.evaluation.baselines import BuyAndHoldBaseline, CashBaseline, EqualWeightBaseline
 from src.evaluation.metrics import FinancialMetrics, block_bootstrap_excess_returns
+from src.evaluation.seed_summary import summarize_seed_metrics
 from src.features.pipeline import FeaturePipeline
 from src.features.scaler import MarketFeatureScaler
 from src.graph.dynamic_graph import build_dynamic_graph_sequence
 from src.graph.multi_relation_graph import GRAPH_RELATIONS
 from src.models.actor_critic import build_actor_critic
+from src.models.policy_adapter import observation_vector, graph_tensors_from_obs, history_mask_from_obs
+from src.models.market_cache import prepare_market_cache
 from src.training.logger import TrainerLogger
 from src.training.ppo_core import PPOBuffer, PPOUpdater
 from src.utils.data_types import MarketDataTensor
+from src.utils.artifacts import atomic_csv, atomic_json, file_hashes, new_run_directory, rng_state, restore_rng_state
+from src.utils.progress import PhaseProgress
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -59,7 +68,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--ppo-iters", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=None)
+    parser.add_argument("--microbatch-size", type=int, default=None, help="Số mẫu forward/backward mỗi lần; GNN mặc định 16 CPU / 32 CUDA, tích lũy gradient đủ minibatch.")
+    parser.add_argument("--cpu-threads", type=int, default=4, help="Số thread PyTorch trên CPU; tránh dùng quá nhiều thread cho graph nhỏ.")
+    parser.add_argument("--cache-batch-size", type=int, default=64, help="Số ngày mã hóa GNN mỗi lượt khi dựng cache.")
+    parser.add_argument("--cache-temporal-batch-size", type=int, default=32, help="Số cửa sổ GRU mỗi lượt khi dựng cache.")
+    parser.add_argument("--progress-every", type=float, default=10.0, help="Khoảng giây giữa các dòng tiến độ trong một giai đoạn train.")
     parser.add_argument("--episodes-per-update", type=int, default=32)
+    parser.add_argument("--run-dir", type=Path, default=None, help="Thư mục artifact riêng cho run; mặc định tạo thư mục mới.")
+    parser.add_argument("--resume", type=Path, default=None, help="Resume từ last.pth với cùng cấu hình train.")
+    parser.add_argument("--train-eval-every", type=int, default=5)
+    parser.add_argument("--bootstrap-block-size", type=int, default=20)
+    parser.add_argument("--bootstrap-samples", type=int, default=10000)
+    parser.add_argument("--matched-cash-ratio", type=float, default=None, help="Cash cố định cho matched baseline; mặc định 1/(N+1).")
     parser.add_argument(
         "--gamma",
         type=float,
@@ -121,6 +141,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Kiến trúc GNN khi dùng --encoder gnn; mặc định đọc configs/model.yaml.",
     )
+    parser.add_argument("--gnn-hidden-channels", type=int, default=None)
+    parser.add_argument("--gnn-out-channels", type=int, default=None)
+    parser.add_argument("--gnn-heads", type=int, default=None)
     parser.add_argument(
         "--rnn-layers",
         type=int,
@@ -138,6 +161,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--seeds",
         default=None,
         help="Tùy chọn chạy nhiều seed, ví dụ: --seeds 7,17,27; xuất thêm mean/std test.",
+    )
+    parser.add_argument(
+        "--untrained-null-seeds",
+        default=None,
+        help=(
+            "Chỉ đánh giá policy chưa train trên validation với các seed phân tách bằng dấu phẩy; "
+            "ví dụ: --untrained-null-seeds 7,17,27. Không chạy PPO hoặc đánh giá test."
+        ),
+    )
+    parser.add_argument(
+        "--null-output",
+        type=Path,
+        default=PROJECT_ROOT / "experiments/untrained_null_validation.csv",
+        help="CSV kết quả policy khởi tạo ngẫu nhiên và baseline validation.",
     )
     parser.add_argument("--device", default="cpu")
     parser.add_argument(
@@ -198,50 +235,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def observation_vector(obs: dict[str, np.ndarray]) -> np.ndarray:
-    """Serialize market history and portfolio state into PPO's fixed-width buffer.
-
-    Với RNN, actor-critic tách phần lịch sử trở lại [L,N,F] trước khi encode;
-    thứ tự thời gian được giữ nguyên.
-    """
-    return np.concatenate(
-        (
-            np.asarray(obs["market_history"], dtype=np.float32).reshape(-1),
-            np.asarray(obs["portfolio_weights"], dtype=np.float32).reshape(-1),
-            np.asarray(obs["cash_ratio"], dtype=np.float32).reshape(-1),
-        )
-    )
-
-
-def graph_tensors_from_obs(
-    obs: dict[str, np.ndarray], device: torch.device
-) -> dict[str, torch.Tensor] | None:
-    if "graph_adjacency_history" not in obs or "graph_edge_mask_history" not in obs:
-        return None
-    return {
-        "adjacency_history": torch.as_tensor(
-            obs["graph_adjacency_history"], dtype=torch.float32, device=device
-        ),
-        "edge_mask_history": torch.as_tensor(
-            obs["graph_edge_mask_history"], dtype=torch.float32, device=device
-        ),
-    }
-
-
 def action_for_model(
     model: nn.Module,
     obs: dict[str, np.ndarray],
     deterministic: bool = False,
+    market_embedding: torch.Tensor | None = None,
 ) -> np.ndarray:
     """Evaluate model action from observation dict."""
     device = next(model.parameters()).device
     with torch.no_grad():
         state = torch.as_tensor(observation_vector(obs), dtype=torch.float32, device=device)
+        history_mask = history_mask_from_obs(obs, device)
         graph = graph_tensors_from_obs(obs, device)
+        if market_embedding is not None:
+            graph = {"market_embedding": market_embedding}
         if graph is None:
-            action, _, _ = model.act(state, deterministic=deterministic)
+            action, _, _ = model.act(state, deterministic=deterministic, history_mask=history_mask)
         else:
-            action, _, _ = model.act(state, deterministic=deterministic, graph=graph)
+            action, _, _ = model.act(state, deterministic=deterministic, graph=graph, history_mask=history_mask)
     return action.detach().cpu().numpy().astype(np.float32)
 
 
@@ -394,11 +405,13 @@ def evaluate_policy_with_actions(
 ) -> tuple[BacktestResult, np.ndarray, np.ndarray]:
     """Backtest deterministically and collect policy and blended target weights."""
     model.eval()
+    market_cache = prepare_market_cache(model, env)
     policy_actions: list[np.ndarray] = []
     blended_targets: list[np.ndarray] = []
 
     def act(obs: dict[str, np.ndarray]) -> np.ndarray:
-        action = action_for_model(model, obs, deterministic=True)
+        embedding = market_cache.get(model, env.history_start_index + env.current_step) if market_cache else None
+        action = action_for_model(model, obs, deterministic=True, market_embedding=embedding)
         policy_target, execution_target = env.project_action(action)
         policy_actions.append(policy_target.copy())
         blended_targets.append(execution_target.copy())
@@ -489,24 +502,50 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     pipeline = FeaturePipeline()
     processed_data, full_tensor = pipeline.run_from_raw(
         raw_dir=args.raw_dir,
-        export_parquet=True,
+        export_parquet=args.resume is None,
         output_file=args.processed_output,
     )
+
+
     split = TemporalSplitter(
         train_end=args.train_end,
         val_start=args.val_start,
         val_end=args.val_end,
         test_start=args.test_start,
     ).split_market_data_tensor(full_tensor)
+    with args.env_config.open("r", encoding="utf-8") as stream:
+        configured_lookback = yaml.safe_load(stream)["environment"].get("lookback_window", 20)
+    lookback = int(configured_lookback if args.lookback is None else args.lookback)
+    if lookback <= 0:
+        raise ValueError("--lookback phải lớn hơn 0.")
+    if full_tensor.warmup_sessions:
+        offset = lookback - 1
+        if len(split.train.dates) <= offset + 2:
+            raise ValueError("Train không đủ dữ liệu sau feature warm-up và lookback.")
+        split.train = MarketDataTensor(
+            tensor=split.train.tensor[offset:].copy(), tickers=list(split.train.tickers),
+            feature_names=list(split.train.feature_names), dates=list(split.train.dates[offset:]),
+        )
+        split.dates_info["train_range"] = f"{split.train.dates[0]} -> {split.train.dates[-1]} (T={len(split.train.dates)}; warm-up excluded)"
 
     scaler = MarketFeatureScaler()
     scaler.fit(split.train)
+    if args.resume is not None:
+        previous = args._resume_payload
+        if previous.get("scaler_params") != scaler.to_dict():
+            raise ValueError("Scaler của resume không khớp dữ liệu/split train.")
+        if previous.get("split_dates") != split.dates_info:
+            raise ValueError("Resume yêu cầu cùng split_dates.")
     train_tensor = scaler.transform(split.train)
     val_tensor = scaler.transform(split.val)
     test_tensor = scaler.transform(split.test)
     scaled_full_tensor = scaler.transform(full_tensor)
     args.scaler_output.parent.mkdir(parents=True, exist_ok=True)
     scaler.save(args.scaler_output)
+    args._scaler_params = scaler.to_dict()
+    args._feature_parameters = pipeline.parameters
+    if hasattr(args, "_run_dir"):
+        scaler.save(args._run_dir / "scaler.json")
 
     tickers = list(full_tensor.tickers)
     all_open_prices = open_price_matrix(processed_data, tickers)
@@ -543,11 +582,400 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     )
 
 
+def evaluate_untrained_null(args: argparse.Namespace, seeds: list[int]) -> pd.DataFrame:
+    configure_run_artifacts(args, "null")
+    try:
+        return _evaluate_untrained_null(args, seeds)
+    except KeyboardInterrupt:
+        finish_run_manifest(args, "interrupted")
+        raise
+    except Exception as exc:
+        finish_run_manifest(args, "failed", error=str(exc))
+        raise
+
+
+def _evaluate_untrained_null(args: argparse.Namespace, seeds: list[int]) -> pd.DataFrame:
+    """Evaluate independently initialized, deterministic policies on validation only."""
+    if len(seeds) < 2 or len(set(seeds)) != len(seeds):
+        raise ValueError("--untrained-null-seeds cần ít nhất 2 seed khác nhau.")
+    if not 0.0 < args.action_alpha <= 1.0:
+        raise ValueError("--action-alpha phải thuộc (0, 1].")
+    if args.device.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError("CUDA được chọn nhưng không khả dụng.")
+
+    with args.model_config.open("r", encoding="utf-8") as stream:
+        configured_model_config = yaml.safe_load(stream)
+    with args.env_config.open("r", encoding="utf-8") as stream:
+        env_config = yaml.safe_load(stream)["environment"]
+    reward_beta = (
+        float(env_config["reward_beta"])
+        if args.reward_beta is None
+        else float(args.reward_beta)
+    )
+    reward_scaling = (
+        float(env_config.get("reward_scaling", 1.0))
+        if args.reward_scaling is None
+        else float(args.reward_scaling)
+    )
+    if not np.isfinite(reward_beta) or reward_beta < 0:
+        raise ValueError("reward_beta phải là số hữu hạn không âm.")
+    if not np.isfinite(reward_scaling) or reward_scaling <= 0:
+        raise ValueError("reward_scaling phải là số hữu hạn lớn hơn 0.")
+
+    (
+        full_tensor,
+        processed_data,
+        scaled_full_tensor,
+        split,
+        train_tensor,
+        val_tensor,
+        _unused_test_tensor,
+        _unused_train_open,
+        val_open,
+        _unused_test_open,
+        _unused_train_close,
+        val_close,
+        _unused_test_close,
+        tickers,
+    ) = prepare_data(args, reward_beta)
+    full_date_index = {str(date): index for index, date in enumerate(full_tensor.dates)}
+    val_history_start = full_date_index[str(split.val.dates[0])]
+    lookback = int(env_config.get("lookback_window", 20) if args.lookback is None else args.lookback)
+    if lookback <= 0:
+        raise ValueError("--lookback phải lớn hơn 0.")
+    n_assets, n_features = train_tensor.tensor.shape[1:]
+    action_dim = n_assets + 1
+    matched_cash = 1.0 / action_dim if args.matched_cash_ratio is None else float(args.matched_cash_ratio)
+    if not np.isfinite(matched_cash) or not 0 <= matched_cash < 1:
+        raise ValueError("matched-cash-ratio phải thuộc [0,1).")
+    encoder = args.encoder
+    rnn_layers = int(args.rnn_layers)
+    rnn_dropout = float(args.rnn_dropout)
+    if rnn_layers <= 0 or not np.isfinite(rnn_dropout) or not 0 <= rnn_dropout < 1:
+        raise ValueError("Cấu hình RNN không hợp lệ.")
+
+    rl_config = configured_model_config.get("rl_agent", {})
+    dirichlet_kappa = (
+        float(args.dirichlet_kappa)
+        if args.dirichlet_kappa is not None
+        else (
+            float(rl_config["dirichlet_kappa"])
+            if rl_config.get("dirichlet_kappa") is not None
+            else None
+        )
+    )
+    if dirichlet_kappa is not None and dirichlet_kappa <= action_dim:
+        raise ValueError(
+            f"dirichlet_kappa ({dirichlet_kappa}) phải lớn hơn action_dim ({action_dim})."
+        )
+    model_kwargs: dict[str, Any] = {
+        "encoder": encoder,
+        "n_assets": n_assets,
+        "n_features": n_features,
+        "lookback": lookback,
+        "action_dim": action_dim,
+        "hidden_dim": args.hidden_dim,
+        "rnn_layers": rnn_layers,
+        "rnn_dropout": rnn_dropout,
+        "dirichlet_kappa": dirichlet_kappa,
+    }
+
+    graph_adjacency_sequence = None
+    graph_edge_mask_sequence = None
+    if encoder == "gnn":
+        gnn_config = configured_model_config.get("gnn", {})
+        architecture = (
+            args.gnn_architecture or str(gnn_config.get("architecture", "GAT"))
+        ).lower()
+        if architecture not in {"gcn", "gat"}:
+            raise ValueError("GNN architecture phải là GCN hoặc GAT.")
+        close_prices = close_price_matrix(processed_data, tickers, full_tensor.dates)
+        close_returns = pd.DataFrame(
+            close_prices,
+            index=pd.DatetimeIndex(pd.to_datetime(full_tensor.dates)),
+            columns=tickers,
+        ).pct_change(fill_method=None)
+        graph_adjacency_sequence, graph_edge_mask_sequence = build_dynamic_graph_sequence(
+            close_returns,
+            full_tensor.dates,
+            tickers,
+            window_size=int(gnn_config.get("correlation_window", 60)),
+            threshold=float(gnn_config.get("threshold_corr", 0.5)),
+            graph_mode=str(gnn_config.get("graph_mode", "knn")).lower(),
+            top_k=int(gnn_config.get("top_k", 5)),
+            sector_config_path=str(PROJECT_ROOT / "configs/assets.yaml"),
+        )
+        model_kwargs.update(
+            {
+                "gnn_architecture": architecture,
+                "gnn_hidden_channels": int(gnn_config.get("hidden_channels", 64) if args.gnn_hidden_channels is None else args.gnn_hidden_channels),
+                "gnn_out_channels": int(gnn_config.get("out_channels", 32) if args.gnn_out_channels is None else args.gnn_out_channels),
+                "gnn_heads": int(gnn_config.get("heads", 4) if args.gnn_heads is None else args.gnn_heads),
+                "temporal_encoder": "gru",
+            }
+        )
+
+    device = torch.device(args.device)
+    risk_free_rate = float(env_config["risk_free_rate"])
+    transaction_cost_rate = resolve_transaction_cost_components(env_config)[2]
+    baseline_env = create_env(
+        val_tensor,
+        val_open,
+        args.env_config,
+        reward_beta,
+        reward_scaling=reward_scaling,
+        history_tensor=scaled_full_tensor,
+        history_start_index=val_history_start,
+        lookback_window=lookback,
+        action_alpha=1.0,
+        graph_adjacency_sequence=graph_adjacency_sequence,
+        graph_edge_mask_sequence=graph_edge_mask_sequence,
+        graph_start_index=val_history_start,
+        close_prices=val_close,
+    )
+    baseline_metrics, _ = evaluate_equal_weight(
+        baseline_env,
+        val_open,
+        n_assets,
+        transaction_cost_rate,
+        risk_free_rate,
+        cash_ratio=0.044,
+    )
+    matched_baseline_env = create_env(
+        val_tensor,
+        val_open,
+        args.env_config,
+        reward_beta,
+        reward_scaling=reward_scaling,
+        history_tensor=scaled_full_tensor,
+        history_start_index=val_history_start,
+        lookback_window=lookback,
+        action_alpha=args.action_alpha,
+        graph_adjacency_sequence=graph_adjacency_sequence,
+        graph_edge_mask_sequence=graph_edge_mask_sequence,
+        graph_start_index=val_history_start,
+        close_prices=val_close,
+    )
+    matched_baseline_metrics, _ = evaluate_equal_weight(
+        matched_baseline_env,
+        val_open,
+        n_assets,
+        transaction_cost_rate,
+        risk_free_rate,
+        cash_ratio=matched_cash,
+    )
+
+    rows: list[dict[str, float | int | str]] = []
+    print(
+        f"Validation null: encoder={encoder}, seeds={len(seeds)}, "
+        f"lookback={lookback}, action_alpha={args.action_alpha:g}; "
+        "không train, không đánh giá test."
+    )
+    print(
+        f"1/N + cash 4.4% | Sharpe={baseline_metrics['sharpe_ratio']:.4f}, "
+        f"return={baseline_metrics['cumulative_return']:.2%}"
+    )
+    print(
+        f"Matched 1/N + cash {matched_cash:.2%}, action_alpha={args.action_alpha:g} | "
+        f"Sharpe={matched_baseline_metrics['sharpe_ratio']:.4f}, "
+        f"return={matched_baseline_metrics['cumulative_return']:.2%}"
+    )
+    for seed in seeds:
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+        model = build_actor_critic(**model_kwargs).to(device)
+        model.cache_batch_size = args.cache_batch_size
+        model.cache_temporal_batch_size = args.cache_temporal_batch_size
+        val_env = create_env(
+            val_tensor,
+            val_open,
+            args.env_config,
+            reward_beta,
+            reward_scaling=reward_scaling,
+            history_tensor=scaled_full_tensor,
+            history_start_index=val_history_start,
+            reward_baseline=args.reward_baseline,
+            lookback_window=lookback,
+            action_alpha=args.action_alpha,
+            graph_adjacency_sequence=graph_adjacency_sequence,
+            graph_edge_mask_sequence=graph_edge_mask_sequence,
+            graph_start_index=val_history_start,
+            close_prices=val_close,
+        )
+        initial_obs, _ = val_env.reset()
+        initial_state = torch.as_tensor(
+            observation_vector(initial_obs), dtype=torch.float32, device=device
+        )
+        initial_graph = graph_tensors_from_obs(initial_obs, device)
+        initial_diagnostics = model.diagnostics(initial_state, initial_graph, history_mask_from_obs(initial_obs, device))
+        result, policy_actions, _ = evaluate_policy_with_actions(model, val_env)
+        metrics = metric_summary(result, risk_free_rate)
+        weight_summary = policy_weight_summary(policy_actions, n_assets)
+        row: dict[str, float | int | str] = {
+            "seed": seed,
+            "encoder": encoder,
+            "checkpoint_status": "untrained",
+            "sharpe_ratio": metrics["sharpe_ratio"],
+            "cumulative_return": metrics["cumulative_return"],
+            "annualized_return": metrics["annualized_return"],
+            "max_drawdown": metrics["max_drawdown"],
+            "total_turnover": metrics["total_turnover"],
+            "total_costs": metrics["total_costs"],
+            "baseline_1n_cash_sharpe": baseline_metrics["sharpe_ratio"],
+            "baseline_1n_cash_cumulative_return": baseline_metrics[
+                "cumulative_return"
+            ],
+            "matched_baseline_sharpe": matched_baseline_metrics["sharpe_ratio"],
+            "matched_baseline_cumulative_return": matched_baseline_metrics[
+                "cumulative_return"
+            ],
+            "matched_baseline_cash_ratio": matched_cash,
+            "matched_baseline_action_alpha": args.action_alpha,
+            "reference_cash_ratio": 0.044,
+            "reference_action_alpha": 1.0,
+            "sharpe_delta_vs_1n_cash": (
+                metrics["sharpe_ratio"] - baseline_metrics["sharpe_ratio"]
+            ),
+            "return_delta_vs_1n_cash": (
+                metrics["cumulative_return"] - baseline_metrics["cumulative_return"]
+            ),
+            "sharpe_delta_vs_matched_baseline": (
+                metrics["sharpe_ratio"] - matched_baseline_metrics["sharpe_ratio"]
+            ),
+            "return_delta_vs_matched_baseline": (
+                metrics["cumulative_return"]
+                - matched_baseline_metrics["cumulative_return"]
+            ),
+            "initial_concentration_mean": initial_diagnostics["concentration_mean"],
+            "initial_kappa_mean": initial_diagnostics["kappa_mean"],
+            "initial_entropy": initial_diagnostics["entropy"],
+            **weight_summary,
+        }
+        rows.append(row)
+        print(
+            f"  seed={seed:>4} | Sharpe={metrics['sharpe_ratio']:.4f} "
+            f"(Δmatched {row['sharpe_delta_vs_matched_baseline']:+.4f}) | "
+            f"return={metrics['cumulative_return']:.2%} "
+            f"(Δmatched {row['return_delta_vs_matched_baseline']:+.2%}) | "
+            f"tilt={weight_summary['mean_abs_deviation_1n']:.3%}"
+        )
+
+    output = pd.DataFrame(rows)
+    output_path = args.null_output
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_csv(output, output_path, index=False)
+    atomic_csv(output, args._run_dir / "untrained_null_validation.csv", index=False)
+    finish_run_manifest(args, "completed", seeds=seeds, model_config=model_kwargs,
+                        resolved_model_config=configured_model_config,
+                        resolved_environment=env_config,
+                        feature_parameters=args._feature_parameters,
+                        matched_cash_ratio=matched_cash)
+    print("\nUntrained null summary (validation):")
+    print(
+        output[[
+            "sharpe_ratio",
+            "cumulative_return",
+            "sharpe_delta_vs_1n_cash",
+            "return_delta_vs_1n_cash",
+            "sharpe_delta_vs_matched_baseline",
+            "return_delta_vs_matched_baseline",
+            "mean_abs_deviation_1n",
+        ]]
+        .agg(["mean", "std", "min", "max"])
+        .to_string(float_format=lambda value: f"{value:.6f}")
+    )
+    print(f"Đã lưu: {output_path}")
+    return output
+def runtime_versions() -> dict[str, str]:
+    versions = {"python": platform.python_version()}
+    for name in ("numpy", "pandas", "torch", "torch-geometric", "gymnasium"):
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            versions[name] = "not_installed"
+    return versions
+
+
+def configure_run_artifacts(args, kind="ppo"):
+    if hasattr(args, "_run_dir"):
+        return
+    if min(args.cpu_threads, args.cache_batch_size, args.cache_temporal_batch_size) <= 0 or (args.microbatch_size is not None and args.microbatch_size <= 0):
+        raise ValueError("Thread count và batch sizes phải lớn hơn 0.")
+    if not np.isfinite(args.progress_every) or args.progress_every <= 0:
+        raise ValueError("--progress-every phải hữu hạn và lớn hơn 0.")
+    if torch.device(args.device).type == "cpu":
+        torch.set_num_threads(args.cpu_threads)
+    if args.resume is not None and args.run_dir is None:
+        run_dir = args.resume.resolve().parent.parent
+    elif args.run_dir is not None:
+        run_dir = args.run_dir.resolve()
+        if run_dir.exists() and any(run_dir.iterdir()) and args.resume is None:
+            raise ValueError("run-dir đã có artifact; chọn thư mục mới hoặc dùng --resume.")
+        run_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        run_dir = new_run_directory(PROJECT_ROOT / "models/runs", f"{kind}_{args.encoder}_seed{args.seed}")
+    hashes = {
+        "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "scripts").glob("*.py")), PROJECT_ROOT),
+        "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
+        "config_hashes": file_hashes([args.model_config, args.env_config, PROJECT_ROOT / "configs/assets.yaml"], PROJECT_ROOT),
+    }
+    if args.resume is not None:
+        previous = torch.load(args.resume, map_location="cpu", weights_only=False)
+        for key, current in hashes.items():
+            if previous.get("run_manifest", {}).get(key) != current:
+                raise ValueError(f"Resume yêu cầu cùng {key}; artifact cũ được giữ nguyên.")
+        if previous.get("run_manifest", {}).get("runtime") != runtime_versions():
+            raise ValueError("Resume yêu cầu cùng phiên bản Python/thư viện để giữ quỹ đạo train.")
+        args._resume_payload = previous
+    args._run_dir = run_dir
+    defaults = build_parser().parse_args([])
+    paths = {
+        "checkpoint": run_dir / "checkpoints/best.pth",
+        "training_log": run_dir / "training_log.csv", "metrics_output": run_dir / "metrics.csv",
+        "null_output": run_dir / "untrained_null_validation.csv",
+        "scaler_output": run_dir / "scaler.json", "processed_output": run_dir / "features.parquet",
+        "tensorboard_dir": run_dir / "tensorboard",
+    }
+    for name, path in paths.items():
+        if getattr(args, name) == getattr(defaults, name):
+            setattr(args, name, path)
+    args._manifest = {
+        "status": "running", "kind": kind, "run_dir": str(run_dir),
+        "arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items() if not k.startswith("_")},
+        "runtime": runtime_versions(),
+        **hashes,
+    }
+    atomic_json(run_dir / "manifest.json", args._manifest)
+
+
+def finish_run_manifest(args, status, **fields):
+    args._manifest.update(status=status, **fields)
+    atomic_json(args._run_dir / "manifest.json", args._manifest)
+
+
 def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
+    configure_run_artifacts(args)
+    try:
+        result = _train(args)
+    except KeyboardInterrupt:
+        finish_run_manifest(args, "interrupted")
+        raise
+    except Exception as exc:
+        finish_run_manifest(args, "failed", error=str(exc))
+        raise
+    finish_run_manifest(args, "trained", best_epoch=result[1]["checkpoint_epoch"])
+    return result
+
+
+def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     if args.epochs <= 0 or args.ppo_iters <= 0 or args.episodes_per_update <= 0:
         raise ValueError("--epochs, --ppo-iters và --episodes-per-update phải lớn hơn 0.")
     if args.hidden_dim <= 0:
         raise ValueError("--hidden-dim phải lớn hơn 0.")
+    if args.train_eval_every <= 0 or args.bootstrap_block_size <= 0 or args.bootstrap_samples <= 0:
+        raise ValueError("Lịch eval và thông số bootstrap phải dương.")
     if args.selection_window <= 0 or args.min_epochs < 0 or args.patience < 0:
         raise ValueError("selection-window phải dương; min-epochs và patience không âm.")
     if args.min_epochs > args.epochs:
@@ -579,6 +1007,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    random.seed(args.seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(args.seed)
     device = torch.device(args.device)
@@ -657,6 +1086,9 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         raise ValueError("--batch-size phải lớn hơn 0.")
 
     n_assets, n_features = train_tensor.tensor.shape[1:]
+    matched_cash = 1.0 / (n_assets + 1) if args.matched_cash_ratio is None else float(args.matched_cash_ratio)
+    if not np.isfinite(matched_cash) or not 0 <= matched_cash < 1:
+        raise ValueError("matched-cash-ratio phải thuộc [0,1).")
     obs_dim = lookback * n_assets * n_features + n_assets + 1
     action_dim = n_assets + 1
     encoder = getattr(args, "encoder", "gru")
@@ -704,9 +1136,9 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         ).lower()
         if gnn_architecture not in {"gcn", "gat"}:
             raise ValueError("GNN architecture trong config phải là GCN hoặc GAT.")
-        gnn_hidden_channels = int(gnn_config.get("hidden_channels", 64))
-        gnn_out_channels = int(gnn_config.get("out_channels", 32))
-        gnn_heads = int(gnn_config.get("heads", 4))
+        gnn_hidden_channels = int(gnn_config.get("hidden_channels", 64) if args.gnn_hidden_channels is None else args.gnn_hidden_channels)
+        gnn_out_channels = int(gnn_config.get("out_channels", 32) if args.gnn_out_channels is None else args.gnn_out_channels)
+        gnn_heads = int(gnn_config.get("heads", 4) if args.gnn_heads is None else args.gnn_heads)
         corr_window = int(gnn_config.get("correlation_window", 60))
         corr_threshold = float(gnn_config.get("threshold_corr", 0.5))
         graph_mode = str(gnn_config.get("graph_mode", "knn")).lower()
@@ -755,6 +1187,12 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             }
         )
     model = build_actor_critic(**model_config).to(device)
+    model.cache_batch_size = args.cache_batch_size
+    model.cache_temporal_batch_size = args.cache_temporal_batch_size
+    microbatch_size = args.microbatch_size
+    if microbatch_size is None:
+        microbatch_size = (16 if device.type == "cpu" else 32) if encoder == "gnn" else batch_size
+    microbatch_size = min(microbatch_size, batch_size)
 
     learning_rate = (
         float(rl_config["learning_rate"])
@@ -809,8 +1247,8 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     args.tensorboard_dir.mkdir(parents=True, exist_ok=True)
     logger = TrainerLogger(
         log_dir=str(args.tensorboard_dir),
-        checkpoint_dir=str(args.checkpoint.parent),
-        best_checkpoint_name=args.checkpoint.name,
+        checkpoint_dir=str(args._run_dir / "checkpoints"),
+        best_checkpoint_name="best.pth",
     )
     training_rows: list[dict[str, float]] = []
     best_score = -np.inf
@@ -827,6 +1265,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "reward_scaling": reward_scaling,
             "reward_baseline": args.reward_baseline,
             "return_convention": "adjusted_close_scaled_open_close_total_return",
+            "sharpe_convention": FinancialMetrics.SHARPE_CONVENTION,
             "universe_methodology": "fixed_current_asset_list_without_point_in_time_membership",
             "test_period_status": (
                 "reused_exploratory_period_not_independent_holdout"
@@ -850,6 +1289,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "action_dim": action_dim,
             "hidden_dim": args.hidden_dim,
             "lookback": lookback,
+            "history_mask_convention": "explicit_bool_mask_true_real_timestep_v1",
             "encoder": encoder,
             "actor_critic_topology": "separate_actor_critic_trunks_shared_encoder",
             "model_config": model_config.copy(),
@@ -866,6 +1306,41 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "feature_names": full_tensor.feature_names,
             "scaler_path": str(args.scaler_output),
             "seed": args.seed,
+            "scaler_params": args._scaler_params,
+            "feature_parameters": args._feature_parameters,
+            "resolved_model_config": configured_model_config,
+            "resolved_environment_config": env_config,
+            "split_dates": split.dates_info,
+            "run_manifest": args._manifest,
+            "scheduler_state_dict": scheduler.state_dict(),
+            "rng_state": rng_state(),
+            "matched_cash_ratio": matched_cash,
+            "training_state": {
+                "best_score": float(best_score), "best_validation_metrics": best_validation_metrics,
+                "recent_validation_scores": recent_validation_scores,
+                "epochs_without_improvement": epochs_without_improvement,
+                "training_rows": training_rows,
+            },
+            "reference_validation_metrics": baseline_metrics,
+            "reference_score": float(baseline_score),
+            "training_parameters": {
+                "epochs": args.epochs, "ppo_iters": args.ppo_iters, "batch_size": batch_size,
+                "window_min": window_min, "window_max": window_max,
+                "gamma": gamma, "gae_lambda": float(rl_config.get("gae_lambda", 0.95)),
+                "seed": args.seed, "episodes_per_update": args.episodes_per_update,
+                "action_alpha": args.action_alpha, "reward_baseline": args.reward_baseline,
+                "reward_scaling": reward_scaling, "reward_beta": reward_beta,
+                "selection_metric": args.selection_metric, "selection_window": args.selection_window,
+                "selection_margin": args.selection_margin,
+                "learning_rate": learning_rate, "target_kl": target_kl,
+                "entropy_coef": entropy_coef, "value_clip_range": value_clip_range,
+                "matched_cash_ratio": matched_cash, "patience": args.patience,
+                "min_epochs": args.min_epochs,
+                "microbatch_size": microbatch_size, "cpu_threads": args.cpu_threads,
+                "cache_batch_size": args.cache_batch_size,
+                "cache_temporal_batch_size": args.cache_temporal_batch_size,
+                "device": str(device), "train_eval_every": args.train_eval_every,
+            },
         }
 
     print(
@@ -900,6 +1375,8 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         f"target_kl={target_kl:g}, entropy={entropy_coef:g}, lr={learning_rate:g}, "
         f"value_clip={'off' if value_clip_range is None else value_clip_range}."
     )
+    print(f"  Runtime: CPU threads={torch.get_num_threads()}, effective minibatch={batch_size}, microbatch={microbatch_size}.", flush=True)
+    print(f"  Run artifacts: {args._run_dir}", flush=True)
     try:
         train_eval_env = create_env(
             train_tensor,
@@ -974,21 +1451,23 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             float(env_config["risk_free_rate"]),
             cash_ratio=0.0,
         )
-        cash44_train_metrics, cash44_train_result = evaluate_equal_weight(
+        train_baseline_env.action_alpha = args.action_alpha
+        val_baseline_env.action_alpha = args.action_alpha
+        matched_train_metrics, matched_train_result = evaluate_equal_weight(
             train_baseline_env,
             train_open,
             n_assets,
             float(env_config["transaction_cost_rate"]),
             float(env_config["risk_free_rate"]),
-            cash_ratio=0.044,
+            cash_ratio=matched_cash,
         )
-        cash44_val_metrics, cash44_val_result = evaluate_equal_weight(
+        matched_val_metrics, matched_val_result = evaluate_equal_weight(
             val_baseline_env,
             val_open,
             n_assets,
             float(env_config["transaction_cost_rate"]),
             float(env_config["risk_free_rate"]),
-            cash_ratio=0.044,
+            cash_ratio=matched_cash,
         )
         logger.log_metrics(
             0,
@@ -997,20 +1476,20 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     "cumulative_return"
                 ],
                 "Train/EqualWeightSharpe": equal_weight_train_metrics["sharpe_ratio"],
-                "Train/EqualWeightCashCumulativeReturn": cash44_train_metrics[
+                "Train/EqualWeightCashCumulativeReturn": matched_train_metrics[
                     "cumulative_return"
                 ],
-                "Train/EqualWeightCashSharpe": cash44_train_metrics["sharpe_ratio"],
+                "Train/EqualWeightCashSharpe": matched_train_metrics["sharpe_ratio"],
                 "Validation/EqualWeightCumulativeReturn": equal_weight_val_metrics[
                     "cumulative_return"
                 ],
                 "Validation/EqualWeightSharpe": equal_weight_val_metrics[
                     "sharpe_ratio"
                 ],
-                "Validation/EqualWeightCashCumulativeReturn": cash44_val_metrics[
+                "Validation/EqualWeightCashCumulativeReturn": matched_val_metrics[
                     "cumulative_return"
                 ],
-                "Validation/EqualWeightCashSharpe": cash44_val_metrics[
+                "Validation/EqualWeightCashSharpe": matched_val_metrics[
                     "sharpe_ratio"
                 ],
             },
@@ -1023,28 +1502,59 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             f"Sharpe={equal_weight_val_metrics['sharpe_ratio']:.3f}"
         )
         print(
-            "  1/N + cash 4.4% reference | "
-            f"train return={cash44_train_metrics['cumulative_return']:.2%}, "
-            f"Sharpe={cash44_train_metrics['sharpe_ratio']:.3f} | "
-            f"val return={cash44_val_metrics['cumulative_return']:.2%}, "
-            f"Sharpe={cash44_val_metrics['sharpe_ratio']:.3f}"
+            f"  Matched 1/N + cash {matched_cash:.2%}, alpha={args.action_alpha:g} | "
+            f"train return={matched_train_metrics['cumulative_return']:.2%}, "
+            f"Sharpe={matched_train_metrics['sharpe_ratio']:.3f} | "
+            f"val return={matched_val_metrics['cumulative_return']:.2%}, "
+            f"Sharpe={matched_val_metrics['sharpe_ratio']:.3f}"
         )
-        baseline_result = evaluate_policy(model, val_env)
-        baseline_metrics = metric_summary(
-            baseline_result,
-            risk_free_rate_annual=float(env_config["risk_free_rate"]),
-        )
+        resume_payload = None
+        if args.resume is not None:
+            resume_payload = torch.load(args.resume, map_location=device, weights_only=False)
+            if resume_payload.get("model_config") != model_config or "training_state" not in resume_payload:
+                raise ValueError("Checkpoint không tương thích để resume model/training state.")
+            for key in ("data_hashes", "source_hashes", "config_hashes"):
+                if resume_payload["run_manifest"][key] != args._manifest[key]:
+                    raise ValueError(f"Resume yêu cầu cùng {key}.")
+            if resume_payload.get("scaler_params") != args._scaler_params:
+                raise ValueError("Scaler của resume không khớp dữ liệu train.")
+            model.load_state_dict(resume_payload["model_state_dict"])
+            optimizer.load_state_dict(resume_payload["optimizer_state_dict"])
+            scheduler.load_state_dict(resume_payload["scheduler_state_dict"])
+            state = resume_payload["training_state"]
+            best_score = float(state["best_score"])
+            best_validation_metrics = state["best_validation_metrics"]
+            recent_validation_scores = state["recent_validation_scores"]
+            epochs_without_improvement = int(state["epochs_without_improvement"])
+            training_rows = state["training_rows"]
+            logger.best_reward = best_score
+            baseline_metrics = resume_payload["reference_validation_metrics"]
+            baseline_score = resume_payload["reference_score"]
+            current_parameters = checkpoint_metadata(int(resume_payload["epoch"]), baseline_metrics)["training_parameters"]
+            if current_parameters != resume_payload["training_parameters"]:
+                raise ValueError("Resume yêu cầu cùng training_parameters (bao gồm epochs/scheduler horizon).")
+            source_best = args.resume.parent / "best.pth"
+            destination_best = logger.checkpoint_dir / "best.pth"
+            if source_best.resolve() != destination_best.resolve():
+                shutil.copy2(source_best, destination_best)
+            restore_rng_state(resume_payload["rng_state"])
+        else:
+            baseline_result = evaluate_policy(model, val_env)
+            baseline_metrics = metric_summary(
+                baseline_result,
+                risk_free_rate_annual=float(env_config["risk_free_rate"]),
+            )
         if args.selection_metric == "sharpe":
             baseline_score = baseline_metrics["sharpe_ratio"]
         elif args.selection_metric == "cumulative_return":
             baseline_score = baseline_metrics["cumulative_return"]
         elif args.selection_metric == "excess_sharpe":
             baseline_score = (
-                baseline_metrics["sharpe_ratio"] - cash44_val_metrics["sharpe_ratio"]
+                baseline_metrics["sharpe_ratio"] - matched_val_metrics["sharpe_ratio"]
             )
         elif args.selection_metric == "excess_return":
             baseline_score = (
-                baseline_metrics["cumulative_return"] - cash44_val_metrics["cumulative_return"]
+                baseline_metrics["cumulative_return"] - matched_val_metrics["cumulative_return"]
             )
         else:
             baseline_score = baseline_metrics["sharpe_ratio"]
@@ -1057,7 +1567,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 "Reference/Turnover": baseline_metrics["total_turnover"],
             },
         )
-        if np.isfinite(baseline_score):
+        if np.isfinite(baseline_score) and resume_payload is None:
             best_score = float(baseline_score)
             best_validation_metrics = baseline_metrics
             # Compare like with like: epoch 0's reference uses the same
@@ -1072,6 +1582,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 selection_metric=f"smoothed_validation_{args.selection_metric}",
                 metadata=checkpoint_metadata(0, baseline_metrics),
             )
+            logger.save_latest(0, model, optimizer, checkpoint_metadata(0, baseline_metrics))
         print(
             f"  untrained validation reference | return={baseline_metrics['cumulative_return']:.2%} "
             f"| profit={baseline_metrics['profit']:+,.2f} "
@@ -1080,9 +1591,19 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             f"| turnover={baseline_metrics['total_turnover']:.2f}"
         )
 
-        for epoch in range(1, args.epochs + 1):
+        start_epoch = int(resume_payload["epoch"]) + 1 if resume_payload else 1
+        if resume_payload:
+            print(f"  Resume tại epoch {start_epoch}; run_dir={args._run_dir}")
+        for epoch in range(start_epoch, args.epochs + 1):
             t0_roll = time.perf_counter()
             model.train()
+            cache_started = time.perf_counter()
+            cache_progress = PhaseProgress(f"epoch {epoch:03d} market cache", args.progress_every) if encoder == "gnn" else None
+            market_cache = prepare_market_cache(
+                model, train_eval_env,
+                progress=(lambda stage, completed, total: cache_progress.update(completed, total, stage)) if cache_progress else None,
+            )
+            cache_time = time.perf_counter() - cache_started
             episode_specs: list[
                 tuple[int, int, MarketDataTensor, np.ndarray, np.ndarray]
             ] = []
@@ -1117,8 +1638,12 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 graph_dim=n_assets if encoder == "gnn" else None,
                 graph_lookback=lookback if encoder == "gnn" else 1,
                 graph_relations=(len(GRAPH_RELATIONS) if encoder == "gnn" else 1),
+                graph_adjacency_sequence=graph_adjacency_sequence,
+                graph_edge_mask_sequence=graph_edge_mask_sequence,
+                history_lookback=lookback,
             )
             episode_rewards: list[float] = []
+            rollout_progress = PhaseProgress(f"epoch {epoch:03d} rollout", args.progress_every)
             for episode_index, (
                 start,
                 length,
@@ -1153,12 +1678,16 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 while not done:
                     obs_vector = observation_vector(obs)
                     state = torch.as_tensor(obs_vector, dtype=torch.float32, device=device)
-                    graph = graph_tensors_from_obs(obs, device)
+                    history_mask = history_mask_from_obs(obs, device)
+                    if market_cache is not None:
+                        graph = {"market_embedding": market_cache.get(model, episode_global_start + episode_env.current_step)}
+                    else:
+                        graph = graph_tensors_from_obs(obs, device)
                     with torch.no_grad():
                         if graph is None:
-                            policy_action, log_prob, value = model.act(state)
+                            policy_action, log_prob, value = model.act(state, history_mask=history_mask)
                         else:
-                            policy_action, log_prob, value = model.act(state, graph=graph)
+                            policy_action, log_prob, value = model.act(state, graph=graph, history_mask=history_mask)
                     policy_action_np = policy_action.cpu().numpy().astype(np.float32)
                     next_obs, reward, terminated, truncated, _ = episode_env.step(
                         policy_action_np
@@ -1171,16 +1700,14 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                         float(reward),
                         float(value.item()),
                         float(log_prob.item()),
-                        graph_adjacency_history=(
-                            obs["graph_adjacency_history"] if graph is not None else None
-                        ),
-                        graph_edge_mask_history=(
-                            obs["graph_edge_mask_history"] if graph is not None else None
-                        ),
+                        graph_day_index=(episode_global_start + episode_env.current_step - 1 if graph is not None else None),
+                        history_mask=obs["history_mask"],
                     )
                     episode_reward += float(reward)
                     obs = next_obs
                     done = terminated or truncated
+                    if buffer.ptr % 32 == 0 or done:
+                        rollout_progress.update(buffer.ptr, rollout_size, f"episode {episode_index + 1}/{args.episodes_per_update}")
 
                 # Random-window boundaries bootstrap the critic. The final train
                 # boundary is terminal because no later training observations exist.
@@ -1189,15 +1716,19 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 else:
                     last_vector = observation_vector(obs)
                     last_state = torch.as_tensor(last_vector, dtype=torch.float32, device=device)
-                    last_graph = graph_tensors_from_obs(obs, device)
+                    last_history_mask = history_mask_from_obs(obs, device)
+                    if market_cache is not None:
+                        last_graph = {"market_embedding": market_cache.get(model, episode_global_start + episode_env.current_step)}
+                    else:
+                        last_graph = graph_tensors_from_obs(obs, device)
                     with torch.no_grad():
                         if last_graph is None:
                             _, _, last_value_tensor = model.act(
-                                last_state, deterministic=True
+                                last_state, deterministic=True, history_mask=last_history_mask
                             )
                         else:
                             _, _, last_value_tensor = model.act(
-                                last_state, deterministic=True, graph=last_graph
+                                last_state, deterministic=True, graph=last_graph, history_mask=last_history_mask
                             )
                     last_value = float(last_value_tensor.item())
                 buffer.finish_path(last_val=last_value)
@@ -1210,6 +1741,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             t_roll = time.perf_counter() - t0_roll
 
             t0_upd = time.perf_counter()
+            update_progress = PhaseProgress(f"epoch {epoch:03d} PPO update", args.progress_every)
             batch = {
                 name: tensor.to(device)
                 for name, tensor in buffer.get().items()
@@ -1220,24 +1752,30 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 batch,
                 train_iters=args.ppo_iters,
                 batch_size=batch_size,
+                microbatch_size=microbatch_size,
+                progress=lambda completed, total, piece, pieces: update_progress.update(completed, total, f"microbatch {piece}/{pieces}"),
+            )
+            update_progress.update(
+                update_stats["NumMinibatches"], args.ppo_iters * int(np.ceil(rollout_size / batch_size)),
+                f"KL stop={bool(update_stats['StoppedEarly'])}", force=True,
             )
             scheduler.step()
             t_upd = time.perf_counter() - t0_upd
 
             t0_eval = time.perf_counter()
-            train_eval_result, train_policy_actions, train_blended_targets = (
-                evaluate_policy_with_actions(model, train_eval_env)
-            )
-            train_policy_weights = policy_weight_summary(
-                train_policy_actions, n_assets, tickers
-            )
-            train_blended_weights = policy_weight_summary(
-                train_blended_targets, n_assets, tickers
-            )
-            train_eval_metrics = metric_summary(
-                train_eval_result,
-                risk_free_rate_annual=float(env_config["risk_free_rate"]),
-            )
+            eval_progress = PhaseProgress(f"epoch {epoch:03d} evaluation", args.progress_every)
+            train_evaluated = epoch == 1 or epoch == args.epochs or epoch % args.train_eval_every == 0
+            if train_evaluated:
+                train_eval_result, train_policy_actions, train_blended_targets = evaluate_policy_with_actions(model, train_eval_env)
+                train_policy_weights = policy_weight_summary(train_policy_actions, n_assets, tickers)
+                train_blended_weights = policy_weight_summary(train_blended_targets, n_assets, tickers)
+                train_eval_metrics = metric_summary(train_eval_result, float(env_config["risk_free_rate"]))
+                eval_progress.update(1, 2, "train hoàn tất", force=True)
+            else:
+                train_eval_metrics = {key: float("nan") for key in equal_weight_train_metrics}
+                template = policy_weight_summary(np.full((1, action_dim), 1.0 / action_dim), n_assets, tickers)
+                train_policy_weights = {key: float("nan") for key in template}
+                train_blended_weights = train_policy_weights.copy()
             val_result, val_policy_actions, val_blended_targets = (
                 evaluate_policy_with_actions(model, val_env)
             )
@@ -1252,6 +1790,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
             )
             t_eval = time.perf_counter() - t0_eval
+            eval_progress.update(2 if train_evaluated else 1, 2 if train_evaluated else 1, "validation hoàn tất")
             train_sharpe_delta_1n = (
                 train_eval_metrics["sharpe_ratio"]
                 - equal_weight_train_metrics["sharpe_ratio"]
@@ -1262,11 +1801,11 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             )
             train_sharpe_delta_1n_cash = (
                 train_eval_metrics["sharpe_ratio"]
-                - cash44_train_metrics["sharpe_ratio"]
+                - matched_train_metrics["sharpe_ratio"]
             )
             train_return_delta_1n_cash = (
                 train_eval_metrics["cumulative_return"]
-                - cash44_train_metrics["cumulative_return"]
+                - matched_train_metrics["cumulative_return"]
             )
             val_sharpe_delta_1n = (
                 val_metrics["sharpe_ratio"] - equal_weight_val_metrics["sharpe_ratio"]
@@ -1276,11 +1815,11 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 - equal_weight_val_metrics["cumulative_return"]
             )
             val_sharpe_delta_1n_cash = (
-                val_metrics["sharpe_ratio"] - cash44_val_metrics["sharpe_ratio"]
+                val_metrics["sharpe_ratio"] - matched_val_metrics["sharpe_ratio"]
             )
             val_return_delta_1n_cash = (
                 val_metrics["cumulative_return"]
-                - cash44_val_metrics["cumulative_return"]
+                - matched_val_metrics["cumulative_return"]
             )
             if args.selection_metric == "sharpe":
                 score = val_metrics["sharpe_ratio"]
@@ -1297,7 +1836,10 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             smoothed_score = float(np.mean(recent_validation_scores))
             training_row = {
                 "epoch": float(epoch),
+                "train_evaluated": int(train_evaluated),
                 "time_rollout": t_roll,
+                "time_market_cache": cache_time,
+                "graph_storage_mb": (graph_adjacency_sequence.nbytes + graph_edge_mask_sequence.nbytes) / 1e6 if encoder == "gnn" else 0.0,
                 "time_update": t_upd,
                 "time_eval": t_eval,
                 "gamma": gamma,
@@ -1318,6 +1860,7 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 "ppo_epochs_completed": float(update_stats["StopIter"]),
                 "ppo_minibatches_completed": float(update_stats["NumMinibatches"]),
                 "ppo_minibatches_attempted": float(update_stats["NumMinibatchesAttempted"]),
+                "ppo_microbatches_completed": float(update_stats["NumMicrobatches"]),
                 "ppo_stopped_early": float(update_stats["StoppedEarly"]),
                 "train_cumulative_return": train_eval_metrics["cumulative_return"],
                 "train_profit": train_eval_metrics["profit"],
@@ -1330,12 +1873,12 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 "train_sharpe_delta_1n": train_sharpe_delta_1n,
                 "step_reward_mean": step_reward_mean,
                 "step_reward_std": step_reward_std,
-                "train_1n_cash_cumulative_return": cash44_train_metrics["cumulative_return"],
-                "train_1n_cash_sharpe": cash44_train_metrics["sharpe_ratio"],
+                "train_1n_cash_cumulative_return": matched_train_metrics["cumulative_return"],
+                "train_1n_cash_sharpe": matched_train_metrics["sharpe_ratio"],
                 "train_return_delta_1n_cash": train_return_delta_1n_cash,
                 "train_sharpe_delta_1n_cash": train_sharpe_delta_1n_cash,
-                "validation_1n_cash_cumulative_return": cash44_val_metrics["cumulative_return"],
-                "validation_1n_cash_sharpe": cash44_val_metrics["sharpe_ratio"],
+                "validation_1n_cash_cumulative_return": matched_val_metrics["cumulative_return"],
+                "validation_1n_cash_sharpe": matched_val_metrics["sharpe_ratio"],
                 "validation_return_delta_1n_cash": val_return_delta_1n_cash,
                 "validation_sharpe_delta_1n_cash": val_sharpe_delta_1n_cash,
                 "validation_score": float(score),
@@ -1406,8 +1949,8 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     "Train/EqualWeightCumulativeReturn": equal_weight_train_metrics[
                         "cumulative_return"
                     ],
-                    "Train/EqualWeightCashSharpe": cash44_train_metrics["sharpe_ratio"],
-                    "Train/EqualWeightCashCumulativeReturn": cash44_train_metrics[
+                    "Train/EqualWeightCashSharpe": matched_train_metrics["sharpe_ratio"],
+                    "Train/EqualWeightCashCumulativeReturn": matched_train_metrics[
                         "cumulative_return"
                     ],
                     "Train/SharpeDeltaVs1N": train_sharpe_delta_1n,
@@ -1426,10 +1969,10 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     "Validation/EqualWeightCumulativeReturn": equal_weight_val_metrics[
                         "cumulative_return"
                     ],
-                    "Validation/EqualWeightCashSharpe": cash44_val_metrics[
+                    "Validation/EqualWeightCashSharpe": matched_val_metrics[
                         "sharpe_ratio"
                     ],
-                    "Validation/EqualWeightCashCumulativeReturn": cash44_val_metrics[
+                    "Validation/EqualWeightCashCumulativeReturn": matched_val_metrics[
                         "cumulative_return"
                     ],
                     "Validation/SharpeDeltaVs1N": val_sharpe_delta_1n,
@@ -1483,6 +2026,10 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             elif epoch >= args.min_epochs:
                 epochs_without_improvement += 1
 
+            logger.save_latest(epoch, model, optimizer, checkpoint_metadata(epoch, val_metrics))
+            atomic_csv(pd.DataFrame(training_rows), args.training_log, index=False)
+            atomic_csv(pd.DataFrame(training_rows), args._run_dir / "training_log.csv", index=False)
+
             print(
                 f"  epoch {epoch:03d}/{args.epochs} "
                 f"| time: roll={t_roll:.1f}s upd={t_upd:.1f}s eval={t_eval:.1f}s "
@@ -1526,12 +2073,17 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     )
                     break
     finally:
+        atomic_csv(pd.DataFrame(training_rows), args.training_log, index=False)
+        atomic_csv(pd.DataFrame(training_rows), args._run_dir / "training_log.csv", index=False)
         logger.close()
 
     if not best_validation_metrics:
         raise RuntimeError("Không tạo được checkpoint: validation score không hữu hạn.")
-    pd.DataFrame(training_rows).to_csv(args.training_log, index=False)
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+    best_path = logger.checkpoint_dir / "best.pth"
+    checkpoint = torch.load(best_path, map_location=device, weights_only=False)
+    if best_path.resolve() != args.checkpoint.resolve():
+        args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(best_path, args.checkpoint)
     saved_model_config = checkpoint.get("model_config")
     if saved_model_config is not None and saved_model_config != model_config:
         raise ValueError(
@@ -1573,10 +2125,29 @@ def train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         "best_validation_metrics": best_validation_metrics,
         "checkpoint_epoch": int(checkpoint.get("epoch", -1)),
         "checkpoint_status": checkpoint_status,
+        "matched_cash_ratio": matched_cash,
+        "run_dir": args._run_dir,
     }
 
 
 def evaluate_test(
+    args: argparse.Namespace,
+    model: nn.Module,
+    context: dict[str, Any],
+) -> pd.DataFrame:
+    try:
+        return _evaluate_test(args, model, context)
+    except KeyboardInterrupt:
+        if hasattr(args, "_run_dir"):
+            finish_run_manifest(args, "interrupted_during_evaluation")
+        raise
+    except Exception as exc:
+        if hasattr(args, "_run_dir"):
+            finish_run_manifest(args, "evaluation_failed", error=str(exc))
+        raise
+
+
+def _evaluate_test(
     args: argparse.Namespace,
     model: nn.Module,
     context: dict[str, Any],
@@ -1631,9 +2202,35 @@ def evaluate_test(
     )
     baseline_backtester = DeterministicBacktester(baseline_env)
     n_assets = len(context["tickers"])
+    matched_cash = float(context.get("matched_cash_ratio", 1.0 / (n_assets + 1)))
+    matched_name = f"Matched 1/N + Cash {100 * matched_cash:g}% (same alpha)"
     env_config = context["env_config"]
+    matched_baseline_env = create_env(
+        context["test_tensor"],
+        context["test_open"],
+        args.env_config,
+        context["reward_beta"],
+        reward_scaling=context["reward_scaling"],
+        history_tensor=context["scaled_full_tensor"],
+        history_start_index=context["test_history_start"],
+        lookback_window=context["lookback"],
+        action_alpha=context["action_alpha"],
+        close_prices=context["test_close"],
+    )
+    matched_baseline_result = DeterministicBacktester(
+        matched_baseline_env
+    ).run_strategy(
+        EqualWeightBaseline(
+            open_prices=context["test_open"],
+            num_assets=n_assets,
+            transaction_cost_rate=float(env_config["transaction_cost_rate"]),
+            risk_free_rate_annual=float(env_config["risk_free_rate"]),
+            cash_ratio=matched_cash,
+        )
+    )
     results = {
         "PPO": ppo_result,
+        matched_name: matched_baseline_result,
         "Equal Weight (1/N)": baseline_backtester.run_strategy(
             EqualWeightBaseline(
                 open_prices=context["test_open"],
@@ -1673,16 +2270,16 @@ def evaluate_test(
     )
     cbb_stats = block_bootstrap_excess_returns(
         ppo_result.daily_net_returns,
-        results["1/N + Cash 4.4%"].daily_net_returns,
-        block_size=5,
-        num_samples=2000,
+        matched_baseline_result.daily_net_returns,
+        block_size=args.bootstrap_block_size,
+        num_samples=args.bootstrap_samples,
         seed=args.seed,
     )
     cbb_1n_stats = block_bootstrap_excess_returns(
         ppo_result.daily_net_returns,
         results["Equal Weight (1/N)"].daily_net_returns,
-        block_size=5,
-        num_samples=2000,
+        block_size=args.bootstrap_block_size,
+        num_samples=args.bootstrap_samples,
         seed=args.seed,
     )
     metrics["profit"] = pd.Series(
@@ -1733,18 +2330,33 @@ def evaluate_test(
     ]
     metrics["checkpoint_epoch"] = np.nan
     metrics["checkpoint_status"] = "none"
+    metrics["sharpe_convention"] = FinancialMetrics.SHARPE_CONVENTION
     metrics.loc["PPO", "checkpoint_epoch"] = float(context.get("checkpoint_epoch", -1))
     metrics.loc["PPO", "checkpoint_status"] = str(context.get("checkpoint_status", "unknown"))
     metrics["cbb_excess_annual_vs_1n_cash"] = np.nan
     metrics["cbb_ci_lower_95"] = np.nan
     metrics["cbb_ci_upper_95"] = np.nan
     metrics["cbb_p_value"] = np.nan
+    metrics["cbb_baseline"] = matched_name
+    metrics["matched_baseline_cash_ratio"] = matched_cash
+    metrics["cbb_p_value_method"] = "one_sided_centered_block_bootstrap_null_mean_zero"
+    metrics["sharpe_delta_vs_matched_baseline"] = np.nan
+    metrics.loc["PPO", "sharpe_delta_vs_matched_baseline"] = (
+        metrics.loc["PPO", "sharpe_ratio"]
+        - metrics.loc[matched_name, "sharpe_ratio"]
+    )
     metrics.loc["PPO", "cbb_excess_annual_vs_1n_cash"] = cbb_stats["mean_excess_annualized"]
     metrics.loc["PPO", "cbb_ci_lower_95"] = cbb_stats["ci_lower_95"]
     metrics.loc["PPO", "cbb_ci_upper_95"] = cbb_stats["ci_upper_95"]
-    metrics.loc["PPO", "cbb_p_value"] = cbb_stats["p_value_excess_le_0"]
+    metrics.loc["PPO", "cbb_p_value"] = cbb_stats["p_value_positive_excess"]
     args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
-    metrics.to_csv(args.metrics_output)
+    atomic_csv(metrics, args.metrics_output)
+    if "run_dir" in context:
+        atomic_csv(metrics, context["run_dir"] / "metrics.csv")
+        daily = pd.DataFrame({name: result.daily_net_returns for name, result in results.items()}, index=context["test_tensor"].dates[1:])
+        daily.index.name = "date"
+        atomic_csv(daily, context["run_dir"] / "daily_returns.csv")
+        finish_run_manifest(args, "completed", best_epoch=context["checkpoint_epoch"])
     print("[5/6] Metrics test (profit và costs theo đơn vị tiền tài khoản):")
     print(metrics.to_string(float_format=lambda value: f"{value:.6f}"))
     print(
@@ -1755,16 +2367,16 @@ def evaluate_test(
         f"blended cash={test_blended_weights['mean_cash_weight']:.2%}"
     )
     print(
-        f"  Bootstrap vs 1/N+cash 4.4% | "
+        f"  Bootstrap vs {matched_name} | "
         f"excess annual return={cbb_stats['mean_excess_annualized']:.2%} "
         f"(95% CI: [{cbb_stats['ci_lower_95']:.2%}, {cbb_stats['ci_upper_95']:.2%}]), "
-        f"p-val(<=0)={cbb_stats['p_value_excess_le_0']:.4f}"
+        f"p-value(H0 mean excess=0)={cbb_stats['p_value_positive_excess']:.4f}"
     )
     print(
         f"  Bootstrap vs 1/N | "
         f"excess annual return={cbb_1n_stats['mean_excess_annualized']:.2%} "
         f"(95% CI: [{cbb_1n_stats['ci_lower_95']:.2%}, {cbb_1n_stats['ci_upper_95']:.2%}]), "
-        f"p-val(<=0)={cbb_1n_stats['p_value_excess_le_0']:.4f}"
+        f"p-value(H0 mean excess=0)={cbb_1n_stats['p_value_positive_excess']:.4f}"
     )
     print(f"[6/6] Đã lưu metrics: {args.metrics_output}")
     return metrics
@@ -1772,6 +2384,16 @@ def evaluate_test(
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.untrained_null_seeds:
+        if args.seeds:
+            raise ValueError("Dùng riêng --untrained-null-seeds hoặc --seeds.")
+        null_seeds = [
+            int(value.strip())
+            for value in args.untrained_null_seeds.split(",")
+            if value.strip()
+        ]
+        evaluate_untrained_null(args, null_seeds)
+        return
     if not args.seeds:
         model, context = train(args)
         evaluate_test(args, model, context)
@@ -1780,35 +2402,52 @@ def main(argv: list[str] | None = None) -> None:
     seeds = [int(value.strip()) for value in args.seeds.split(",") if value.strip()]
     if len(seeds) < 2:
         raise ValueError("--seeds cần ít nhất 2 seed, ví dụ: --seeds 7,17,27.")
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("--seeds không được chứa seed trùng lặp.")
+    if args.resume is not None:
+        raise ValueError("Resume từng seed riêng bằng --seed và --resume, không dùng --seeds.")
+    if args.run_dir is not None and args.run_dir.exists() and any(args.run_dir.iterdir()):
+        raise ValueError("Thư mục ensemble đã có artifact; chọn --run-dir mới.")
+    ensemble_dir = args.run_dir.resolve() if args.run_dir is not None else new_run_directory(PROJECT_ROOT / "models/runs", "ensemble")
+    ensemble_dir.mkdir(parents=True, exist_ok=True)
+    defaults = build_parser().parse_args([])
+    if args.metrics_output == defaults.metrics_output:
+        args.metrics_output = ensemble_dir / "metrics.csv"
+    atomic_json(ensemble_dir / "ensemble_manifest.json", {"seeds": seeds, "status": "running"})
 
     per_seed_metrics: dict[int, pd.DataFrame] = {}
     for seed in seeds:
         run_args = copy.copy(args)
         run_args.seed = seed
-        run_args.checkpoint = (
-            args.checkpoint.parent / f"seed_{seed}" / args.checkpoint.name
-        )
+        run_args.run_dir = ensemble_dir / f"seed_{seed}"
+        if args.checkpoint != defaults.checkpoint:
+            run_args.checkpoint = args.checkpoint.parent / f"seed_{seed}" / args.checkpoint.name
         run_args.metrics_output = args.metrics_output.with_name(
             f"{args.metrics_output.stem}_seed{seed}{args.metrics_output.suffix}"
         )
-        run_args.training_log = args.training_log.with_name(
-            f"{args.training_log.stem}_seed{seed}{args.training_log.suffix}"
-        )
-        run_args.tensorboard_dir = args.tensorboard_dir / f"seed_{seed}"
+        if args.training_log != defaults.training_log:
+            run_args.training_log = args.training_log.with_name(f"{args.training_log.stem}_seed{seed}{args.training_log.suffix}")
+        if args.tensorboard_dir != defaults.tensorboard_dir:
+            run_args.tensorboard_dir = args.tensorboard_dir / f"seed_{seed}"
         print(f"\n===== PPO run seed={seed} =====")
         model, context = train(run_args)
         per_seed_metrics[seed] = evaluate_test(run_args, model, context)
 
-    stacked = pd.concat(per_seed_metrics, names=["seed", "strategy"])
-    summary = stacked.groupby(level="strategy").agg(["mean", "std"])
+    summary, seed_metadata = summarize_seed_metrics(per_seed_metrics)
     summary_path = args.metrics_output.with_name(
         f"{args.metrics_output.stem}_seeds_summary{args.metrics_output.suffix}"
     )
     summary_path.parent.mkdir(parents=True, exist_ok=True)
     summary.to_csv(summary_path)
+    metadata_path = args.metrics_output.with_name(
+        f"{args.metrics_output.stem}_seeds_metadata{args.metrics_output.suffix}"
+    )
+    seed_metadata.to_csv(metadata_path, index=False)
+    atomic_json(ensemble_dir / "ensemble_manifest.json", {"seeds": seeds, "status": "completed", "summary_path": str(summary_path), "metadata_path": str(metadata_path)})
     print("\nTest mean ± std across seeds:")
     print(summary.to_string(float_format=lambda value: f"{value:.6f}"))
     print(f"Đã lưu tổng hợp nhiều seed: {summary_path}")
+    print(f"Đã lưu metadata từng seed: {metadata_path}")
 
 
 if __name__ == "__main__":

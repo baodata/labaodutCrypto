@@ -15,7 +15,7 @@ from src.utils.data_types import MarketDataTensor
 
 class TestBacktester:
     @pytest.fixture
-    def env(self):
+    def env(self, trading_env_config_path):
         T, N, F = 20, 3, 5
         tensor = np.random.randn(T, N, F).astype(np.float32)
         tickers = ["A", "B", "C"]
@@ -28,7 +28,10 @@ class TestBacktester:
         for t in range(1, T):
             open_prices[t] = open_prices[t-1] * 1.005
             
-        return TradingEnv(market_tensor, open_prices)
+        return TradingEnv(
+            market_tensor, open_prices, close_prices=open_prices * 1.005,
+            config_path=str(trading_env_config_path),
+        )
     
     def test_cash_only_strategy(self, env):
         """Chiến lược 100% tiền mặt."""
@@ -40,7 +43,7 @@ class TestBacktester:
         result = bt.run_strategy(cash_fn)
         
         assert isinstance(result, BacktestResult)
-        assert result.total_steps == env.T - 2  # 18 bước
+        assert result.total_steps == env.T - 1
         assert len(result.portfolio_values) == result.total_steps + 1
         # Cash sinh lãi rất nhỏ (risk-free rate)
         assert result.portfolio_values[-1] >= 100000.0
@@ -57,7 +60,7 @@ class TestBacktester:
         
         result = bt.run_strategy(eq_fn)
         
-        assert result.total_steps == env.T - 2
+        assert result.total_steps == env.T - 1
         # Giá tăng 0.5%/ngày => danh mục phải tăng trưởng
         assert result.portfolio_values[-1] > 100000.0
         
@@ -90,4 +93,4 @@ class TestBacktester:
             return np.array([0.25, 0.25, 0.25, 0.25])
         
         result = bt.run_agent(agent_fn)
-        assert result.total_steps == env.T - 2
+        assert result.total_steps == env.T - 1

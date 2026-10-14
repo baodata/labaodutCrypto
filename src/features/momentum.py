@@ -21,6 +21,6 @@ def calculate_momentum_features(close: pd.Series) -> pd.DataFrame:
 
     # 12-1 momentum excludes the latest 21 sessions from the 252-session return.
     features["mom_12_1"] = close.shift(21).div(close.shift(252)).sub(1.0)
-    rolling_high = close.rolling(window=252, min_periods=1).max()
+    rolling_high = close.rolling(window=252, min_periods=252).max()
     features["dist_52w_high"] = close.div(rolling_high).sub(1.0)
     return features.replace([float("inf"), -float("inf")], float("nan")).fillna(0.0)

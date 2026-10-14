@@ -273,6 +273,11 @@ class CalendarAligner:
                 f"Không tìm thấy file dữ liệu hợp lệ cho danh sách ticker trong {dir_path}"
             )
 
+        # Validate before alignment can sort/drop duplicate or corrupt rows.
+        from src.data.validator import DataValidator
+        validator = DataValidator()
+        for ticker, frame in data_dict.items():
+            validator.validate_dataframe(frame, ticker).raise_if_invalid()
         return self.align(data_dict)
 
     @staticmethod

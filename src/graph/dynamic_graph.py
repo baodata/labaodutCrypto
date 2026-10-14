@@ -23,11 +23,21 @@ class DynamicGraphGenerator:
         threshold: float = 0.5,
         mode: Literal["threshold", "knn", "dynamic_threshold"] = "threshold",
         top_k: int = 5,
+        tickers: Sequence[str] | None = None,
     ):
         self.rolling_corr_df = rolling_corr_df
         self.threshold = threshold
         self.mode = mode
         self.top_k = top_k
+        self.tickers = list(tickers) if tickers is not None else (list(rolling_corr_df.columns) if rolling_corr_df is not None else None)
+        if rolling_corr_df is not None:
+            if not rolling_corr_df.columns.is_unique or not rolling_corr_df.index.is_unique:
+                raise ValueError("Rolling correlation chứa index/ticker trùng lặp.")
+            if list(rolling_corr_df.columns) != self.tickers:
+                raise ValueError("Thứ tự ticker trong rolling_corr_df không khớp graph.")
+            for _, frame in rolling_corr_df.groupby(level=0, sort=False):
+                if list(frame.index.get_level_values(-1)) != self.tickers:
+                    raise ValueError("Thứ tự node của từng correlation matrix không khớp ticker.")
         
     def get_graph_at_time(self, timestamp: pd.Timestamp) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -63,7 +73,7 @@ def build_dynamic_graph_sequence(
 
     The correlation for date ``t`` uses returns up to and including ``t``.
     This is safe for the trading environment because the observation at ``t``
-    places orders for the following open-to-open interval. Static sector edges
+    places orders at Open[t+1], with the next observation marked at Close[t+1]. Static sector edges
     are added to every daily correlation graph.
 
     Returns:
@@ -75,6 +85,8 @@ def build_dynamic_graph_sequence(
         raise ValueError("window_size phải lớn hơn 1.")
     if len(tickers) == 0:
         raise ValueError("tickers không được rỗng.")
+    if len(set(tickers)) != len(tickers) or not returns_df.columns.is_unique or not returns_df.index.is_unique:
+        raise ValueError("Ticker/date không được trùng lặp.")
     if not np.isfinite(threshold) or not 0.0 <= threshold <= 1.0:
         raise ValueError("threshold phải là số hữu hạn trong [0, 1].")
     if graph_mode not in {"threshold", "knn", "dynamic_threshold"}:
@@ -85,12 +97,17 @@ def build_dynamic_graph_sequence(
     date_index = pd.DatetimeIndex(pd.to_datetime(list(dates)))
     if date_index.has_duplicates or not date_index.is_monotonic_increasing:
         raise ValueError("dates phải tăng dần và không trùng lặp.")
+    if set(tickers) - set(returns_df.columns) or not date_index.isin(returns_df.index).all():
+        raise ValueError("returns_df thiếu ticker hoặc ngày được yêu cầu.")
+    if not returns_df.index.is_monotonic_increasing:
+        raise ValueError("returns_df phải tăng dần theo ngày.")
     aligned_returns = returns_df.reindex(index=date_index, columns=list(tickers))
     if aligned_returns.shape != (len(date_index), len(tickers)):
         raise ValueError("returns_df không thể căn theo dates và tickers.")
     # The first return is naturally undefined. Treat non-finite values as
     # missing so rolling correlation emits no dynamic edge until warm-up.
-    aligned_returns = aligned_returns.replace([np.inf, -np.inf], np.nan)
+    if np.isinf(aligned_returns.to_numpy()).any():
+        raise ValueError("Returns chứa Inf.")
 
     from src.graph.correlation import compute_rolling_correlation
     from src.graph.multi_relation_graph import GRAPH_RELATIONS, MultiRelationGraphBuilder

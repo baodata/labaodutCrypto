@@ -1,9 +1,18 @@
 import pytest
 import numpy as np
 from src.env.trading_env import TradingEnv
+from src.env.orders import PortfolioOrder
 from src.utils.data_types import MarketDataTensor
 
 class TestTradingEnv:
+    @pytest.fixture
+    def make_env(self, trading_env_config_path):
+        def factory(market_tensor, open_prices, **kwargs):
+            return TradingEnv(
+                market_tensor, open_prices, config_path=str(trading_env_config_path), **kwargs
+            )
+        return factory
+
     @pytest.fixture
     def mock_data(self):
         T, N, F = 10, 3, 5
@@ -24,9 +33,9 @@ class TestTradingEnv:
             
         return market_tensor, open_prices
 
-    def test_env_init_and_reset(self, mock_data):
+    def test_env_init_and_reset(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices)
+        env = make_env(market_tensor, open_prices)
         
         obs, info = env.reset()
         
@@ -39,9 +48,11 @@ class TestTradingEnv:
         assert info["cash_weight"] == 1.0
         assert info["step"] == 0
 
-    def test_env_step(self, mock_data):
+    def test_env_step(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices)
+        close_prices = open_prices.copy()
+        close_prices[:, 0] *= 1.01
+        env = make_env(market_tensor, open_prices, close_prices=close_prices)
         env.reset()
         
         # Action dồn hết 100% vào tài sản 0 (tăng 1% mỗi ngày)
@@ -53,14 +64,14 @@ class TestTradingEnv:
         assert np.isclose(info["turnover"], 1.0)
         assert np.isclose(info["cost_rate"], 0.001)
         
-        # Gross Return của Asset 0 = 1% = 0.01; net return trừ phí 0.1%.
-        assert np.isclose(info["net_return"], 0.009)
-        
-        # Vốn = 100000 * 1.009 = 100900
-        assert np.isclose(env.portfolio.portfolio_value, 100900.0)
+        # Initial cash earns overnight interest; buy at next open, then earn 1%.
+        overnight_cash_growth = np.sqrt(1.0 + 0.02 / 252)
+        expected_value = 100000.0 * overnight_cash_growth * (1.0 - 0.001) * 1.01
+        assert np.isclose(info["net_return"], expected_value / 100000.0 - 1.0)
+        assert np.isclose(env.portfolio.portfolio_value, expected_value)
         
         # Bước 2: AI quyết định giữ nguyên (Hold) Asset 0
-        obs, reward, terminated, truncated, info = env.step(action)
+        obs, reward, terminated, truncated, info = env.step(PortfolioOrder.hold())
         
         # AI hold => Không mất phí (Turnover = 0)
         assert np.isclose(info["cost_rate"], 0.0)
@@ -68,16 +79,15 @@ class TestTradingEnv:
         # Lợi nhuận ròng = Lợi nhuận gộp = 1%
         assert np.isclose(info["net_return"], 0.01)
         
-        # Vốn mới = 100900 * 1.01 = 101909
-        assert np.isclose(env.portfolio.portfolio_value, 101909.0)
+        assert np.isclose(env.portfolio.portfolio_value, expected_value * 1.01)
 
-    def test_equal_weight_reward_baseline_only_changes_training_reward(self, mock_data):
+    def test_equal_weight_reward_baseline_only_changes_training_reward(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
         for step in range(1, len(open_prices)):
             open_prices[step] = open_prices[step - 1] * 1.01
 
-        raw_env = TradingEnv(market_tensor, open_prices, reward_baseline="none")
-        excess_env = TradingEnv(
+        raw_env = make_env(market_tensor, open_prices, reward_baseline="none")
+        excess_env = make_env(
             market_tensor, open_prices, reward_baseline="equal_weight"
         )
         raw_env.reset(seed=3)
@@ -91,9 +101,9 @@ class TestTradingEnv:
         assert np.isclose(raw_info["net_return"], excess_info["net_return"])
         assert np.isclose(raw_reward - excess_reward, 1.0)
 
-    def test_lookback_observation_is_declared_and_padded(self, mock_data):
+    def test_lookback_observation_is_declared_and_padded(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices, lookback_window=3)
+        env = make_env(market_tensor, open_prices, lookback_window=3)
 
         obs, _ = env.reset()
 
@@ -102,9 +112,9 @@ class TestTradingEnv:
         assert np.array_equal(obs["market_history"][2], market_tensor.tensor[0])
         assert env.observation_space.contains(obs)
 
-    def test_action_alpha_is_applied_inside_environment(self, mock_data):
+    def test_action_alpha_is_applied_inside_environment(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices, action_alpha=0.5)
+        env = make_env(market_tensor, open_prices, action_alpha=0.5)
         env.reset(seed=4)
 
         _, _, _, _, info = env.step(np.array([1.0, 0.0, 0.0, 0.0]))
@@ -113,21 +123,21 @@ class TestTradingEnv:
         assert np.isclose(info["cost_rate"], 0.0005)
         assert env.portfolio.weights.dtype == np.float32
 
-    def test_action_rejects_nonfinite_weights(self, mock_data):
+    def test_action_rejects_nonfinite_weights(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices)
+        env = make_env(market_tensor, open_prices)
         env.reset()
 
         with pytest.raises(ValueError, match="hữu hạn"):
             env.step(np.array([0.5, np.nan, 0.0, 0.0]))
 
-    def test_exhausting_market_data_is_truncated(self, mock_data):
+    def test_exhausting_market_data_is_truncated(self, mock_data, make_env):
         market_tensor, open_prices = mock_data
-        env = TradingEnv(market_tensor, open_prices)
+        env = make_env(market_tensor, open_prices)
         env.reset()
         action = np.array([0.0, 0.0, 0.0, 1.0])
 
-        for _ in range(env.T - 2):
+        for _ in range(env.T - 1):
             _, _, terminated, truncated, _ = env.step(action)
 
         assert not terminated

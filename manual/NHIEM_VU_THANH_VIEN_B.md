@@ -15,6 +15,7 @@ _(DYNAMIC GRAPH + GNN/GAT + PPO BASELINE + LOW-LEVEL SECTOR MARL + GAT COMMUNICA
 >
 > 📖 **Quy chế 70/30 & Lộ trình 5 Level học AI:** Xem chi tiết tại [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md).
 > 🤝 **Bảng điều phối chung với A:** Xem tại [BANG_DIEU_PHOI_2_NGUOI.md](file:///home/tuan/AI/AI_roject1/manual/BANG_DIEU_PHOI_2_NGUOI.md).
+> **Backlog định lượng bổ sung (14/10/2026):** [TICKET_CAI_THIEN_DINH_LUONG.md](TICKET_CAI_THIEN_DINH_LUONG.md). Phân công của B ở mục 5 dưới đây.
 
 ---
 
@@ -360,3 +361,23 @@ _Mục tiêu: Hoàn thiện báo cáo khoa học và đóng gói source code._
     3. - Ownership Edges
     4. - Macro Nodes
   - Phân tích xem loại thông tin phi giá nào mang lại Alpha vượt trội nhất cho danh mục đầu tư.
+
+## 5. Backlog cải thiện định lượng — phân công B
+
+Chi tiết, phụ thuộc, DoD và trạng thái được quản lý tại [backlog QNT](TICKET_CAI_THIEN_DINH_LUONG.md). B là owner chính các ticket dưới đây; A review theo quy chế 70/30.
+
+| Ưu tiên | Ticket của B | Nội dung |
+|---|---|---|
+| P0 | [QNT-001](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-001) | Nghiệm thu contract hiện tại, history mask và cache |
+| P1 | [QNT-007](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-007), [QNT-008](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-008) | Shrinkage graph và SPY residual graph |
+| P1 | [QNT-025](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-025) | Runner ablation, năm seed và báo cáo gate |
+| P2 | [QNT-015](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-015) | Supervised alpha predictor, sau gate tín hiệu |
+| P2 | [QNT-017](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-017), [QNT-018](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-018) | Contract phương pháp học và QP khả vi |
+| P2 | [QNT-019](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-019) | Lead-lag graph và số relation linh hoạt |
+| P2 | [QNT-020](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-020) | RMT/spectral denoising |
+| P2 | [QNT-021](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-021) | Concept nodes, mapping node/action và cache |
+| P2 | [QNT-022](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-022) | Quantile critic và distributional targets |
+
+**Bắt đầu:** QNT-001 rồi dựng phần nền của QNT-025. Khi A bàn giao QNT-006, làm QNT-007 → QNT-008. GNN + GRU và graph ba quan hệ đã có, nên các ticket mới kế thừa đường dữ liệu hiện tại.
+
+B là reviewer các ticket A phụ trách, tập trung batch–stream parity, mask, buffer/schema, checkpoint/resume, gradient và chi phí chạy. Concept nodes đồng bộ với `ADV-GRAPH-*`; nhánh QP/CVaR nâng cao mở theo gate riêng.

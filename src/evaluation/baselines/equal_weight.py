@@ -50,52 +50,11 @@ class EqualWeightBaseline:
         """Strategy interface shared with TradingEnv backtests."""
         return self.get_weights(len(obs["portfolio_weights"]))
 
-    def run(self) -> np.ndarray:
-        """
-        Mô phỏng chiến lược, tái cân bằng hàng ngày.
-        Sử dụng Open-to-Open returns, trả về mảng độ dài T-2.
-        
-        Returns:
-            np.ndarray: Mảng lợi nhuận ròng hàng ngày.
-        """
-        T = self.open_prices.shape[0]
-        net_returns = []
-        
-        # Bắt đầu với 100% tiền mặt
-        current_weights = np.zeros(self.num_assets + 1)
-        current_weights[-1] = 1.0
-        target_weights = self.get_weights(self.num_assets)
-        
-        for t in range(T - 2):
-            # Tính lợi nhuận tài sản từ Open[t+1] đến Open[t+2]
-            p0 = self.open_prices[t+1]
-            p1 = self.open_prices[t+2]
-            # Xử lý trường hợp p0 == 0
-            asset_returns = np.where(p0 > 0, (p1 - p0) / p0, 0.0)
-            
-            # Khớp tỷ trọng (Giao dịch)
-            turnover = np.sum(
-                np.abs(target_weights[:-1] - current_weights[:-1])
-            )
-            tc = self.c * turnover
-            
-            # Lợi nhuận gộp danh mục
-            gross_return = np.sum(target_weights[:-1] * asset_returns) + target_weights[-1] * self.rf_daily
-            
-            # Lợi nhuận ròng
-            net_return = gross_return - tc
-            net_returns.append(net_return)
-            
-            # Tỷ trọng trôi dạt (drifted weights) cho bước tiếp theo
-            new_weights = np.zeros(self.num_assets + 1)
-            new_weights[:-1] = target_weights[:-1] * (1 + asset_returns)
-            new_weights[-1] = target_weights[-1] * (1 + self.rf_daily)
-            
-            total_value = np.sum(new_weights)
-            if total_value > 0:
-                current_weights = new_weights / total_value
-            else:
-                current_weights = np.zeros(self.num_assets + 1)
-                current_weights[-1] = 1.0
-                
-        return np.array(net_returns)
+    def run(self, *, close_prices: np.ndarray, action_alpha: float = 1.0,
+            max_asset_weight: float = 1.0, dates=None) -> np.ndarray:
+        """Use TradingEnv's causal T-1-step simulation, including execution costs."""
+        from src.evaluation.baselines.simulation import simulate_baseline
+        return simulate_baseline(
+            self, self.open_prices, close_prices, self.c, self.rf_daily * 252,
+            action_alpha=action_alpha, max_asset_weight=max_asset_weight, dates=dates,
+        )

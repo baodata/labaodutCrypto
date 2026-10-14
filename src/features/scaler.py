@@ -73,7 +73,10 @@ class MarketFeatureScaler:
             t, n, f = train_data.tensor.shape
             # Tính toán thống kê gộp qua cả trục thời gian T và tài sản N cho từng feature
             # shape: [T * N, F]
-            reshaped = train_data.tensor.reshape(-1, f)
+            ready = train_data.tensor[train_data.feature_ready]
+            if not len(ready):
+                raise ValueError("Train chưa có feature sau warm-up để fit scaler.")
+            reshaped = ready.reshape(-1, f)
             mu = np.mean(reshaped, axis=0)
             sigma = np.std(reshaped, axis=0)
 
@@ -132,6 +135,7 @@ class MarketFeatureScaler:
                 tickers=list(data.tickers),
                 feature_names=list(data.feature_names),
                 dates=list(data.dates),
+                warmup_sessions=data.warmup_sessions,
             )
             out_obj.validate()
             return out_obj
@@ -179,7 +183,17 @@ class MarketFeatureScaler:
         path = Path(file_path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        payload = {
+        payload = self.to_dict()
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+
+        return path
+
+    def to_dict(self) -> dict:
+        if not self.is_fitted:
+            raise RuntimeError("Chưa fit scaler.")
+        return {
             "version": "1.0",
             "is_fitted": self.is_fitted,
             "feature_names": self.feature_names,
@@ -188,11 +202,6 @@ class MarketFeatureScaler:
             "eps": self.eps,
             "clip_range": list(self.clip_range) if self.clip_range else None,
         }
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-
-        return path
 
     @classmethod
     def load(cls, file_path: Union[Path, str]) -> "MarketFeatureScaler":
@@ -204,6 +213,17 @@ class MarketFeatureScaler:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
+        return cls.from_dict(data)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "MarketFeatureScaler":
+        if not data.get("is_fitted"):
+            raise ValueError("Scaler checkpoint chưa được fit.")
+        names = data["feature_names"]
+        if len(set(names)) != len(names) or set(names) != set(data["means"]) or set(names) != set(data["stds"]):
+            raise ValueError("Scaler feature metadata không khớp.")
+        if not all(np.isfinite(v) for v in data["means"].values()) or not all(np.isfinite(v) and v >= 0 for v in data["stds"].values()):
+            raise ValueError("Scaler có tham số không hợp lệ.")
         scaler = cls(
             eps=data.get("eps", 1e-8),
             clip_range=tuple(data["clip_range"]) if data.get("clip_range") else None,

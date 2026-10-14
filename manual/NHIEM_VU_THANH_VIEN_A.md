@@ -17,6 +17,7 @@ _(DATA + ENVIRONMENT + PPO BASELINE + HIGH-LEVEL MACRO AGENT + EVALUATION)_
 >
 > 📖 **Quy chế 70/30 & Lộ trình 5 Level học AI:** Xem chi tiết tại [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md).
 > 🤝 **Bảng điều phối chung với B:** Xem tại [BANG_DIEU_PHOI_2_NGUOI.md](file:///home/tuan/AI/AI_roject1/manual/BANG_DIEU_PHOI_2_NGUOI.md).
+> **Backlog định lượng bổ sung (14/10/2026):** [TICKET_CAI_THIEN_DINH_LUONG.md](TICKET_CAI_THIEN_DINH_LUONG.md). Phân công của A ở mục 4 dưới đây.
 
 ---
 
@@ -332,3 +333,25 @@ _Mục tiêu: Hoàn tất tài liệu nghiên cứu và đảm bảo chạy lạ
 
 - [ ] **[FINAL-001] Tái lập kết quả từ môi trường sạch (P0 - Chung)**
   - Clone repo ra một máy/môi trường mới, chạy script từ bước tải data đến xuất báo cáo kết quả xem có lỗi nào không.
+
+## 4. Backlog cải thiện định lượng — phân công A
+
+Chi tiết, phụ thuộc, DoD và trạng thái được quản lý tại [backlog QNT](TICKET_CAI_THIEN_DINH_LUONG.md). A là owner chính các ticket dưới đây; B review theo quy chế 70/30.
+
+| Ưu tiên | Ticket của A | Nội dung |
+|---|---|---|
+| P0 | [QNT-002](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-002) | Đóng băng protocol, matched baseline và gate |
+| P0 | [QNT-003](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-003) | Rank-IC ngoài mẫu, baseline tuyến tính và gate tín hiệu |
+| P1 | [QNT-004](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-004), [QNT-005](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-005) | Cross-sectional và rolling normalization |
+| P1 | [QNT-006](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-006) | Covariance risk bank EWMA/Ledoit–Wolf |
+| P1 | [QNT-009](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-009) | Walk-forward causal và danh mục liên tục qua fold |
+| P1 | [QNT-010](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-010) | Volatility targeting cùng baseline |
+| P1 | [QNT-011](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-011), [QNT-012](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-012), [QNT-013](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-013) | Liquidity, market impact và adaptive execution |
+| P1 | [QNT-014](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-014) | Differential Sharpe reward có state |
+| P2 | [QNT-016](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-016) | Convex allocator độc lập |
+| P2 | [QNT-023](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-023) | Actor CVaR và gate tail risk |
+| P2 | [QNT-024](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-024) | CPCV research, purge/embargo |
+
+**Bắt đầu:** sau nghiệm thu QNT-001 của B, làm QNT-002 → QNT-003; tiếp theo QNT-004 và QNT-006. Covariance là bàn giao chung để B triển khai shrinkage graph. Các ticket P2 mở theo gate và thời gian của dự án; luồng H-MARL core giữ kế hoạch riêng.
+
+A là reviewer các ticket B phụ trách, tập trung causal timing, return/cost units, baseline công bằng và ý nghĩa của loss/metric.

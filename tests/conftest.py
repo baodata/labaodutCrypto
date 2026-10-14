@@ -5,6 +5,23 @@ cái này tạo data giả lập để test
 import pytest
 import pandas as pd
 import numpy as np
+import yaml
+
+
+@pytest.fixture
+def trading_env_config_path(tmp_path):
+    """Explicit test costs/limits, independent of mutable research configuration."""
+    path = tmp_path / "env.yaml"
+    path.write_text(yaml.safe_dump({"environment": {
+        "initial_balance": 100000.0,
+        "transaction_fee_pct": 0.001,
+        "slippage_pct": 0.0,
+        "max_asset_weight": 1.0,
+        "risk_free_rate": 0.02,
+        "reward_beta": 1.0,
+        "reward_scaling": 100.0,
+    }}), encoding="utf-8")
+    return path
 
 @pytest.fixture(scope="session")
 def synthetic_returns_df():

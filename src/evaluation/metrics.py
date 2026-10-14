@@ -5,6 +5,8 @@ class FinancialMetrics:
     """
     Lớp tính toán các chỉ số đánh giá hiệu quả đầu tư từ chuỗi lợi nhuận hàng ngày.
     """
+    SHARPE_CONVENTION = "daily_arithmetic_excess_sample_std"
+
     def __init__(
         self,
         daily_net_returns: np.ndarray,
@@ -58,11 +60,17 @@ class FinancialMetrics:
             self.annualized_return = 0.0
             
         # 3. Biến động hàng năm (Annualized volatility)
-        self.annualized_volatility = np.std(self.daily_net_returns) * np.sqrt(self.trading_days_per_year)
+        daily_std = float(np.std(self.daily_net_returns, ddof=1)) if T > 1 else 0.0
+        self.annualized_volatility = daily_std * np.sqrt(self.trading_days_per_year)
         
         # 4. Tỷ lệ Sharpe (Sharpe ratio)
-        if self.annualized_volatility > 1e-6:
-            self.sharpe_ratio = (self.annualized_return - self.risk_free_rate_annual) / self.annualized_volatility
+        # Use arithmetic daily excess returns. CAGR remains a separate metric.
+        # The daily risk-free convention matches PortfolioReturnEngine.
+        if daily_std > 1e-12:
+            excess = self.daily_net_returns - self.risk_free_rate_annual / self.trading_days_per_year
+            self.sharpe_ratio = float(
+                np.sqrt(self.trading_days_per_year) * np.mean(excess) / daily_std
+            )
         else:
             self.sharpe_ratio = 0.0
             
@@ -139,6 +147,7 @@ def block_bootstrap_excess_returns(
     block_size: int = 5,
     num_samples: int = 2000,
     seed: int = 42,
+    confidence_level: float = 0.95,
 ) -> dict[str, float]:
     """
     Circular Block Bootstrap (CBB) trên chuỗi excess return hàng ngày (strategy - benchmark).
@@ -148,10 +157,17 @@ def block_bootstrap_excess_returns(
         std_excess_annualized: Sai số chuẩn của excess return năm hóa.
         ci_lower_95: Cận dưới khoảng tin cậy 95%.
         ci_upper_95: Cận trên khoảng tin cậy 95%.
-        p_value_excess_le_0: Tỷ lệ mẫu bootstrap có excess return <= 0 (p-value 1 phía).
+        p_value_positive_excess: One-sided test under centered H0: mean excess = 0.
+        bootstrap_fraction_excess_le_0: Descriptive tail fraction, not a null p-value.
     """
     strategy_returns = np.asarray(strategy_returns, dtype=np.float64)
     benchmark_returns = np.asarray(benchmark_returns, dtype=np.float64)
+    if strategy_returns.ndim != 1 or strategy_returns.shape != benchmark_returns.shape:
+        raise ValueError("Strategy và benchmark phải là chuỗi một chiều cùng độ dài.")
+    if not np.isfinite(strategy_returns).all() or not np.isfinite(benchmark_returns).all():
+        raise ValueError("Returns bootstrap phải hữu hạn.")
+    if num_samples <= 0 or not 0.0 < confidence_level < 1.0:
+        raise ValueError("Số mẫu bootstrap/confidence_level không hợp lệ.")
     excess = strategy_returns - benchmark_returns
     T = len(excess)
     if T < block_size or block_size <= 0:
@@ -159,22 +175,26 @@ def block_bootstrap_excess_returns(
     
     rng = np.random.default_rng(seed)
     num_blocks = int(np.ceil(T / block_size))
-    circular_excess = np.concatenate([excess, excess[:block_size]])
-    
-    boot_means = []
-    for _ in range(num_samples):
-        start_indices = rng.integers(0, T, size=num_blocks)
-        sampled_blocks = [circular_excess[i : i + block_size] for i in start_indices]
-        sample = np.concatenate(sampled_blocks)[:T]
-        boot_means.append(np.mean(sample))
-        
-    boot_means = np.array(boot_means)
+    boot_means = np.empty(num_samples, dtype=np.float64)
+    offsets = np.arange(block_size)
+    for first in range(0, num_samples, 256):
+        count = min(256, num_samples - first)
+        starts = rng.integers(0, T, size=(count, num_blocks))
+        indices = (starts[..., None] + offsets) % T
+        samples = excess[indices].reshape(count, -1)[:, :T]
+        boot_means[first:first + count] = samples.mean(axis=1)
     annualized_means = boot_means * 252.0
+    observed = float(np.mean(excess) * 252.0)
+    # The same block draws from centered returns implement the boundary null.
+    centered_null_means = annualized_means - observed
+    p_positive = (1 + np.count_nonzero(centered_null_means >= observed)) / (num_samples + 1)
+    tail = (1.0 - confidence_level) / 2.0
     
     return {
-        "mean_excess_annualized": float(np.mean(annualized_means)),
+        "mean_excess_annualized": observed,
         "std_excess_annualized": float(np.std(annualized_means)),
-        "ci_lower_95": float(np.percentile(annualized_means, 2.5)),
-        "ci_upper_95": float(np.percentile(annualized_means, 97.5)),
-        "p_value_excess_le_0": float(np.mean(annualized_means <= 0.0)),
+        "ci_lower_95": float(np.quantile(annualized_means, tail)),
+        "ci_upper_95": float(np.quantile(annualized_means, 1.0 - tail)),
+        "p_value_positive_excess": float(p_positive),
+        "bootstrap_fraction_excess_le_0": float(np.mean(annualized_means <= 0.0)),
     }

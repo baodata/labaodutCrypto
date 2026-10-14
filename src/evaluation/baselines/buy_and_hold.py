@@ -1,5 +1,7 @@
 import numpy as np
 
+from src.env.orders import PortfolioOrder
+
 class BuyAndHoldBaseline:
     """
     Chiến lược Mua và Giữ (Buy and Hold).
@@ -40,59 +42,20 @@ class BuyAndHoldBaseline:
         weights[:-1] = 1.0 / num_assets
         return weights
 
-    def __call__(self, obs: dict, info: dict | None = None) -> np.ndarray:
-        """Buy once, then retain the environment's naturally drifted weights."""
+    def __call__(self, obs: dict, info: dict | None = None) -> PortfolioOrder:
+        """Allocate fully at the first open, then keep share quantities unchanged."""
         if info is not None and info.get("step", 0) == 0:
-            return self.get_initial_weights(len(obs["portfolio_weights"]))
-        return np.concatenate((obs["portfolio_weights"], obs["cash_ratio"])).astype(np.float32)
+            return PortfolioOrder.rebalance(
+                self.get_initial_weights(len(obs["portfolio_weights"])),
+                action_alpha=1.0,
+            )
+        return PortfolioOrder.hold()
 
-    def run(self) -> np.ndarray:
-        """
-        Mô phỏng chiến lược, chỉ trả chi phí giao dịch vào ngày 0.
-        Sử dụng Open-to-Open returns, trả về mảng độ dài T-2.
-        
-        Returns:
-            np.ndarray: Mảng lợi nhuận ròng hàng ngày.
-        """
-        T = self.open_prices.shape[0]
-        net_returns = []
-        
-        # Bắt đầu với 100% tiền mặt
-        current_weights = np.zeros(self.num_assets + 1)
-        current_weights[-1] = 1.0
-        
-        # Mua vào ngày 0
-        target_weights = self.get_initial_weights(self.num_assets)
-        tc_initial = self.c * np.sum(
-            np.abs(target_weights[:-1] - current_weights[:-1])
+    def run(self, *, close_prices: np.ndarray, action_alpha: float = 1.0,
+            max_asset_weight: float = 1.0, dates=None) -> np.ndarray:
+        """Use TradingEnv's causal T-1-step simulation, including execution costs."""
+        from src.evaluation.baselines.simulation import simulate_baseline
+        return simulate_baseline(
+            self, self.open_prices, close_prices, self.c, self.rf_daily * 252,
+            action_alpha=action_alpha, max_asset_weight=max_asset_weight, dates=dates,
         )
-        
-        current_weights = target_weights
-        
-        for t in range(T - 2):
-            p0 = self.open_prices[t+1]
-            p1 = self.open_prices[t+2]
-            asset_returns = np.where(p0 > 0, (p1 - p0) / p0, 0.0)
-            
-            gross_return = np.sum(current_weights[:-1] * asset_returns) + current_weights[-1] * self.rf_daily
-            
-            if t == 0:
-                net_return = gross_return - tc_initial
-            else:
-                net_return = gross_return # tc = 0
-                
-            net_returns.append(net_return)
-            
-            # Cập nhật tỷ trọng trôi dạt
-            new_weights = np.zeros(self.num_assets + 1)
-            new_weights[:-1] = current_weights[:-1] * (1 + asset_returns)
-            new_weights[-1] = current_weights[-1] * (1 + self.rf_daily)
-            
-            total_value = np.sum(new_weights)
-            if total_value > 0:
-                current_weights = new_weights / total_value
-            else:
-                current_weights = np.zeros(self.num_assets + 1)
-                current_weights[-1] = 1.0
-                
-        return np.array(net_returns)

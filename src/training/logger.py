@@ -3,6 +3,7 @@ src/training/logger.py
 Bộ ghi chép Nhật ký Huấn luyện (Logger) và Lưu trữ Mô hình (Checkpoint).
 """
 import os
+from uuid import uuid4
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
@@ -25,6 +26,22 @@ class TrainerLogger:
     def log_metrics(self, step: int, metrics: dict):
         for tag, value in metrics.items():
             self.writer.add_scalar(tag, value, step)
+        self.writer.flush()
+
+    @staticmethod
+    def _atomic_save(checkpoint, path):
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + f".{uuid4().hex}.tmp")
+        torch.save(checkpoint, tmp)
+        tmp.replace(path)
+
+    def save_latest(self, step, model, optimizer, metadata):
+        checkpoint = {
+            "step": step, "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(), **metadata,
+        }
+        self._atomic_save(checkpoint, self.checkpoint_dir / "last.pth")
             
     def save_checkpoint(
         self,
@@ -45,11 +62,11 @@ class TrainerLogger:
         }
         if metadata:
             checkpoint.update(metadata)
-        torch.save(checkpoint, self.checkpoint_dir / f"checkpoint_step_{step}.pth")
+        self._atomic_save(checkpoint, self.checkpoint_dir / f"checkpoint_step_{step}.pth")
         
         if current_reward > self.best_reward:
             self.best_reward = current_reward
-            torch.save(checkpoint, self.checkpoint_dir / self.best_checkpoint_name)
+            self._atomic_save(checkpoint, self.checkpoint_dir / self.best_checkpoint_name)
             
     def close(self):
         self.writer.close()

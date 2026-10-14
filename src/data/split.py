@@ -138,7 +138,8 @@ class TemporalSplitter:
         """Phân chia MarketDataTensor [T, N, F] dọc theo trục thời gian T."""
         date_series = pd.to_datetime(tensor_obj.dates)
 
-        train_indices = np.where(date_series <= self.train_end)[0]
+        tensor_obj.validate()
+        train_indices = np.where((date_series <= self.train_end) & tensor_obj.feature_ready)[0]
         val_indices = np.where((date_series >= self.val_start) & (date_series <= self.val_end))[0]
         test_indices = np.where(date_series >= self.test_start)[0]
 
@@ -150,18 +151,21 @@ class TemporalSplitter:
             tickers=list(tensor_obj.tickers),
             feature_names=list(tensor_obj.feature_names),
             dates=[tensor_obj.dates[i] for i in train_indices],
+            warmup_sessions=max(0, tensor_obj.warmup_sessions - int(train_indices[0])),
         )
         val_tensor = MarketDataTensor(
             tensor=tensor_obj.tensor[val_indices, :, :].copy(),
             tickers=list(tensor_obj.tickers),
             feature_names=list(tensor_obj.feature_names),
             dates=[tensor_obj.dates[i] for i in val_indices],
+            warmup_sessions=max(0, tensor_obj.warmup_sessions - int(val_indices[0])),
         )
         test_tensor = MarketDataTensor(
             tensor=tensor_obj.tensor[test_indices, :, :].copy(),
             tickers=list(tensor_obj.tickers),
             feature_names=list(tensor_obj.feature_names),
             dates=[tensor_obj.dates[i] for i in test_indices],
+            warmup_sessions=max(0, tensor_obj.warmup_sessions - int(test_indices[0])),
         )
 
         train_tensor.validate()

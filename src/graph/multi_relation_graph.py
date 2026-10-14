@@ -40,7 +40,7 @@ class MultiRelationGraphBuilder:
         
         # Khởi tạo GRAPH-004
         self.dynamic_gen = DynamicGraphGenerator(
-            rolling_corr_df, threshold, mode=graph_mode, top_k=top_k
+            rolling_corr_df, threshold, mode=graph_mode, top_k=top_k, tickers=tickers
         )
         
         # Khởi tạo GRAPH-003
@@ -60,7 +60,7 @@ class MultiRelationGraphBuilder:
         edge_index: torch.Tensor,
         edge_weight: torch.Tensor,
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        positive_mask = edge_weight >= 0
+        positive_mask = edge_weight > 0
         negative_mask = edge_weight < 0
         positive = (edge_index[:, positive_mask], edge_weight[positive_mask])
         negative = (
@@ -84,6 +84,17 @@ class MultiRelationGraphBuilder:
         )
         return positive, negative, (self.sec_edge_index, self.sec_edge_weight)
 
+    def build_relations_from_matrix(self, corr_matrix: np.ndarray) -> tuple:
+        """Live relation API, identical to the relation layout used for training."""
+        from src.graph.builder import generate_correlation_edges
+        if np.asarray(corr_matrix).shape != (len(self.tickers), len(self.tickers)):
+            raise ValueError("Correlation shape không khớp thứ tự tickers của builder.")
+        edges, weights = generate_correlation_edges(
+            corr_matrix, threshold=self.threshold, mode=self.graph_mode, top_k=self.top_k
+        )
+        positive, negative = self._split_signed_correlation(edges, weights)
+        return positive, negative, (self.sec_edge_index, self.sec_edge_weight)
+
     def build_from_matrix(
         self,
         corr_matrix: np.ndarray,
@@ -91,7 +102,7 @@ class MultiRelationGraphBuilder:
         mode: Literal["threshold", "knn", "dynamic_threshold"] | None = None,
         top_k: int | None = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Gộp cả Tương quan và Ngành từ ma trận trực tiếp (Dành cho Adapter và Live Trading)."""
+        """Legacy flattened API; checkpoint inference uses build_relations_from_matrix."""
         from src.graph.dynamic_graph import generate_correlation_edges
         corr_edge_index, corr_edge_weight = generate_correlation_edges(
             corr_matrix,

@@ -44,8 +44,10 @@ def calculate_risk_features(
     parkinson_vol = np.sqrt(
         parkinson_variance.rolling(window=20, min_periods=1).mean()
     )
-    negative_returns = daily_returns.where(daily_returns < 0.0)
-    downside_vol = negative_returns.rolling(window=20, min_periods=2).std(ddof=1)
+    # Downside semideviation around zero, including non-negative days as zeros.
+    downside_vol = np.sqrt(
+        daily_returns.clip(upper=0.0).pow(2).rolling(window=20, min_periods=2).mean()
+    )
 
     previous_close = close.shift(1)
     true_range = pd.concat(
