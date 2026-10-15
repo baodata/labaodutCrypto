@@ -335,8 +335,8 @@ class PPOUpdater:
                     first_kl = approx_kl
                 max_kl = approx_kl if not np.isfinite(max_kl) else max(max_kl, approx_kl)
 
-                # Do not apply a minibatch update that already exceeds the KL guard.
-                if approx_kl > 1.5 * self.target_kl:
+                # Do not apply a minibatch update that already exceeds the KL guard once learning has started.
+                if minibatches_completed > 0 and approx_kl > 1.5 * self.target_kl:
                     stopped_early = True
                     stop_kl = approx_kl
                     optimizer.zero_grad(set_to_none=True)

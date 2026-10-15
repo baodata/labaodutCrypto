@@ -111,8 +111,8 @@ def test_end_to_end_train_val_test_pipeline():
     pipeline = FeaturePipeline()
     _, full_tensor = pipeline.run_from_raw(raw_dir=raw_dir, export_parquet=True)
 
-    # 2. Split thời gian
-    splitter = TemporalSplitter()
+    # 2. Split thời gian theo cấu hình assets.yaml
+    splitter = TemporalSplitter.from_config()
     split_res = splitter.split_market_data_tensor(full_tensor)
 
     # 3. Fit scaler CHỈ trên tập Train

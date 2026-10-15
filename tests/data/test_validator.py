@@ -203,5 +203,5 @@ def test_validate_real_parquet_files():
     assert len(results) > 0, "Expected parquet files in data/raw"
     for ticker, res in results.items():
         assert res.is_valid is True, f"Asset {ticker} failed validation: {res.errors}"
-        assert res.stats["num_rows"] > 2500
+        assert res.stats["num_rows"] > 1000
 

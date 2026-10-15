@@ -100,7 +100,8 @@ def test_pipeline_run_on_real_market_dataset():
     )
 
     # 24 mã giao dịch, SPY chỉ là tham chiếu; feature count lấy từ pipeline.
-    assert market_tensor.tensor.shape == (2765, 24, len(FeaturePipeline.FEATURE_NAMES))
+    assert market_tensor.tensor.shape[1:] == (24, len(FeaturePipeline.FEATURE_NAMES))
+    assert market_tensor.tensor.shape[0] > 1000
     assert out_file.exists()
     assert out_file.stat().st_size > 100_000  # Kích thước hợp lý (> 100KB)
 

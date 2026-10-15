@@ -48,6 +48,7 @@ from src.models.policy_adapter import observation_vector, graph_tensors_from_obs
 from src.models.market_cache import prepare_market_cache
 from src.training.logger import TrainerLogger
 from src.training.ppo_core import PPOBuffer, PPOUpdater
+from src.utils.config import AssetsConfig
 from src.utils.data_types import MarketDataTensor
 from src.utils.artifacts import atomic_csv, atomic_json, file_hashes, new_run_directory, rng_state, restore_rng_state
 from src.utils.progress import PhaseProgress
@@ -61,10 +62,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/model.yaml")
     parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
-    parser.add_argument("--train-end", default=TemporalSplitter.DEFAULT_TRAIN_END)
-    parser.add_argument("--val-start", default=TemporalSplitter.DEFAULT_VAL_START)
-    parser.add_argument("--val-end", default=TemporalSplitter.DEFAULT_VAL_END)
-    parser.add_argument("--test-start", default=TemporalSplitter.DEFAULT_TEST_START)
+    parser.add_argument(
+        "--assets-config",
+        type=Path,
+        default=PROJECT_ROOT / "configs/assets.yaml",
+        help="Đường dẫn file cấu hình vũ trụ cổ phiếu và phân chia dữ liệu (mặc định: configs/assets.yaml).",
+    )
+    parser.add_argument(
+        "--train-end",
+        default=None,
+        help="Mốc kết thúc tập train (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--val-start",
+        default=None,
+        help="Mốc bắt đầu tập validation (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--val-end",
+        default=None,
+        help="Mốc kết thúc tập validation (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
+    parser.add_argument(
+        "--test-start",
+        default=None,
+        help="Mốc bắt đầu tập test/OOS (YYYY-MM-DD). Mặc định đọc từ assets.yaml.",
+    )
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--ppo-iters", type=int, default=10)
     parser.add_argument("--batch-size", type=int, default=None)
@@ -131,9 +154,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hidden-dim", type=int, default=128)
     parser.add_argument(
         "--encoder",
-        choices=("mlp", "lstm", "gru", "gnn"),
+        choices=("mlp", "lstm", "gru", "gnn", "gcn", "gat"),
         default="gru",
-        help="Loại encoder: gru mặc định; cũng hỗ trợ lstm, mlp và gnn động.",
+        help="Loại encoder: gru mặc định; cũng hỗ trợ lstm, mlp, gnn động, gcn và gat.",
     )
     parser.add_argument(
         "--gnn-architecture",
@@ -143,7 +166,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--gnn-hidden-channels", type=int, default=None)
     parser.add_argument("--gnn-out-channels", type=int, default=None)
-    parser.add_argument("--gnn-heads", type=int, default=None)
+    parser.add_argument("--gnn-heads", type=int, default=4, help="Số head attention cho GAT/GNN.")
+    parser.add_argument("--gnn-dropout", type=float, default=0.0, help="Dropout cho GNN (mặc định 0.0 cho PPO).")
+    parser.add_argument("--gnn-knn", type=int, default=5, help="Số hàng xóm k-NN cho Dynamic Graph (mặc định 5).")
     parser.add_argument(
         "--rnn-layers",
         type=int,
@@ -231,6 +256,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--scaler-output",
         type=Path,
         default=PROJECT_ROOT / "data/processed/scaler_params.json",
+    )
+    parser.add_argument(
+        "--run-name",
+        default=None,
+        help="Tên định danh cho chiến lược PPO trong file metrics (mặc định: tự sinh từ cấu hình).",
+    )
+    parser.add_argument(
+        "--overwrite-metrics",
+        action="store_true",
+        help="Ghi đè hoàn toàn file metrics thay vì ghi nối tiếp (append).",
     )
     return parser
 
@@ -505,20 +540,58 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         export_parquet=args.resume is None,
         output_file=args.processed_output,
     )
+    # Phân chia dữ liệu theo thứ tự ưu tiên: CLI > configs/assets.yaml > Tự động tỷ lệ
+    train_end = args.train_end
+    val_start = args.val_start
+    val_end = args.val_end
+    test_start = args.test_start
 
+    assets_config_path = getattr(args, "assets_config", PROJECT_ROOT / "configs/assets.yaml")
+    if Path(assets_config_path).exists():
+        assets_cfg = AssetsConfig(str(assets_config_path))
+        cfg_splits = assets_cfg.get_split_dates()
+        train_end = train_end or cfg_splits.get("train_end")
+        val_start = val_start or cfg_splits.get("val_start")
+        val_end = val_end or cfg_splits.get("val_end")
+        test_start = test_start or cfg_splits.get("test_start")
 
-    split = TemporalSplitter(
-        train_end=args.train_end,
-        val_start=args.val_start,
-        val_end=args.val_end,
-        test_start=args.test_start,
-    ).split_market_data_tensor(full_tensor)
+    # Kiểm tra tính tương thích giữa mốc split và dải ngày thực tế của full_tensor
+    tensor_start = pd.Timestamp(full_tensor.dates[0])
+    tensor_end = pd.Timestamp(full_tensor.dates[-1])
+
+    need_auto = False
+    if not (train_end and val_start and val_end and test_start):
+        need_auto = True
+    else:
+        t_end = pd.Timestamp(train_end)
+        v_start = pd.Timestamp(val_start)
+        v_end = pd.Timestamp(val_end)
+        t_start = pd.Timestamp(test_start)
+        if not (tensor_start <= t_end < v_start <= v_end < t_start <= tensor_end):
+            need_auto = True
+
+    if need_auto:
+        print(
+            f"[CẢNH BÁO] Các mốc split ({train_end}, {val_start}, {val_end}, {test_start}) "
+            f"không khớp với dải ngày dữ liệu thực tế ({tensor_start.date()} -> {tensor_end.date()}). "
+            f"Hệ thống tự động phân chia theo tỷ lệ 70% Train / 15% Val / 15% Test."
+        )
+        splitter = TemporalSplitter.from_dates(full_tensor.dates, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15)
+    else:
+        splitter = TemporalSplitter(
+            train_end=train_end,
+            val_start=val_start,
+            val_end=val_end,
+            test_start=test_start,
+        )
+
+    split = splitter.split_market_data_tensor(full_tensor)
     with args.env_config.open("r", encoding="utf-8") as stream:
         configured_lookback = yaml.safe_load(stream)["environment"].get("lookback_window", 20)
     lookback = int(configured_lookback if args.lookback is None else args.lookback)
     if lookback <= 0:
         raise ValueError("--lookback phải lớn hơn 0.")
-    if full_tensor.warmup_sessions:
+    if getattr(full_tensor, "warmup_sessions", 0):
         offset = lookback - 1
         if len(split.train.dates) <= offset + 2:
             raise ValueError("Train không đủ dữ liệu sau feature warm-up và lookback.")
@@ -1092,10 +1165,13 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     obs_dim = lookback * n_assets * n_features + n_assets + 1
     action_dim = n_assets + 1
     encoder = getattr(args, "encoder", "gru")
-    if encoder not in {"mlp", "lstm", "gru", "gnn"}:
-        raise ValueError("--encoder phải là 'mlp', 'lstm', 'gru' hoặc 'gnn'.")
+    if encoder not in {"mlp", "lstm", "gru", "gnn", "gcn", "gat"}:
+        raise ValueError("--encoder phải là 'mlp', 'lstm', 'gru', 'gnn', 'gcn' hoặc 'gat'.")
     rnn_layers = int(getattr(args, "rnn_layers", 1))
     rnn_dropout = float(getattr(args, "rnn_dropout", 0.0))
+    gnn_heads = int(getattr(args, "gnn_heads", 4))
+    gnn_dropout = float(getattr(args, "gnn_dropout", 0.1))
+    gnn_knn = int(getattr(args, "gnn_knn", 5))
     if rnn_layers <= 0:
         raise ValueError("--rnn-layers phải lớn hơn 0.")
     if not np.isfinite(rnn_dropout) or not 0.0 <= rnn_dropout < 1.0:
@@ -1125,6 +1201,10 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         "rnn_layers": rnn_layers,
         "rnn_dropout": rnn_dropout,
         "dirichlet_kappa": dirichlet_kappa,
+        "gnn_heads": gnn_heads,
+        "gnn_dropout": gnn_dropout,
+        "gnn_knn": gnn_knn,
+        "tickers": tickers,
     }
     graph_adjacency_sequence = None
     graph_edge_mask_sequence = None
@@ -1301,6 +1381,9 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "graph_date_indexing": "observation_date_t" if encoder == "gnn" else None,
             "graph_config": graph_metadata,
             "graph_relation_channels": list(GRAPH_RELATIONS) if encoder == "gnn" else None,
+            "gnn_heads": gnn_heads if encoder in {"gat", "gnn"} else None,
+            "gnn_dropout": gnn_dropout if encoder in {"gat", "gcn"} else None,
+            "gnn_knn": gnn_knn if encoder in {"gat", "gcn"} else None,
             "action_alpha": args.action_alpha,
             "tickers": tickers,
             "feature_names": full_tensor.feature_names,
@@ -1348,7 +1431,11 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         + (
             f"obs={obs_dim} (flatten)"
             if encoder == "mlp"
-            else f"[{lookback}, {n_assets}, {n_features}]→h_{args.hidden_dim}"
+            else (
+                f"Dynamic Graph GNN (k-NN={gnn_knn}, D={args.hidden_dim})"
+                if encoder in {"gat", "gcn"}
+                else f"[{lookback}, {n_assets}, {n_features}]→h_{args.hidden_dim}"
+            )
         )
         + f", actions={action_dim}, device={device}, minibatch={batch_size}."
     )
@@ -2037,12 +2124,13 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 f"| policy loss={update_stats['LossPi']:.4f} "
                 f"| value loss={update_stats['LossV']:.4f} "
                 f"| EV={update_stats['ExplainedVar']:.3f} "
-                f"| train return={train_eval_metrics['cumulative_return']:.2%} "
+                f"\n| train return={train_eval_metrics['cumulative_return']:.2%} "
                 f"| train profit={train_eval_metrics['profit']:+,.2f} "
                 f"| train total={train_eval_metrics['final_value']:,.2f} "
                 f"| train Sharpe={train_eval_metrics['sharpe_ratio']:.3f} "
                 f"(Δ1/N {train_sharpe_delta_1n:+.3f}, Δ1/N+cash {train_sharpe_delta_1n_cash:+.3f}) "
-                f"| val return={val_metrics['cumulative_return']:.2%} "
+                f"| train return Δ1/N={train_return_delta_1n:+.2%} "
+                f"\n| val return={val_metrics['cumulative_return']:.2%} "
                 f"| val profit={val_metrics['profit']:+,.2f} "
                 f"| val total={val_metrics['final_value']:,.2f} "
                 f"| val Sharpe={val_metrics['sharpe_ratio']:.3f} "
@@ -2128,6 +2216,54 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         "matched_cash_ratio": matched_cash,
         "run_dir": args._run_dir,
     }
+
+
+def save_or_append_metrics(
+    metrics_path: Path,
+    new_metrics: pd.DataFrame,
+    overwrite: bool = False,
+) -> pd.DataFrame:
+    """Lưu bảng metrics vào CSV:
+    - Nếu file đã tồn tại và overwrite=False: Giữ nguyên các hàng baseline (1/N, Buy & Hold, Cash)
+      ở trên cùng, giữ lại các mô hình PPO cũ đã chạy trước đó, và ghi nối tiếp (hoặc cập nhật)
+      kết quả của mô hình PPO mới.
+    - Đảm bảo 3 hàng baseline luôn đứng ở đầu file CSV.
+    """
+    baseline_names = ["Equal Weight (1/N)", "Buy & Hold", "Cash"]
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if overwrite or not metrics_path.exists():
+        combined_df = new_metrics.copy()
+    else:
+        try:
+            existing_df = pd.read_csv(metrics_path, index_col=0)
+            # Lấy baseline từ new_metrics nếu có, hoặc từ existing_df
+            base_df = new_metrics.loc[[b for b in baseline_names if b in new_metrics.index]]
+            if base_df.empty:
+                base_df = existing_df.loc[[b for b in baseline_names if b in existing_df.index]]
+
+            # Lấy các mô hình PPO đã lưu trước đó (loại bỏ baseline, loại bỏ 'PPO' cũ và PPO đang chạy)
+            curr_ppo_names = [idx for idx in new_metrics.index if idx not in baseline_names]
+            old_ppos = existing_df.loc[
+                [idx for idx in existing_df.index if idx not in baseline_names and idx not in curr_ppo_names and idx != "PPO"]
+            ]
+
+            # Lấy PPO của lượt chạy hiện tại
+            curr_ppos = new_metrics.loc[curr_ppo_names]
+
+            # Ghép lại bằng pd.concat
+            combined_df = pd.concat([base_df, old_ppos, curr_ppos], axis=0)
+        except Exception as e:
+            print(f"[CẢNH BÁO] Không thể đọc file metrics cũ ({e}), tạo file mới.")
+            combined_df = new_metrics.copy()
+
+    # Sắp xếp hàng: 3 baselines ở đầu tiên, theo sau là các PPO runs
+    top_rows = [b for b in baseline_names if b in combined_df.index]
+    other_rows = [r for r in combined_df.index if r not in baseline_names]
+    combined_df = combined_df.loc[top_rows + other_rows]
+
+    combined_df.to_csv(metrics_path)
+    return combined_df
 
 
 def evaluate_test(
@@ -2228,9 +2364,9 @@ def _evaluate_test(
             cash_ratio=matched_cash,
         )
     )
+
+    # Thứ tự: 1/N, Buy & Hold, Cash ở đầu tiên, theo sau là các baselines và PPO
     results = {
-        "PPO": ppo_result,
-        matched_name: matched_baseline_result,
         "Equal Weight (1/N)": baseline_backtester.run_strategy(
             EqualWeightBaseline(
                 open_prices=context["test_open"],
@@ -2238,15 +2374,6 @@ def _evaluate_test(
                 transaction_cost_rate=float(env_config["transaction_cost_rate"]),
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
                 cash_ratio=0.0,
-            )
-        ),
-        "1/N + Cash 4.4%": baseline_backtester.run_strategy(
-            EqualWeightBaseline(
-                open_prices=context["test_open"],
-                num_assets=n_assets,
-                transaction_cost_rate=float(env_config["transaction_cost_rate"]),
-                risk_free_rate_annual=float(env_config["risk_free_rate"]),
-                cash_ratio=0.044,
             )
         ),
         "Buy & Hold": baseline_backtester.run_strategy(
@@ -2263,7 +2390,19 @@ def _evaluate_test(
                 risk_free_rate_annual=float(env_config["risk_free_rate"]),
             )
         ),
+        "1/N + Cash 4.4%": baseline_backtester.run_strategy(
+            EqualWeightBaseline(
+                open_prices=context["test_open"],
+                num_assets=n_assets,
+                transaction_cost_rate=float(env_config["transaction_cost_rate"]),
+                risk_free_rate_annual=float(env_config["risk_free_rate"]),
+                cash_ratio=0.044,
+            )
+        ),
+        matched_name: matched_baseline_result,
+        "PPO": ppo_result,
     }
+
     metrics = backtester.compare(
         results,
         risk_free_rate_annual=float(env_config["risk_free_rate"]),
@@ -2349,15 +2488,98 @@ def _evaluate_test(
     metrics.loc["PPO", "cbb_ci_lower_95"] = cbb_stats["ci_lower_95"]
     metrics.loc["PPO", "cbb_ci_upper_95"] = cbb_stats["ci_upper_95"]
     metrics.loc["PPO", "cbb_p_value"] = cbb_stats["p_value_positive_excess"]
-    args.metrics_output.parent.mkdir(parents=True, exist_ok=True)
-    atomic_csv(metrics, args.metrics_output)
+
+    # Ghi lại các thông số cấu hình môi trường và mô hình
+    meta_info = {
+        "Equal Weight (1/N)": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "1.0",
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "Buy & Hold": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "1.0",
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "Cash": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "-",
+            "cost_rate": "0.0",
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "1/N + Cash 4.4%": {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": "1.0",
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        matched_name: {
+            "encoder": "-",
+            "reward_beta": "-",
+            "lookback": "-",
+            "action_alpha": str(context["action_alpha"]),
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": "-",
+        },
+        "PPO": {
+            "encoder": str(args.encoder),
+            "reward_beta": str(context["reward_beta"]),
+            "lookback": str(context["lookback"]),
+            "action_alpha": str(context["action_alpha"]),
+            "cost_rate": str(env_config["transaction_cost_rate"]),
+            "risk_free_rate": str(env_config["risk_free_rate"]),
+            "seed": str(args.seed),
+        },
+    }
+    meta_cols = ["encoder", "reward_beta", "lookback", "action_alpha", "cost_rate", "risk_free_rate", "seed"]
+    for col in meta_cols:
+        metrics[col] = [meta_info.get(s, {}).get(col, "-") for s in metrics.index]
+
+    # Đưa các cột cấu hình ra phía trước các cột tài chính
+    perf_cols = [c for c in metrics.columns if c not in meta_cols]
+    metrics = metrics[meta_cols + perf_cols]
+
+    # Xác định tên định danh cho PPO run khi lưu tổng hợp (sprint5_metrics.csv)
+    ppo_label = getattr(args, "run_name", None)
+    if not ppo_label:
+        parts = [f"PPO ({args.encoder}", f"beta={context['reward_beta']}"]
+        if context["lookback"] != 20:
+            parts.append(f"w={context['lookback']}")
+        if args.seed != 7:
+            parts.append(f"seed={args.seed}")
+        ppo_label = ", ".join(parts) + ")"
+
+    # Lưu và ghi tiếp (append) vào file metrics_output (sprint5_metrics.csv)
+    metrics_to_append = metrics.rename(index={"PPO": ppo_label})
+    save_or_append_metrics(
+        args.metrics_output,
+        metrics_to_append,
+        overwrite=getattr(args, "overwrite_metrics", False),
+    )
+
     if "run_dir" in context:
         atomic_csv(metrics, context["run_dir"] / "metrics.csv")
         daily = pd.DataFrame({name: result.daily_net_returns for name, result in results.items()}, index=context["test_tensor"].dates[1:])
         daily.index.name = "date"
         atomic_csv(daily, context["run_dir"] / "daily_returns.csv")
         finish_run_manifest(args, "completed", best_epoch=context["checkpoint_epoch"])
-    print("[5/6] Metrics test (profit và costs theo đơn vị tiền tài khoản):")
+
+        print("[5/6] Metrics test (profit và costs theo đơn vị tiền tài khoản):")
     print(metrics.to_string(float_format=lambda value: f"{value:.6f}"))
     print(
         "  PPO mean weights | "

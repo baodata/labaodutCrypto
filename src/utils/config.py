@@ -72,3 +72,54 @@ class AssetsConfig:
         end = self.date_range.get("end_date", "2025-12-31")
         return start, end
 
+    def get_split_dates(self) -> Dict[str, str]:
+        """
+        Trả về dictionary các mốc phân chia nếu được cấu hình trong assets.yaml:
+        {'train_end': ..., 'val_start': ..., 'val_end': ..., 'test_start': ...}
+        Tìm kiếm ưu tiên trong khối date_range, sau đó trong khối split riêng.
+        """
+        split_cfg = self.raw_config.get("split", {})
+        train_end = self.date_range.get("train_end") or split_cfg.get("train_end")
+        val_start = self.date_range.get("val_start") or split_cfg.get("val_start")
+        val_end = self.date_range.get("val_end") or split_cfg.get("val_end")
+        test_start = self.date_range.get("test_start") or split_cfg.get("test_start")
+
+        result = {}
+        if train_end:
+            result["train_end"] = str(train_end)
+        if val_start:
+            result["val_start"] = str(val_start)
+        if val_end:
+            result["val_end"] = str(val_end)
+        if test_start:
+            result["test_start"] = str(test_start)
+        return result
+
+    def get_split_or_default_dates(self) -> tuple[str, str, str, str]:
+        """
+        Trả về tuple (train_end, val_start, val_end, test_start).
+        Nếu file config đã chỉ định đủ 4 mốc thì trả về trực tiếp.
+        Nếu thiếu, tự động tính toán dựa trên start_date và end_date theo tỷ lệ 70% / 15% / 15%.
+        """
+        splits = self.get_split_dates()
+        if len(splits) == 4:
+            return splits["train_end"], splits["val_start"], splits["val_end"], splits["test_start"]
+
+        import pandas as pd
+        start_dt = pd.Timestamp(self.date_range.get("start_date", "2015-01-01"))
+        end_dt = pd.Timestamp(self.date_range.get("end_date", "2025-12-31"))
+        total_days = max(1, (end_dt - start_dt).days)
+
+        train_end_dt = start_dt + pd.Timedelta(days=int(total_days * 0.70))
+        val_start_dt = train_end_dt + pd.Timedelta(days=1)
+        val_end_dt = start_dt + pd.Timedelta(days=int(total_days * 0.85))
+        test_start_dt = val_end_dt + pd.Timedelta(days=1)
+
+        return (
+            splits.get("train_end", str(train_end_dt.date())),
+            splits.get("val_start", str(val_start_dt.date())),
+            splits.get("val_end", str(val_end_dt.date())),
+            splits.get("test_start", str(test_start_dt.date())),
+        )
+
+

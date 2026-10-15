@@ -62,12 +62,27 @@ class TemporalSplitter:
 
     def __init__(
         self,
-        train_end: str = DEFAULT_TRAIN_END,
-        val_start: str = DEFAULT_VAL_START,
-        val_end: str = DEFAULT_VAL_END,
-        test_start: str = DEFAULT_TEST_START,
+        train_end: Optional[str] = None,
+        val_start: Optional[str] = None,
+        val_end: Optional[str] = None,
+        test_start: Optional[str] = None,
+        config_path: Optional[str] = None,
     ) -> None:
-        """Khởi tạo TemporalSplitter với các mốc thời gian."""
+        """Khởi tạo TemporalSplitter với các mốc thời gian hoặc từ file cấu hình."""
+        if config_path is not None:
+            from src.utils.config import AssetsConfig
+            cfg = AssetsConfig(str(config_path))
+            t_end, v_start, v_end, t_start = cfg.get_split_or_default_dates()
+            train_end = train_end or t_end
+            val_start = val_start or v_start
+            val_end = val_end or v_end
+            test_start = test_start or t_start
+        else:
+            train_end = train_end or self.DEFAULT_TRAIN_END
+            val_start = val_start or self.DEFAULT_VAL_START
+            val_end = val_end or self.DEFAULT_VAL_END
+            test_start = test_start or self.DEFAULT_TEST_START
+
         self.train_end = pd.Timestamp(train_end)
         self.val_start = pd.Timestamp(val_start)
         self.val_end = pd.Timestamp(val_end)
@@ -75,8 +90,45 @@ class TemporalSplitter:
 
         if not (self.train_end < self.val_start <= self.val_end < self.test_start):
             raise ValueError(
-                "Các mốc thời gian phải thỏa mãn: train_end < val_start <= val_end < test_start."
+                f"Các mốc thời gian không hợp lệ: train_end ({self.train_end.date()}) < "
+                f"val_start ({self.val_start.date()}) <= val_end ({self.val_end.date()}) < "
+                f"test_start ({self.test_start.date()})."
             )
+
+    @classmethod
+    def from_config(cls, config_path: str = "configs/assets.yaml") -> "TemporalSplitter":
+        """Khởi tạo TemporalSplitter đọc mốc ngày trực tiếp từ assets.yaml."""
+        return cls(config_path=config_path)
+
+    @classmethod
+    def from_dates(
+        cls,
+        dates: Any,
+        train_ratio: float = 0.70,
+        val_ratio: float = 0.15,
+        test_ratio: float = 0.15,
+    ) -> "TemporalSplitter":
+        """Tự động tính các mốc train/val/test từ chuỗi ngày theo tỷ lệ (mặc định 70/15/15)."""
+        dt_series = pd.to_datetime(list(dates)).sort_values()
+        n = len(dt_series)
+        if n < 3:
+            raise ValueError(f"Cần ít nhất 3 ngày để phân chia, hiện có {n}.")
+        train_idx = max(0, int(n * train_ratio) - 1)
+        val_start_idx = train_idx + 1
+        val_end_idx = max(val_start_idx, int(n * (train_ratio + val_ratio)) - 1)
+        test_start_idx = min(n - 1, val_end_idx + 1)
+
+        train_end = str(dt_series[train_idx].date())
+        val_start = str(dt_series[val_start_idx].date())
+        val_end = str(dt_series[val_end_idx].date())
+        test_start = str(dt_series[test_start_idx].date())
+
+        return cls(
+            train_end=train_end,
+            val_start=val_start,
+            val_end=val_end,
+            test_start=test_start,
+        )
 
     def split_dataframe(self, df: pd.DataFrame) -> SplitResult[pd.DataFrame]:
         """Phân chia một DataFrame có DatetimeIndex hoặc cột Date."""
@@ -144,7 +196,13 @@ class TemporalSplitter:
         test_indices = np.where(date_series >= self.test_start)[0]
 
         if len(train_indices) == 0 or len(val_indices) == 0 or len(test_indices) == 0:
-            raise ValueError("Một trong các tập sau khi phân chia bị rỗng (0 timesteps).")
+            raise ValueError(
+                f"Một trong các tập sau khi phân chia bị rỗng (Train: {len(train_indices)}, Val: {len(val_indices)}, Test: {len(test_indices)}). "
+                f"Dải ngày dữ liệu thực tế: {tensor_obj.dates[0]} -> {tensor_obj.dates[-1]} (T={len(tensor_obj.dates)}). "
+                f"Cấu hình split hiện tại: train_end={self.train_end.date()}, "
+                f"val=[{self.val_start.date()} -> {self.val_end.date()}], "
+                f"test_start={self.test_start.date()}."
+            )
 
         train_tensor = MarketDataTensor(
             tensor=tensor_obj.tensor[train_indices, :, :].copy(),
@@ -207,7 +265,12 @@ class TemporalSplitter:
     def _validate_temporal_order(self, train_df: pd.DataFrame, val_df: pd.DataFrame, test_df: pd.DataFrame) -> None:
         """Kiểm định nghiệm thu: max(train_date) < min(val_date) và max(val_date) < min(test_date)."""
         if train_df.empty or val_df.empty or test_df.empty:
-            raise ValueError("Một trong các tập dữ liệu bị rỗng sau khi phân chia.")
+            raise ValueError(
+                f"Một trong các tập dữ liệu bị rỗng sau khi phân chia (Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}). "
+                f"Cấu hình split hiện tại: train_end={self.train_end.date()}, "
+                f"val=[{self.val_start.date()} -> {self.val_end.date()}], "
+                f"test_start={self.test_start.date()}."
+            )
 
         max_train = pd.Timestamp(self._get_max_date(train_df))
         min_val = pd.Timestamp(self._get_min_date(val_df))

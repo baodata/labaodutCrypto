@@ -97,13 +97,13 @@ def test_split_market_data_tensor():
 
 
 def test_split_on_real_processed_dataset():
-    """Kiểm tra phân chia trực tiếp trên file data/processed/features.parquet."""
+    """Kiểm tra phân chia trực tiếp trên file data/processed/features.parquet theo assets.yaml."""
     parquet_path = Path("data/processed/features.parquet")
     if not parquet_path.exists():
         pytest.skip("data/processed/features.parquet chưa tồn tại, bỏ qua test.")
 
     df_features = pd.read_parquet(parquet_path)
-    splitter = TemporalSplitter()
+    splitter = TemporalSplitter.from_config()
     split_res = splitter.split_dataframe(df_features)
 
     # Kiểm tra kích thước các tập
@@ -113,4 +113,18 @@ def test_split_on_real_processed_dataset():
 
     # Đảm bảo không có dòng nào bị thất thoát
     assert len(split_res.train) + len(split_res.val) + len(split_res.test) == len(df_features)
+
+
+def test_split_from_config():
+    """Kiểm tra TemporalSplitter.from_config() đọc chính xác từ assets.yaml."""
+    splitter = TemporalSplitter.from_config("configs/assets.yaml")
+    assert splitter.train_end < splitter.val_start <= splitter.val_end < splitter.test_start
+
+
+def test_split_from_dates_ratio():
+    """Kiểm tra TemporalSplitter.from_dates() tự động chia theo tỷ lệ."""
+    dates = pd.bdate_range("2010-01-01", periods=1000)
+    splitter = TemporalSplitter.from_dates(dates, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15)
+    assert splitter.train_end < splitter.val_start <= splitter.val_end < splitter.test_start
+
 

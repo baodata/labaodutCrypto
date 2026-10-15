@@ -8,7 +8,11 @@ def summarize_seed_metrics(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if not per_seed_metrics:
         raise ValueError("Cần ít nhất một bảng metrics để tổng hợp seed.")
-    stacked = pd.concat(per_seed_metrics, names=["seed", "strategy"])
+    cleaned = {
+        s: df.drop(columns=[c for c in ["seed", "strategy"] if c in df.columns], errors="ignore")
+        for s, df in per_seed_metrics.items()
+    }
+    stacked = pd.concat(cleaned, names=["seed", "strategy"])
     numeric = stacked.select_dtypes(include="number").drop(
         columns=["checkpoint_epoch"], errors="ignore"
     )

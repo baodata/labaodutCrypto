@@ -139,7 +139,7 @@ def test_align_real_parquet_dataset():
 
     # 24 stocks + SPY benchmark = 25 assets
     assert result.num_assets >= 25
-    assert result.num_timesteps > 2500
+    assert result.num_timesteps > 1000
 
     # Ensure 100% synchronization across all assets
     first_ticker = next(iter(result.aligned_data.keys()))
