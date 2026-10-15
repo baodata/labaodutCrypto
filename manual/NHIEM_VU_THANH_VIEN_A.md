@@ -17,7 +17,7 @@ _(DATA + ENVIRONMENT + PPO BASELINE + HIGH-LEVEL MACRO AGENT + EVALUATION)_
 >
 > 📖 **Quy chế 70/30 & Lộ trình 5 Level học AI:** Xem chi tiết tại [QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md](file:///home/tuan/AI/AI_roject1/manual/QUY_CHE_DONG_BO_VA_HOC_AI_70_30.md).
 > 🤝 **Bảng điều phối chung với B:** Xem tại [BANG_DIEU_PHOI_2_NGUOI.md](file:///home/tuan/AI/AI_roject1/manual/BANG_DIEU_PHOI_2_NGUOI.md).
-> **Backlog định lượng bổ sung (14/10/2026):** [TICKET_CAI_THIEN_DINH_LUONG.md](TICKET_CAI_THIEN_DINH_LUONG.md). Phân công của A ở mục 4 dưới đây.
+> **Ticket định lượng đã tích hợp vào Sprint 5–9:** [đặc tả và bảng ánh xạ](TICKET_CAI_THIEN_DINH_LUONG.md). Cập nhật 16/10/2026.
 
 ---
 
@@ -49,6 +49,11 @@ src/
 ---
 
 ## 3. Checklist công việc chi tiết theo từng Sprint
+
+> **Tích hợp định lượng — cập nhật 16/10/2026:** Ticket `QNT-*` có checklist trực tiếp trong Sprint 5–9 bên dưới. Checklist ở file owner là nguồn trạng thái; [đặc tả định lượng](TICKET_CAI_THIEN_DINH_LUONG.md) giữ công thức và phụ thuộc.
+> - Sprint 1–4/4.5 giữ phần nền đã ghi nhận; nâng cấp mới xếp từ Sprint 5 để contract/protocol có trước các task sử dụng chúng.
+> - Trong cùng sprint, làm theo phụ thuộc và bàn giao A ↔ B. P2 là `[MỐC C — CÓ ĐIỀU KIỆN]`, không chặn nghiệm thu H-MARL core.
+> - Trạng thái theo dõi hiện có được giữ lại khi chuyển mục. “Đã có core runner” là tiến độ một phần QNT-025, chưa phải nghiệm thu toàn ticket.
 
 ### 🏁 SPRINT 1: Thiết lập Vũ trụ Cổ phiếu & Tải dữ liệu thô
 
@@ -199,6 +204,37 @@ _Mục tiêu: Xây dựng logic tính toán tiền mặt, cổ phiếu, phí gia
 
 _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được các chiến lược Baseline truyền thống._
 
+#### Ticket định lượng của Sprint 5
+
+**Thứ tự phối hợp:** B/QNT-001 → A/QNT-002 → A/QNT-003. QNT-003 đánh giá feature hiện có; sau QNT-004/005 ở Sprint 6, chạy lại đánh giá theo protocol đã chốt.
+
+<a id="qnt-002"></a>
+
+- [ ] **[QNT-002] — Đóng băng protocol, baseline và gate (P0) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** ⏳ Đang nghiệm thu.
+  - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001
+  - **Phạm vi:** Tạo config thí nghiệm chuẩn gồm train/inner-val/outer-val, seed, search budget, checkpoint rule và gate. Thêm chế độ đánh giá validation/fold phát triển mà không tự động đọc test set.
+  - **Tệp tác động:** `src/training/train_ppo.py`, `src/evaluation/metrics.py`, `src/utils/artifacts.py`; config dự kiến `configs/quant_research_protocol.yaml`.
+  - **DoD (Nghiệm thu):**
+    - Baseline 1/N, matched cash + alpha và untrained policy có cùng timeline, cost, cap. Lịch tái cân bằng và first allocation được ghi rõ.
+    - Khi thêm overlay rủi ro, baseline áp dụng cùng quy tắc causal; không lấy cash/exposure nhìn lại từ PPO để tối ưu baseline.
+    - Checkpoint lưu cả mức cải thiện so với epoch 0 và matched baseline; trường hợp không vượt margin đã định báo "chưa đạt gate", không trình bày fallback như kết quả đã học.
+  - **Sản phẩm bàn giao:** Config có hash, baseline reference mới sau masking, bảng protocol và giới hạn holdout.
+  - **Đặc tả bổ sung:** [QNT-002](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-002).
+
+<a id="qnt-003"></a>
+
+- [ ] **[QNT-003] — Đo tín hiệu ngoài mẫu và baseline tuyến tính (P0) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002
+  - **Phạm vi:** Tính rank-IC ở horizon 1/5/20 trên nhãn thực thi được; hệ số, hướng tín hiệu và strength fit trên train/inner-val. Đánh giá riêng từng outer fold/giai đoạn phát triển, gồm 1/N lõi + tilt và matched baseline.
+  - **Tệp tác động:** `scripts/analyze_feature_signal.py`, `scripts/evaluate_equal_weight_tilt.py`, `scripts/evaluate_tilt_robustness.py`.
+  - **DoD (Nghiệm thu):** Purge các label train kéo vào kỳ đánh giá; IC có số mẫu và block CI; báo cáo turnover, chi phí, spread lợi suất giữa các nhóm score và độ ổn định dấu IC. Tham số không được chọn bằng outer fold/test.
+  - **Sản phẩm bàn giao:** `signal_by_fold.csv`, `linear_baseline_by_fold.csv` và quyết định GO/NO-GO alpha modeling. Kết quả âm vẫn tính là hoàn thành ticket nếu implementation đúng.
+  - **Đặc tả bổ sung:** [QNT-003](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-003).
+
+#### Công việc nền và H-MARL của sprint
+
 - [x] **[ENV-008] Đóng gói Gymnasium-compatible Trading Environment (P0)**
   - _Tệp cần tạo:_ `src/env/trading_env.py`, `tests/test_trading_env.py`
   - _Nội dung:_ Cài đặt chuẩn Gymnasium: `reset()`, `step(action)`, `observation_space`, `action_space`.
@@ -231,9 +267,92 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
 
 ---
 
-### 🏁 SPRINT 6: Bộ chỉ số đo lường hiệu quả danh mục (Financial Metrics)
+### 🏁 SPRINT 6: Feature, Risk, Execution & Sector MARL
 
 _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức độ rủi ro gánh chịu._
+
+#### Ticket định lượng của Sprint 6
+
+**Thứ tự phối hợp:** QNT-004 → QNT-005; QNT-006 bàn giao cho B/QNT-007 → QNT-008; QNT-011 → QNT-012 → QNT-013 (cần thêm QNT-006). QNT-014 là ablation reward riêng; không bật đồng thời mọi thay đổi khi đo tác động.
+
+<a id="qnt-004"></a>
+
+- [ ] **[QNT-004] — Chuẩn hóa cross-sectional theo feature (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002
+  - **Phạm vi:** Thêm chế độ `static_train`, `xs_zscore`, `xs_rank` và tùy chọn gaussian rank. Cấu hình theo tên feature; feature vốn là rank/RSI hữu hạn không tự động chuẩn hóa lần nữa.
+  - **Tệp tác động:** `src/features/scaler.py`, `src/features/pipeline.py`, `src/models/policy_adapter.py`; module dự kiến `src/features/normalization.py`.
+  - **DoD (Nghiệm thu):** Ngày t chỉ dùng các mã thuộc universe hợp lệ ngày t; ticker order không đổi; xử lý ties, N=1, std=0 và thiếu dữ liệu. Padding giữ bằng 0 sau transform và dùng mask tường minh.
+  - **Sản phẩm bàn giao:** Metadata mode/feature/clip/epsilon, batch-stream parity, ablation với scaler hiện tại. Giữ market-level context khi rank làm mất mức tuyệt đối.
+  - **Đặc tả bổ sung:** [QNT-004](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-004).
+
+<a id="qnt-005"></a>
+
+- [ ] **[QNT-005] — Causal rolling normalization và state inference (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-004
+  - **Phạm vi:** Rolling z-score theo từng mã/feature, cửa sổ ban đầu 252 phiên; chốt `statistics[t-252:t)` để chuẩn hóa feature t. Các horizon khác chỉ chọn trong inner-val.
+  - **Tệp tác động:** `src/features/scaler.py`, `src/utils/data_types.py`, `src/training/train_ppo.py`.
+  - **DoD (Nghiệm thu):** Sửa dữ liệu sau t không đổi normalized feature t; batch và inference từng ngày khớp; không fit cả val/test một lần. Lưu rolling state, ngày cuối, ticker/feature order, warm-up và readiness.
+  - **Sản phẩm bàn giao:** Checkpoint/resume/walk-forward khôi phục đúng state; tỷ lệ clip/outlier theo fold và ablation static vs xs vs rolling vs hybrid.
+  - **Đặc tả bổ sung:** [QNT-005](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-005).
+
+<a id="qnt-006"></a>
+
+- [ ] **[QNT-006] — Risk bank covariance EWMA/Ledoit–Wolf (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Bàn giao cho B.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001, QNT-002
+  - **Phạm vi:** Một bộ ước lượng covariance causal theo ngày dùng chung cho graph (bàn giao cho B), risk overlay và allocator; gồm baseline sample covariance, EWMA và Ledoit–Wolf tuyến tính.
+  - **Tệp tác động:** `src/env/risk.py`, `src/graph/correlation.py`, `src/utils/data_types.py`; module dự kiến `src/risk/covariance.py`.
+  - **DoD (Nghiệm thu):** Shape N=1 đúng; dữ liệu hữu hạn, ma trận đối xứng và PSD trong tolerance; shrinkage/fallback/jitter được log. Dữ liệu sau t không ảnh hưởng covariance t; annualization chỉ thực hiện một lần.
+  - **Sản phẩm bàn giao:** Covariance bank cache theo data/config hash, condition number, eigenvalue minimum và sai số dự báo volatility ngoài mẫu. Bàn giao cho B làm QNT-007.
+  - **Đặc tả bổ sung:** [QNT-006](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-006).
+
+<a id="qnt-011"></a>
+
+- [ ] **[QNT-011] — Thanh khoản ADV, volatility và data contract (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001
+  - **Phạm vi:** Trailing dollar ADV (Average Daily Volume) và daily volatility theo từng mã; thông tin để quyết định ở Close[t] chỉ dùng dữ liệu đến t.
+  - **Tệp tác động:** `src/features/pipeline.py`, `src/data/alignment.py`, `src/utils/data_types.py`; module dự kiến `src/features/liquidity.py`.
+  - **DoD (Nghiệm thu):** Đơn vị ADV là tiền/ngày, volatility là tỷ lệ/ngày. Chốt giá/volume adjustment basis; không nhân giá total-return đã điều chỉnh cổ tức với volume rồi mặc định đó là notional giao dịch thật. Xử lý zero volume, thiếu dữ liệu, split và ticker order.
+  - **Sản phẩm bàn giao:** Liquidity bank theo ngày, metadata source/window/readiness. Volume thực tế ngày t+1 không được dùng tại t.
+  - **Đặc tả bổ sung:** [QNT-011](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-011).
+
+<a id="qnt-012"></a>
+
+- [ ] **[QNT-012] — Square-root impact và phân rã chi phí (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-011, QNT-002
+  - **Phạm vi:** Optional impact trên commission/spread baseline: $\text{impact\_rate}_i = \eta \cdot \sigma_i \cdot \sqrt{Q_i / \text{dollar\_ADV}_i}$, với $Q_i$ là notional giao dịch thực tế tại Open kế tiếp.
+  - **Tệp tác động:** `src/env/cost.py`, `src/env/trading_env.py`, `src/evaluation/metrics.py`, `configs/env.yaml`.
+  - **DoD (Nghiệm thu):** Stock legs chỉ tính một lần, cash leg không tạo impact; hold/zero trade có phí 0; $\eta=0$ khớp đường hiện tại; tổng chi phí tiền khớp NAV. Log riêng commission, spread/slippage và impact, không tính trùng.
+  - **Sản phẩm bàn giao:** Stress testing theo $\eta$ và NAV, bảng phân rã chi phí (cost decomposition) và cảnh báo participation rate khi thiếu dữ liệu.
+  - **Đặc tả bổ sung:** [QNT-012](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-012).
+
+<a id="qnt-013"></a>
+
+- [ ] **[QNT-013] — Tốc độ execution thích nghi và vùng hold (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-012, QNT-006
+  - **Phạm vi:** Tốc độ tái cân bằng từng mã dựa trên chi phí, thanh khoản và rủi ro causal; vùng không giao dịch (no-trade band) và participation cap.
+  - **Tệp tác động:** `src/env/rebalance.py`, `src/env/trading_env.py`.
+  - **DoD (Nghiệm thu):** Target chốt từ Close, execution cost dùng drift tại Open; không đọc Open tương lai để chọn tốc độ tại Close. Sau điều chỉnh tốc độ từng mã, weights/cash/cap vẫn hợp lệ.
+  - **Sản phẩm bàn giao:** Báo cáo so sánh các baseline cùng execution controller, tỷ lệ hold, turnover, chi phí và signal decay.
+  - **Đặc tả bổ sung:** [QNT-013](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-013).
+
+<a id="qnt-014"></a>
+
+- [ ] **[QNT-014] — Reward Differential Sharpe có state (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001, QNT-002
+  - **Phạm vi:** Reward mode riêng cho Differential Sharpe Ratio (DSR); trước cập nhật EMA, dùng moments $A, B$ của bước trước và delta từ return ròng hiện tại. Chốt rõ excess return so với risk-free hay active return so với benchmark.
+  - **Tệp tác động:** `src/env/reward.py`, `src/env/trading_env.py`, `src/training/train_ppo.py`.
+  - **DoD (Nghiệm thu):** Mẫu số có $\epsilon$ chống chia 0 và cơ chế warm-up; constant-return không gây reward nổ/NaN. EMA moments, readiness và update convention có state trong observation/reset/checkpoint. Không khởi tạo moments bằng lợi suất tương lai.
+  - **Sản phẩm bàn giao:** Chẩn đoán reward scale/clipping, gradient, KL, EV; ablation excess-return vs DSR với seed/fold cố định.
+  - **Đặc tả bổ sung:** [QNT-014](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-014).
+
+#### Công việc nền và H-MARL của sprint
 
 - [ ] **[MARL-001] Thống nhất ranh giới phân chia Sector với B (P0 - Chung)**
   - Cung cấp danh sách phân nhóm cổ phiếu cho từng sector agent.
@@ -255,6 +374,35 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 ### 🏁 SPRINT 7: Phát triển High-Level Agent & Ghép nối Phân cấp
 
 _Mục tiêu: Làm chủ Agent vĩ mô phân bổ vốn vào các nhóm ngành và tiền mặt, sau đó ghép nối toàn diện._
+
+#### Ticket định lượng của Sprint 7
+
+**Thứ tự phối hợp:** QNT-010 dùng risk bank Sprint 6. QNT-016 có thể dùng alpha ridge fit train; bàn giao allocator thường cho B/QNT-017 trước QNT-018. Nhánh P2 không bắt buộc cho HMARL-004.
+
+<a id="qnt-010"></a>
+
+- [ ] **[QNT-010] — Volatility targeting cho policy và baseline (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-006, QNT-002
+  - **Phạm vi:** Risk overlay causal với hệ số co $k = \min(1, \text{target\_vol} / \text{forecast\_vol})$; giảm phần cổ phiếu theo $k$, chuyển phần còn lại vào cash. Target và forecast dùng cùng đơn vị đã khai báo.
+  - **Tệp tác động:** `src/env/risk.py`, `src/env/rebalance.py`, `src/env/trading_env.py`, `src/evaluation/baselines/`.
+  - **DoD (Nghiệm thu):** Forecast từ covariance t; cash/zero variance an toàn, không dùng đòn bẩy; weights tổng bằng 1 và cap hợp lệ; thay đổi overlay dẫn đến giao dịch thì tính phí đúng. Explicit hold giữ nguyên cổ phiếu nếu không có lịch/lệnh risk override.
+  - **Sản phẩm bàn giao:** Realized vol, target tracking, cash/exposure, return và tail loss. So sánh 1/N dùng cùng overlay, estimator và lịch.
+  - **Đặc tả bổ sung:** [QNT-010](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-010).
+
+<a id="qnt-016"></a>
+
+- [ ] **[QNT-016] — Allocator lồi độc lập (Convex Allocator) (P2) [ĐỊNH LƯỢNG · MỐC C — CÓ ĐIỀU KIỆN]**
+  - **Theo dõi (kế thừa):** 🔬 Nghiên cứu.
+  - **Mức độ:** P2 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-006, QNT-003
+  - **Phạm vi:** Allocator lồi giải bằng solver thường (trước khi làm QP khả vi); nhận alpha dự báo từ ridge/QNT-015, ma trận covariance, danh mục tại Close và hệ số chi phí.
+  - **Tệp tác động:** `src/env/rebalance.py`, `src/env/risk.py`, `src/evaluation/backtester.py`; package dự kiến `src/allocation/`.
+  - **Bài toán:** Maximize $\alpha^T w - \frac{\gamma}{2} w^T \Sigma w - \frac{\lambda}{2} \Delta w^T \Lambda \Delta w$ thỏa mãn long-only, max asset cap, sector caps.
+  - **DoD (Nghiệm thu):** Xử lý synthetic feasible/infeasible cases; sai số ràng buộc trong tolerance; solver fallback được log khi timeout. Trạng thái $w_{prev}$ là trạng thái biết tại Close.
+  - **Sản phẩm bàn giao:** Runtime/solver status, so sánh mean-variance baseline vs alpha + allocator vs simple tilt.
+  - **Đặc tả bổ sung:** [QNT-016](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-016).
+
+#### Công việc nền và H-MARL của sprint
 
 - [ ] **[HMARL-000] Tài liệu thiết kế huấn luyện phân cấp (P0)** _(mới)_
   - Chốt 3 điều:
@@ -286,6 +434,34 @@ _Mục tiêu: Làm chủ Agent vĩ mô phân bổ vốn vào các nhóm ngành v
 
 _Mục tiêu: Thực hiện các thí nghiệm chứng minh sự đóng góp của các thành phần (Ablation Study)._
 
+#### Ticket định lượng của Sprint 8
+
+**Thứ tự phối hợp:** QNT-009 cấp fold cho B/QNT-025. Nếu mở nhánh CVaR, chờ B/QNT-022 rồi làm QNT-023 trước khi chốt báo cáo tail risk trong EXP-004. Feature/cost ablation dùng các phiên bản đã nghiệm thu ở Sprint 6–7.
+
+<a id="qnt-009"></a>
+
+- [ ] **[QNT-009] — Runner walk-forward causal (P1) [ĐỊNH LƯỢNG]**
+  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002
+  - **Phạm vi:** Rolling/expanding folds; retrain hoặc fine-tune mỗi 20/60 phiên. Mỗi fit chỉ nhận dữ liệu có sẵn trước ngày deployment; scaler và checkpoint selection thuộc phần train/inner-val của fold.
+  - **Tệp tác động:** `src/data/split.py`, `src/training/train_ppo.py`, `src/evaluation/backtester.py`; script dự kiến `scripts/evaluate_walk_forward.py`.
+  - **DoD (Nghiệm thu):** Label/rollout overlap được purge; model triển khai chỉ chạy sau thời điểm fit; nối OOS daily returns không trùng/ngắt ngày. NAV, holdings, cash và phí tiếp tục qua điểm retrain, không reset danh mục miễn phí ở mỗi fold.
+  - **Sản phẩm bàn giao:** Manifest theo fold chứa fit/deploy dates, parent checkpoint/scaler state, fresh-train vs fine-tune, runtime và artifact. Baseline chạy liên tục trên cùng lịch.
+  - **Đặc tả bổ sung:** [QNT-009](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-009).
+
+<a id="qnt-023"></a>
+
+- [ ] **[QNT-023] — Mục tiêu actor CVaR và gate tail risk (P2) [ĐỊNH LƯỢNG · MỐC C — CÓ ĐIỀU KIỆN]**
+  - **Theo dõi (kế thừa):** 🔬 Nghiên cứu.
+  - **Mức độ:** P2 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-022
+  - **Phạm vi:** Định nghĩa mục tiêu CVaR trên đuôi dưới (lower-tail return), horizon, tail level $\alpha$ (ví dụ 5%) và mục tiêu Actor; quy tắc risk-sensitive advantage hoặc constrained policy update.
+  - **Tệp tác động:** `src/training/ppo_core.py`, `src/env/reward.py`, `src/evaluation/metrics.py`, `src/training/train_ppo.py`.
+  - **DoD (Nghiệm thu):** Không chỉ thay Critic bằng quantiles rồi giữ nguyên Actor loss cũ và gọi là tối ưu CVaR. Với 32 quantiles, tail 5% chỉ có 1–2 điểm; cần grid phân vị đủ mịn ở đuôi.
+  - **Sản phẩm bàn giao:** Realized tail loss/CVaR, drawdown, net return, cash và baseline rủi ro theo fold; gate giới hạn đánh đổi lợi suất.
+  - **Đặc tả bổ sung:** [QNT-023](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-023).
+
+#### Công việc nền và H-MARL của sprint
+
 - [ ] **[EXP-006] Thí nghiệm Feature Ablation (P1)**
   - _Nội dung:_ So sánh hiệu quả mô hình khi chỉ dùng:
     - Nhóm 1: Chỉ dùng giá thô và Volume.
@@ -304,6 +480,23 @@ _Mục tiêu: Thực hiện các thí nghiệm chứng minh sự đóng góp c�
 ### 🏁 SPRINT 9: Kiểm toán Rò rỉ Dữ liệu & Thống kê Khoa học
 
 _Mục tiêu: Đảm bảo kết quả trung thực, không bị bias và có ý nghĩa thống kê._
+
+#### Ticket định lượng của Sprint 9
+
+**Thứ tự phối hợp:** QNT-024 nhận walk-forward từ Sprint 8. CPCV ghi rõ research-only nếu train có nhóm ở tương lai so nhóm đánh giá; walk-forward vẫn là phép đánh giá causal chính.
+
+<a id="qnt-024"></a>
+
+- [ ] **[QNT-024] — CPCV research, purge và embargo (P2) [ĐỊNH LƯỢNG · MỐC C — CÓ ĐIỀU KIỆN]**
+  - **Theo dõi (kế thừa):** 🔬 Nghiên cứu.
+  - **Mức độ:** P2 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-009
+  - **Phạm vi:** Chia tập tổ hợp (Combinatorial Purged Cross-Validation) phục vụ nghiên cứu; mỗi mẫu có decision time, label interval và rollout interval. Fit scaler/hyperparameter trên train fold theo protocol.
+  - **Tệp tác động:** `src/data/split.py`, `scripts/analyze_feature_signal.py`; module dự kiến `src/evaluation/purged_cv.py`.
+  - **DoD (Nghiệm thu):** Purge overlap theo interval thực tế; embargo được cấu hình và giải thích logic, không tự động đặt bằng lookback. Tránh episode nối qua nhóm đánh giá.
+  - **Sản phẩm bàn giao:** Split visualization, overlap checks và CPCV research report. Lưu ý walk-forward QNT-009 vẫn là phép đánh giá chính theo thời gian thực tế.
+  - **Đặc tả bổ sung:** [QNT-024](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-024).
+
+#### Công việc nền và H-MARL của sprint
 
 - [ ] **[RESEARCH-002] Kiểm toán toàn diện Bias & Rò rỉ dữ liệu (P0)**
   - _Nội dung:_ Soát xét toàn bộ mã nguồn để đảm bảo:
@@ -329,29 +522,8 @@ _Mục tiêu: Hoàn tất tài liệu nghiên cứu và đảm bảo chạy lạ
   - Mô tả chi tiết luồng xử lý: Raw Data $\rightarrow$ Preprocessing $\rightarrow$ Features $\rightarrow$ Environment $\rightarrow$ Backtester.
 
 - [ ] **[DOC-003] Soạn thảo tài liệu thiết lập thí nghiệm & Bảng kết quả (P0)**
+  - Tổng hợp QNT đã nghiệm thu ở Sprint 5–9: config/fold/seed, cost, matched baseline, gate PASS/FAIL và giới hạn holdout; chỉ báo cáo nhánh P2 đã thực sự chạy.
   - Trình bày bảng so sánh Sharpe, MDD, Return, Calmar và các biểu đồ phân tích.
 
 - [ ] **[FINAL-001] Tái lập kết quả từ môi trường sạch (P0 - Chung)**
   - Clone repo ra một máy/môi trường mới, chạy script từ bước tải data đến xuất báo cáo kết quả xem có lỗi nào không.
-
-## 4. Backlog cải thiện định lượng — phân công A
-
-Chi tiết, phụ thuộc, DoD và trạng thái được quản lý tại [backlog QNT](TICKET_CAI_THIEN_DINH_LUONG.md). A là owner chính các ticket dưới đây; B review theo quy chế 70/30.
-
-| Ưu tiên | Ticket của A | Nội dung |
-|---|---|---|
-| P0 | [QNT-002](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-002) | Đóng băng protocol, matched baseline và gate |
-| P0 | [QNT-003](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-003) | Rank-IC ngoài mẫu, baseline tuyến tính và gate tín hiệu |
-| P1 | [QNT-004](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-004), [QNT-005](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-005) | Cross-sectional và rolling normalization |
-| P1 | [QNT-006](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-006) | Covariance risk bank EWMA/Ledoit–Wolf |
-| P1 | [QNT-009](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-009) | Walk-forward causal và danh mục liên tục qua fold |
-| P1 | [QNT-010](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-010) | Volatility targeting cùng baseline |
-| P1 | [QNT-011](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-011), [QNT-012](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-012), [QNT-013](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-013) | Liquidity, market impact và adaptive execution |
-| P1 | [QNT-014](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-014) | Differential Sharpe reward có state |
-| P2 | [QNT-016](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-016) | Convex allocator độc lập |
-| P2 | [QNT-023](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-023) | Actor CVaR và gate tail risk |
-| P2 | [QNT-024](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-024) | CPCV research, purge/embargo |
-
-**Bắt đầu:** sau nghiệm thu QNT-001 của B, làm QNT-002 → QNT-003; tiếp theo QNT-004 và QNT-006. Covariance là bàn giao chung để B triển khai shrinkage graph. Các ticket P2 mở theo gate và thời gian của dự án; luồng H-MARL core giữ kế hoạch riêng.
-
-A là reviewer các ticket B phụ trách, tập trung causal timing, return/cost units, baseline công bằng và ý nghĩa của loss/metric.
