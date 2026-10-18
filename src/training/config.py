@@ -35,6 +35,7 @@ SETTINGS = {
         ("margin", "selection_margin", float, 0.0),
     ),
     "evaluation": (
+        ("scope", "evaluation_scope", str, "test"),
         ("train_eval_every", "train_eval_every", int, 5),
         ("bootstrap_block_size", "bootstrap_block_size", int, 20),
         ("bootstrap_samples", "bootstrap_samples", int, 10000),
@@ -60,7 +61,10 @@ def _validate(value: Any, name: str, kind: type) -> Any:
         valid = isinstance(value, str)
     if not valid:
         raise ValueError(f"Cấu hình {name} phải có kiểu {kind.__name__} hợp lệ: {value!r}")
-    if name == "selection_metric":
+    if name == "evaluation_scope":
+        if value not in {"validation", "test"}:
+            raise ValueError("evaluation_scope phải là validation hoặc test.")
+    elif name == "selection_metric":
         if value not in {"sharpe", "cumulative_return", "excess_sharpe", "excess_return"}:
             raise ValueError(f"selection_metric không hợp lệ: {value!r}")
     elif name == "matched_cash_ratio":
@@ -80,6 +84,8 @@ def resolve_training_config(args: argparse.Namespace) -> dict[str, Any]:
     Resolution is idempotent so an ensemble can copy the resolved namespace
     without interpreting its YAML-derived values as fresh CLI overrides.
     """
+    from src.evaluation.research_protocol import apply_research_protocol
+    apply_research_protocol(args)
     if hasattr(args, "_training_config_inputs"):
         return args._training_config_inputs
     args.training_config = Path(getattr(args, "training_config", DEFAULT_TRAINING_CONFIG))

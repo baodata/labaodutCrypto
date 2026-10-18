@@ -36,7 +36,7 @@ class SplitResult(Generic[T]):
 
     train: T
     val: T
-    test: T
+    test: Optional[T]
     dates_info: dict[str, Any]
 
     def summary(self) -> str:
@@ -186,16 +186,16 @@ class TemporalSplitter:
 
         return SplitResult(train=train_dict, val=val_dict, test=test_dict, dates_info=info)
 
-    def split_market_data_tensor(self, tensor_obj: MarketDataTensor) -> SplitResult[MarketDataTensor]:
+    def split_market_data_tensor(self, tensor_obj: MarketDataTensor, *, include_test: bool = True) -> SplitResult[MarketDataTensor]:
         """Phân chia MarketDataTensor [T, N, F] dọc theo trục thời gian T."""
         date_series = pd.to_datetime(tensor_obj.dates)
 
         tensor_obj.validate()
         train_indices = np.where((date_series <= self.train_end) & tensor_obj.feature_ready)[0]
         val_indices = np.where((date_series >= self.val_start) & (date_series <= self.val_end))[0]
-        test_indices = np.where(date_series >= self.test_start)[0]
+        test_indices = np.where(date_series >= self.test_start)[0] if include_test else np.array([], dtype=int)
 
-        if len(train_indices) == 0 or len(val_indices) == 0 or len(test_indices) == 0:
+        if len(train_indices) == 0 or len(val_indices) == 0 or (include_test and len(test_indices) == 0):
             raise ValueError(
                 f"Một trong các tập sau khi phân chia bị rỗng (Train: {len(train_indices)}, Val: {len(val_indices)}, Test: {len(test_indices)}). "
                 f"Dải ngày dữ liệu thực tế: {tensor_obj.dates[0]} -> {tensor_obj.dates[-1]} (T={len(tensor_obj.dates)}). "
@@ -224,16 +224,18 @@ class TemporalSplitter:
             feature_names=list(tensor_obj.feature_names),
             dates=[tensor_obj.dates[i] for i in test_indices],
             warmup_sessions=max(0, tensor_obj.warmup_sessions - int(test_indices[0])),
-        )
+        ) if include_test else None
 
         train_tensor.validate()
         val_tensor.validate()
-        test_tensor.validate()
+        if test_tensor is not None:
+            test_tensor.validate()
 
         info = {
             "train_range": f"{train_tensor.dates[0]} -> {train_tensor.dates[-1]} (T={len(train_tensor.dates)})",
             "val_range": f"{val_tensor.dates[0]} -> {val_tensor.dates[-1]} (T={len(val_tensor.dates)})",
-            "test_range": f"{test_tensor.dates[0]} -> {test_tensor.dates[-1]} (T={len(test_tensor.dates)})",
+            "test_range": (f"{test_tensor.dates[0]} -> {test_tensor.dates[-1]} (T={len(test_tensor.dates)})"
+                           if test_tensor is not None else "not_evaluated_validation_only"),
             "tickers": tensor_obj.tickers,
             "feature_names": tensor_obj.feature_names,
         }

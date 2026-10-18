@@ -85,6 +85,7 @@ from src.training.null_evaluation import _evaluate_untrained_null as _evaluate_u
 from src.training.ppo_trainer import train as train
 from src.training.ppo_trainer import _train as _train
 from src.training.multi_seed import train_multi_seed
+from src.evaluation.validation_evaluator import evaluate_validation
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -102,10 +103,12 @@ def main(argv: list[str] | None = None) -> None:
         return
     if not args.seeds:
         model, context = train(args)
-        evaluate_test(args, model, context)
+        evaluator = evaluate_validation if args.evaluation_scope == "validation" else evaluate_test
+        evaluator(args, model, context)
         return
 
-    train_multi_seed(args, train_fn=train, evaluate_fn=evaluate_test)
+    evaluator = evaluate_validation if args.evaluation_scope == "validation" else evaluate_test
+    train_multi_seed(args, train_fn=train, evaluate_fn=evaluator)
 
 
 if __name__ == "__main__":

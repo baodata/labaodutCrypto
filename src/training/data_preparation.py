@@ -126,13 +126,6 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
             "Hãy đặt dữ liệu raw vào thư mục này trước khi train."
         )
 
-    print("[1/6] Tính feature, căn lịch và ghi processed parquet...")
-    pipeline = FeaturePipeline()
-    processed_data, full_tensor = pipeline.run_from_raw(
-        raw_dir=args.raw_dir,
-        export_parquet=args.resume is None,
-        output_file=args.processed_output,
-    )
     # Phân chia dữ liệu theo thứ tự ưu tiên: CLI > configs/assets.yaml > Tự động tỷ lệ
     train_end = args.train_end
     val_start = args.val_start
@@ -148,6 +141,21 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         val_end = val_end or cfg_splits.get("val_end")
         test_start = test_start or cfg_splits.get("test_start")
 
+    include_test = getattr(args, "evaluation_scope", "test") != "validation"
+    if not include_test and not (train_end and val_start and val_end):
+        raise ValueError("Validation-only yêu cầu mốc train/validation tường minh.")
+    protocol = getattr(args, "_research_protocol", None)
+    if protocol and pd.Timestamp(val_end) > pd.Timestamp(protocol["development_end"]):
+        raise ValueError("Validation vượt development_end của protocol.")
+    print("[1/6] Tính feature, căn lịch và ghi processed parquet...")
+    pipeline = FeaturePipeline(assets_config_path=str(assets_config_path))
+    processed_data, full_tensor = pipeline.run_from_raw(
+        raw_dir=args.raw_dir,
+        export_parquet=args.resume is None,
+        output_file=args.processed_output,
+        end_date=(getattr(args, "_research_protocol_fold", {}).get("outer_end", val_end)
+                  if not include_test else None),
+    )
     # Kiểm tra tính tương thích giữa mốc split và dải ngày thực tế của full_tensor
     tensor_start = pd.Timestamp(full_tensor.dates[0])
     tensor_end = pd.Timestamp(full_tensor.dates[-1])
@@ -160,9 +168,12 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         v_start = pd.Timestamp(val_start)
         v_end = pd.Timestamp(val_end)
         t_start = pd.Timestamp(test_start)
-        if not (tensor_start <= t_end < v_start <= v_end < t_start <= tensor_end):
+        if not (tensor_start <= t_end < v_start <= v_end < t_start and v_end <= tensor_end
+                and (not include_test or t_start <= tensor_end)):
             need_auto = True
 
+    if need_auto and not include_test:
+        raise ValueError("Validation-only không được tự thay đổi split đã chọn.")
     if need_auto:
         print(
             f"[CẢNH BÁO] Các mốc split ({train_end}, {val_start}, {val_end}, {test_start}) "
@@ -178,7 +189,7 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
             test_start=test_start,
         )
 
-    split = splitter.split_market_data_tensor(full_tensor)
+    split = splitter.split_market_data_tensor(full_tensor, include_test=include_test)
     with args.env_config.open("r", encoding="utf-8") as stream:
         configured_lookback = yaml.safe_load(stream)["environment"].get("lookback_window", 20)
     lookback = int(configured_lookback if args.lookback is None else args.lookback)
@@ -204,7 +215,7 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
             raise ValueError("Resume yêu cầu cùng split_dates.")
     train_tensor = scaler.transform(split.train)
     val_tensor = scaler.transform(split.val)
-    test_tensor = scaler.transform(split.test)
+    test_tensor = scaler.transform(split.test) if include_test else None
     scaled_full_tensor = scaler.transform(full_tensor)
     args.scaler_output.parent.mkdir(parents=True, exist_ok=True)
     scaler.save(args.scaler_output)
@@ -216,9 +227,24 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     tickers = list(full_tensor.tickers)
     all_open_prices = open_price_matrix(processed_data, tickers)
     all_close_prices = close_price_matrix(processed_data, tickers, full_tensor.dates)
+    fold = getattr(args, "_research_protocol_fold", None)
+    if fold:
+        dates = pd.DatetimeIndex(pd.to_datetime(full_tensor.dates))
+        a = int(dates.searchsorted(pd.Timestamp(fold["outer_start"])))
+        b = int(dates.searchsorted(pd.Timestamp(fold["outer_end"]), side="right"))
+        outer = MarketDataTensor(scaled_full_tensor.tensor[a:b].copy(), tickers,
+                    list(full_tensor.feature_names), list(full_tensor.dates[a:b]))
+        outer.validate()
+        if b - a < 2 or dates[b-1] < pd.Timestamp(fold["outer_end"]) - pd.Timedelta(days=7):
+            raise ValueError("Không đủ dữ liệu outer development theo protocol.")
+        args._outer_validation_context = {"val_tensor": outer, "val_open": all_open_prices[a:b],
+            "val_close": all_close_prices[a:b], "val_history_start": a,
+            "evaluation_period": "outer_development", "protocol_fold": fold}
     date_to_index = {str(date): index for index, date in enumerate(full_tensor.dates)}
 
     def prices_for(partition, price_matrix: np.ndarray) -> np.ndarray:
+        if partition is None:
+            return None
         indices = [date_to_index[str(date)] for date in partition.dates]
         return price_matrix[indices].copy()
 

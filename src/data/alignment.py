@@ -213,6 +213,7 @@ class CalendarAligner:
         raw_dir: Path | str,
         file_pattern: str = "*.parquet",
         tickers: list[str] | None = None,
+        end_date: str | None = None,
     ) -> AlignmentResult:
         """Load, validate, and align all asset files from a raw directory.
 
@@ -253,6 +254,10 @@ class CalendarAligner:
                 df = pd.read_csv(file_path)
             else:
                 continue
+            if end_date is not None:
+                date_column = next((c for c in df.columns if str(c).lower() == "date"), None)
+                dates = pd.to_datetime(df[date_column] if date_column is not None else df.index)
+                df = df.loc[dates <= pd.Timestamp(end_date)].copy()
             if ticker in loaded_data:
                 raise ValueError(f"Tìm thấy nhiều file dữ liệu cho ticker '{ticker}'.")
             loaded_data[ticker] = df

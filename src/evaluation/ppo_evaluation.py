@@ -80,6 +80,8 @@ def evaluate_test(
     context: dict[str, Any],
 ) -> pd.DataFrame:
     resolve_training_config(args)
+    if args.evaluation_scope != "test":
+        raise ValueError("Chế độ validation không cho phép backtest test.")
     try:
         return _evaluate_test(args, model, context)
     except KeyboardInterrupt:

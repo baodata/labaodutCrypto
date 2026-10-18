@@ -292,6 +292,7 @@ class FeaturePipeline:
         raw_dir: Union[Path, str] = "data/raw",
         export_parquet: bool = True,
         output_file: Union[Path, str] = "data/processed/features.parquet",
+        end_date: str | None = None,
     ) -> Tuple[dict[str, pd.DataFrame], MarketDataTensor]:
         """Căn lịch, tính feature, tạo tensor; SPY là tham chiếu ngoài action space."""
         aligner = CalendarAligner(method="intersection")
@@ -304,6 +305,7 @@ class FeaturePipeline:
         alignment_res = aligner.align_from_directory(
             raw_dir,
             tickers=requested_tickers,
+            end_date=end_date,
         )
 
         processed_data = self.process_all(alignment_res.aligned_data)

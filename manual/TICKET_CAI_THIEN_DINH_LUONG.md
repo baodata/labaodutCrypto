@@ -119,17 +119,21 @@ P0 làm trước nâng cấp; P1 vào sprint tương ứng; P2 chỉ mở theo g
 <a id="qnt-002"></a>
 ### QNT-002 — Đóng băng protocol, baseline và gate
 
+**Bàn giao 18/10/2026:** [Báo cáo Sprint 5, source/config hash và kết quả theo gate](NGHIEM_THU_SPRINT_5.md). Checklist chính tại sprint của A.
+
 **Checklist sprint:** [Sprint 5 — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-002).
 
 - **P0 · Owner A · Review B · Phụ thuộc QNT-001**
 - **Phạm vi:** tạo config thí nghiệm gồm train/inner-val/outer-val, seed, search budget, checkpoint rule và gate. Thêm chế độ đánh giá validation/fold phát triển mà không tự chạy test; tên CLI chốt khi triển khai.
-- **File:** [train_ppo.py](../src/training/train_ppo.py), [metrics.py](../src/evaluation/metrics.py), [artifacts.py](../src/utils/artifacts.py); config **dự kiến** `configs/quant_research_protocol.yaml`.
+- **File:** [train_ppo.py](../src/training/train_ppo.py), [metrics.py](../src/evaluation/metrics.py), [artifacts.py](../src/utils/artifacts.py); [configs/quant_research_protocol.yaml](../configs/quant_research_protocol.yaml).
 - **DoD:** baseline 1/N, matched cash + alpha và untrained policy có cùng timeline/cost/cap; lịch tái cân bằng và first allocation được ghi rõ. Khi thêm overlay, baseline áp dụng cùng quy tắc causal; không lấy cash/exposure nhìn lại từ PPO để tối ưu baseline.
 - **Checkpoint:** lưu cả mức cải thiện so epoch 0 và matched baseline; trường hợp không đạt margin đã định báo “chưa đạt gate”, không trình bày fallback như kết quả đã học.
 - **Bàn giao:** config có hash, baseline reference mới sau masking, bảng protocol và giới hạn holdout. Tiêu chí giảm rủi ro và tìm alpha được xác định trước theo mục tiêu của nhánh.
 
 <a id="qnt-003"></a>
 ### QNT-003 — Đo tín hiệu ngoài mẫu và baseline tuyến tính
+
+**Bàn giao 18/10/2026:** [Báo cáo Sprint 5, source/config hash và kết quả theo gate](NGHIEM_THU_SPRINT_5.md). Checklist chính tại sprint của A.
 
 **Checklist sprint:** [Sprint 5 — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-003).
 

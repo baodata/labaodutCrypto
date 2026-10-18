@@ -10,6 +10,8 @@
 
 Tài liệu mô tả cách chương trình đang chạy. Với một kết quả đã lưu, dùng `manifest.json` và metadata checkpoint của run đó để biết phiên bản mã, cấu hình và dữ liệu đã thực sự được sử dụng. Run được khởi động trước sửa masking có thể dùng cơ chế cũ.
 
+**Sprint 5 ngày 18/10/2026:** đã bổ sung protocol train/inner/outer development, validation-only, checkpoint learning gate và IC/linear baseline theo fold. Xem [báo cáo nghiệm thu](NGHIEM_THU_SPRINT_5.md) cho luồng và artifact mới; default CLI không dùng protocol vẫn giữ cách đánh giá lịch sử trước đó.
+
 ## Mục lục
 
 1. [Phạm vi triển khai](#1-phạm-vi-triển-khai)

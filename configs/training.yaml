@@ -19,6 +19,7 @@ checkpoint_selection:
   margin: 0.0
 
 evaluation:
+  scope: test                 # Legacy default; use validation during development.
   train_eval_every: 5
   bootstrap_block_size: 20
   bootstrap_samples: 10000

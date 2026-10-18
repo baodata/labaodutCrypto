@@ -122,6 +122,8 @@ $$\text{Equal Weight (1/N)} \longrightarrow \text{Single-Agent PPO} \longrightar
 
 ## 6. Phối hợp các ticket định lượng trong sprint
 
+**Nghiệm thu Sprint 5 — 18/10/2026:** QNT-002 và QNT-003 đã triển khai, chạy end-to-end trên dữ liệu thật và bàn giao [báo cáo/artifact](NGHIEM_THU_SPRINT_5.md). Gate nghiên cứu NO-GO; không backtest test 2023–2025 trong lượt này. Trạng thái checklist quản lý tại file A.
+
 Toàn bộ **25 QNT** có checklist trực tiếp tại Sprint 5–9 trong [kế hoạch A](NHIEM_VU_THANH_VIEN_A.md) và [kế hoạch B](NHIEM_VU_THANH_VIEN_B.md). Bảng sprint mục 3 đã bao gồm các task này; [đặc tả QNT](TICKET_CAI_THIEN_DINH_LUONG.md) giữ phụ thuộc, công thức, DoD và liên kết tới owner.
 
 1. **Sprint 5:** B/QNT-001 → A/QNT-002 → A/QNT-003. Giữ trạng thái hiện có; không tự đánh dấu thêm việc đã xong khi chuyển mục.

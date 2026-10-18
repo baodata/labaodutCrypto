@@ -1,0 +1,58 @@
+# Frozen Sprint 5 development protocol. Changing this file starts a new protocol.
+version: sprint5-v1
+evaluation_scope: validation
+development_end: "2022-12-31"
+period_status: historical_development_not_independent_confirmation
+seeds: [7, 17, 27, 37, 47]
+bootstrap:
+  block_size: 20
+  samples: 2000
+  seed: 1729
+execution:
+  action_alpha: 0.25
+  cash_ratio: 0.04
+  initial_allocation: blend_from_cash
+  rebalance_every_sessions: 1
+checkpoint_gate:
+  minimum_improvement_over_untrained: 0.03
+  minimum_sharpe_delta_vs_matched: 0.0
+signal:
+  features: [xs_rank_ret_20d, mom_12_1, excess_ret_20d]
+  ic_horizons: [1, 5, 20]
+  label_horizon: 1
+  ridge_alphas: [0.1, 1.0]
+  tilt_fractions: [0.0, 0.25, 0.5]
+  selection_metric: sharpe_ratio
+  search_budget_per_fold: 6
+gate:
+  minimum_positive_folds: 3
+  minimum_annualized_net_excess: 0.02
+  minimum_ci_lower: 0.0
+  minimum_mean_sharpe_delta: 0.0
+  maximum_drawdown_degradation: 0.02
+  minimum_signal_folds: 3
+folds:
+  - name: development_2019
+    train_end: "2017-12-31"
+    inner_start: "2018-01-01"
+    inner_end: "2018-12-31"
+    outer_start: "2019-01-01"
+    outer_end: "2019-12-31"
+  - name: development_2020
+    train_end: "2018-12-31"
+    inner_start: "2019-01-01"
+    inner_end: "2019-12-31"
+    outer_start: "2020-01-01"
+    outer_end: "2020-12-31"
+  - name: development_2021
+    train_end: "2019-12-31"
+    inner_start: "2020-01-01"
+    inner_end: "2020-12-31"
+    outer_start: "2021-01-01"
+    outer_end: "2021-12-31"
+  - name: development_2022
+    train_end: "2020-12-31"
+    inner_start: "2021-01-01"
+    inner_end: "2021-12-31"
+    outer_start: "2022-01-01"
+    outer_end: "2022-12-31"

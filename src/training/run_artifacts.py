@@ -59,6 +59,8 @@ def configure_run_artifacts(args, kind="ppo"):
             Path(getattr(args, "assets_config", PROJECT_ROOT / "configs/assets.yaml")),
         ], PROJECT_ROOT),
     }
+    if getattr(args, "research_protocol", None) is not None:
+        hashes["config_hashes"].update(file_hashes([args.research_protocol], PROJECT_ROOT))
     if args.resume is not None:
         previous = torch.load(args.resume, map_location="cpu", weights_only=False)
         for key, current in hashes.items():
@@ -86,6 +88,8 @@ def configure_run_artifacts(args, kind="ppo"):
         "arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items() if not k.startswith("_")},
         "runtime": runtime_versions(),
         "training_config_inputs": copy.deepcopy(args._training_config_inputs),
+        "research_protocol": getattr(args, "_research_protocol", None),
+        "research_protocol_hash": getattr(args, "_research_protocol_hash", None),
         **hashes,
     }
     record_effective_training_config(args)

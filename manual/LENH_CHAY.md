@@ -29,6 +29,29 @@ Các cờ mô hình và môi trường hiện có như `--lookback`, `--action-a
 
 Mỗi run lưu `training_config.json` và `resolved_training_config` trong manifest/checkpoint. Các giá trị tự động được cập nhật khi biết kích thước dữ liệu/device; manifest giữ thêm `training_config_inputs` trước khi tính tự động. Resume yêu cầu cùng training YAML, cấu hình CLI đã resolve và các điều kiện tái lập hiện có. Khi chạy nhiều seed, mỗi thư mục seed có snapshot riêng.
 
+## Sprint 5 — protocol đóng băng, chỉ development validation
+
+[Protocol](../configs/quant_research_protocol.yaml) và [báo cáo nghiệm thu](NGHIEM_THU_SPRINT_5.md). Chạy từ thư mục gốc:
+
+```bash
+# QNT-003: IC + inner-fit linear tilt, bốn outer development fold.
+python scripts/analyze_feature_signal.py \
+  --research-protocol configs/quant_research_protocol.yaml
+
+# QNT-002: PPO chọn checkpoint trên inner 2021, báo cáo outer 2022.
+python scripts/run_sprint5_backtest.py \
+  --research-protocol configs/quant_research_protocol.yaml \
+  --encoder gru --lookback 10 --hidden-dim 64 \
+  --episodes-per-update 8 --ppo-iters 3 \
+  --epochs 10 --min-epochs 5 --patience 5 --bootstrap-samples 2000
+```
+
+Mặc định protocol chọn fold cuối; đổi fold bằng `--protocol-fold development_2019` (hoặc 2020/2021/2022 theo tên trong YAML). Mốc CLI, alpha/cash, selection metric và seed xung đột protocol sẽ báo lỗi. Không dùng `--evaluation-scope test` cùng protocol.
+
+Nếu chỉ cần validation của split hiện có mà không dùng protocol: `python -m src.training.train_ppo --evaluation-scope validation`. Khi đó validation vẫn là kỳ chọn checkpoint, không tự trở thành outer holdout.
+
+Kết quả Sprint 5 đã chạy: **NO-GO**; cả bốn inner fold chọn tilt 0, PPO chưa vượt biên cải thiện nên dùng fallback epoch 0. Chỉ đổi protocol/gate bằng một phiên bản nghiên cứu mới đã chốt trước lượt chạy.
+
 ## 1. GAT + GRU nhỏ — 5 seed
 
 **Mục đích:** đánh giá độ ổn định qua seed và so với matched baseline cash 4%, cùng action alpha 0.25.

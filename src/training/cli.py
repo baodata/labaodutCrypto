@@ -26,6 +26,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/model.yaml")
     parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
+    parser.add_argument("--research-protocol", type=Path, default=None,
+                        help="Protocol định lượng đóng băng; chỉ dùng development validation.")
+    parser.add_argument("--protocol-fold", default=None, help="Fold PPO; mặc định fold cuối protocol.")
+    parser.add_argument("--evaluation-scope", choices=("validation", "test"), default=None,
+                        help="Chỉ backtest validation hoặc test sau train.")
     parser.add_argument(
         "--training-config", type=Path, default=DEFAULT_TRAINING_CONFIG,
         help="Cấu hình train/early stopping/checkpoint/evaluation; CLI ghi đè YAML.",

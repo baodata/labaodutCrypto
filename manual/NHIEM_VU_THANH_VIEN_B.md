@@ -206,6 +206,8 @@ _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi ph�
   - _Tệp thực hiện:_ `src/training/logger.py`, `src/training/train_ppo.py`
   - _Nội dung:_ Tự động lưu checkpoint mô hình có Sharpe/Reward tốt nhất trên tập Validation (`best_model.pth`). Ghi log training metrics và TensorBoard qua `TrainerLogger`.
 
+> **Bàn giao Sprint 5 ngày 18/10/2026:** QNT-002/QNT-003 của A đã tích hợp CLI/config/artifacts/gate vào trainer và chạy dữ liệu thật. [Báo cáo nghiệm thu](NGHIEM_THU_SPRINT_5.md). Kết quả NO-GO được ghi rõ; QNT-025 đầy đủ vẫn thuộc Sprint 8.
+
 > 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: Dữ liệu processed $\rightarrow$ Trading Environment $\rightarrow$ PPO (A+B) $\rightarrow$ Backtest $\rightarrow$ Xuất bảng metrics so sánh với Equal Weight & Cash. Không chỉ là từng module chạy riêng lẻ!
 
 ---

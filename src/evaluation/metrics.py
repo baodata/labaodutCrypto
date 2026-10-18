@@ -148,6 +148,7 @@ def block_bootstrap_excess_returns(
     num_samples: int = 2000,
     seed: int = 42,
     confidence_level: float = 0.95,
+    groups: np.ndarray | None = None,
 ) -> dict[str, float]:
     """
     Circular Block Bootstrap (CBB) trên chuỗi excess return hàng ngày (strategy - benchmark).
@@ -177,12 +178,29 @@ def block_bootstrap_excess_returns(
     num_blocks = int(np.ceil(T / block_size))
     boot_means = np.empty(num_samples, dtype=np.float64)
     offsets = np.arange(block_size)
-    for first in range(0, num_samples, 256):
-        count = min(256, num_samples - first)
-        starts = rng.integers(0, T, size=(count, num_blocks))
-        indices = (starts[..., None] + offsets) % T
-        samples = excess[indices].reshape(count, -1)[:, :T]
-        boot_means[first:first + count] = samples.mean(axis=1)
+    if groups is not None:
+        groups = np.asarray(groups)
+        if groups.shape != excess.shape:
+            raise ValueError("Bootstrap groups phải cùng shape với returns.")
+        boot_means.fill(0.0)
+        for group in np.unique(groups):
+            values = excess[groups == group]
+            if len(values) < block_size:
+                raise ValueError("Mỗi bootstrap group phải đủ block_size.")
+            blocks = int(np.ceil(len(values) / block_size))
+            for first in range(0, num_samples, 256):
+                count = min(256, num_samples - first)
+                starts = rng.integers(0, len(values), size=(count, blocks))
+                indices = (starts[..., None] + offsets) % len(values)
+                samples = values[indices].reshape(count, -1)[:, :len(values)]
+                boot_means[first:first + count] += samples.sum(axis=1) / T
+    else:
+        for first in range(0, num_samples, 256):
+            count = min(256, num_samples - first)
+            starts = rng.integers(0, T, size=(count, num_blocks))
+            indices = (starts[..., None] + offsets) % T
+            samples = excess[indices].reshape(count, -1)[:, :T]
+            boot_means[first:first + count] = samples.mean(axis=1)
     annualized_means = boot_means * 252.0
     observed = float(np.mean(excess) * 252.0)
     # The same block draws from centered returns implement the boundary null.

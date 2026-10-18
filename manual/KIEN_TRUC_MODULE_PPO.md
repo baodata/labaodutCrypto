@@ -22,6 +22,14 @@
 
 Mã serialize checkpoint ở logger; quyết định chọn best/latest và trạng thái optimizer/scheduler/RNG vẫn thuộc trainer. Không tạo lại các phép tính `FinancialMetrics`/bootstrap đã có trong `src/evaluation/metrics.py`.
 
+### Bổ sung Sprint 5 ngày 18/10/2026
+
+- `src/evaluation/research_protocol.py`: đóng băng folds/execution/gate và kiểm tra xung đột CLI.
+- `src/evaluation/validation_evaluator.py`: báo cáo validation/outer development sau chọn checkpoint, không gọi test.
+- `src/evaluation/feature_signal.py`: rank-IC/ridge helpers dùng chung, giữ import tương thích của script cũ.
+- `src/evaluation/signal_research.py`: nested inner selection, IC theo fold, baseline 1/N-core tilt và GO/NO-GO.
+- `configs/quant_research_protocol.yaml`: định nghĩa protocol v1. [Nghiệm thu dữ liệu thật](NGHIEM_THU_SPRINT_5.md).
+
 ## 2. Hướng phụ thuộc
 
 ```mermaid

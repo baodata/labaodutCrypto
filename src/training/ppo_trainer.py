@@ -19,6 +19,7 @@ import yaml
 from src.data.split import TemporalSplitter
 from src.env.cost import resolve_transaction_cost_components
 from src.evaluation.metrics import FinancialMetrics
+from src.evaluation.research_protocol import checkpoint_learning_gate
 from src.evaluation.policy_evaluator import evaluate_equal_weight
 from src.evaluation.policy_evaluator import evaluate_policy
 from src.evaluation.policy_evaluator import evaluate_policy_with_actions
@@ -41,6 +42,7 @@ from src.training.run_artifacts import configure_run_artifacts
 from src.training.run_artifacts import finish_run_manifest
 from src.training.run_artifacts import record_effective_training_config
 from src.utils.artifacts import atomic_csv
+from src.utils.artifacts import atomic_json
 from src.utils.artifacts import restore_rng_state
 from src.utils.artifacts import rng_state
 from src.utils.data_types import MarketDataTensor
@@ -155,7 +157,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     full_date_index = {str(date): index for index, date in enumerate(full_tensor.dates)}
     train_history_start = full_date_index[str(split.train.dates[0])]
     val_history_start = full_date_index[str(split.val.dates[0])]
-    test_history_start = full_date_index[str(split.test.dates[0])]
+    test_history_start = full_date_index[str(split.test.dates[0])] if split.test is not None else None
     graph_metadata = None
 
     rl_config = model_config["rl_agent"]
@@ -374,6 +376,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             "sharpe_convention": FinancialMetrics.SHARPE_CONVENTION,
             "universe_methodology": "fixed_current_asset_list_without_point_in_time_membership",
             "test_period_status": (
+                "not_evaluated_validation_only" if args.evaluation_scope == "validation" else
                 "reused_exploratory_period_not_independent_holdout"
                 if reused_historical_test
                 else "custom_period_freshness_unverified"
@@ -433,6 +436,12 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             },
             "reference_validation_metrics": baseline_metrics,
             "reference_score": float(baseline_score),
+            "learning_gate": checkpoint_learning_gate(
+                epoch, val_metrics, baseline_metrics, matched_val_metrics,
+                float(np.mean(recent_validation_scores)) - baseline_score,
+                getattr(args, "_research_protocol", None),
+            ),
+            "matched_validation_metrics": matched_val_metrics,
             "training_parameters": {
                 "epochs": args.epochs, "ppo_iters": args.ppo_iters, "batch_size": batch_size,
                 "window_min": window_min, "window_max": window_max,
@@ -681,6 +690,18 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 "Reference/Turnover": baseline_metrics["total_turnover"],
             },
         )
+        atomic_json(args._run_dir / "baseline_reference.json", {
+            "selection_period": "inner" if getattr(args, "_research_protocol", None) else "validation",
+            "untrained_validation": baseline_metrics,
+            "equal_weight_train": equal_weight_train_metrics, "equal_weight_validation": equal_weight_val_metrics,
+            "matched_train": matched_train_metrics, "matched_validation": matched_val_metrics,
+            "matched_cash_ratio": matched_cash, "action_alpha": args.action_alpha,
+            "baseline_action_alpha": 1.0, "initial_allocation": "blend_from_cash",
+            "transaction_fee_pct": transaction_fee_pct, "slippage_pct": slippage_pct,
+            "max_asset_weight": float(env_config.get("max_asset_weight", 1.0)),
+            "timeline": "close_t_decision_open_t_plus_1_execution_close_t_plus_1_mark",
+            "history_mask_convention": "explicit_bool_mask_true_real_timestep_v1",
+        })
         if np.isfinite(baseline_score) and resume_payload is None:
             best_score = float(baseline_score)
             best_validation_metrics = baseline_metrics
@@ -948,6 +969,10 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             recent_validation_scores.append(float(score))
             recent_validation_scores = recent_validation_scores[-args.selection_window :]
             smoothed_score = float(np.mean(recent_validation_scores))
+            learning_gate = checkpoint_learning_gate(
+                epoch, val_metrics, baseline_metrics, matched_val_metrics,
+                smoothed_score - baseline_score, getattr(args, "_research_protocol", None),
+            )
             training_row = {
                 "epoch": float(epoch),
                 "train_evaluated": int(train_evaluated),
@@ -1035,7 +1060,15 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                 }
             )
             training_rows.append(training_row)
+            training_row.update({
+                "validation_sharpe_delta_vs_untrained": learning_gate["sharpe_delta_vs_untrained"],
+                "validation_selection_delta_vs_untrained": learning_gate["smoothed_selection_delta_vs_untrained"],
+                "learning_gate_passed": int(learning_gate["passed"]),
+            })
             epoch_metrics = {
+                    "Validation/LearningGatePassed": int(learning_gate["passed"]),
+                    "Validation/SharpeDeltaVsUntrained": learning_gate["sharpe_delta_vs_untrained"],
+                    "Validation/SmoothedSelectionDeltaVsUntrained": learning_gate["smoothed_selection_delta_vs_untrained"],
                     "Time/Rollout": t_roll,
                     "Time/Update": t_upd,
                     "Time/Eval": t_eval,
@@ -1124,6 +1157,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             improved = (
                 np.isfinite(smoothed_score)
                 and smoothed_score > (best_score + args.selection_margin)
+                and (not getattr(args, "_research_protocol", None) or learning_gate["passed"])
             )
             if improved:
                 best_score = smoothed_score
@@ -1210,7 +1244,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     checkpoint_status = checkpoint.get("checkpoint_status", "legacy_or_unknown")
     if checkpoint_status == "untrained_fallback" or int(checkpoint.get("epoch", -1)) == 0:
         warnings.warn(
-            "Checkpoint tốt nhất là epoch 0 (policy chưa train). Kết quả test sẽ đo policy khởi tạo, "
+            f"Checkpoint tốt nhất là epoch 0 (policy chưa train). Kết quả {args.evaluation_scope} sẽ đo policy khởi tạo, "
             "không phải kết quả của một policy PPO đã học.",
             RuntimeWarning,
             stacklevel=2,
@@ -1222,6 +1256,12 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         f"val profit={best_validation_metrics['profit']:+,.2f}"
     )
     return model, {
+        "val_tensor": val_tensor, "val_open": val_open, "val_close": val_close,
+        "val_history_start": val_history_start,
+        **getattr(args, "_outer_validation_context", {}),
+        "reference_validation_metrics": baseline_metrics,
+        "matched_validation_metrics": matched_val_metrics,
+        "learning_gate": checkpoint.get("learning_gate", {}),
         "full_tensor": full_tensor,
         "scaled_full_tensor": scaled_full_tensor,
         "split": split,

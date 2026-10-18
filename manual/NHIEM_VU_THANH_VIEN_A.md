@@ -212,28 +212,30 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
 
 <a id="qnt-002"></a>
 
-- [ ] **[QNT-002] — Đóng băng protocol, baseline và gate (P0) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** ⏳ Đang nghiệm thu.
+- [x] **[QNT-002] — Đóng băng protocol, baseline và gate (P0) [ĐỊNH LƯỢNG]**
+  - **Theo dõi:** ✅ Triển khai/nghiệm thu dữ liệu thật; gate NO-GO.
   - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001
   - **Phạm vi:** Tạo config thí nghiệm chuẩn gồm train/inner-val/outer-val, seed, search budget, checkpoint rule và gate. Thêm chế độ đánh giá validation/fold phát triển mà không tự động đọc test set.
-  - **Tệp tác động:** `src/training/train_ppo.py`, `src/evaluation/metrics.py`, `src/utils/artifacts.py`; config dự kiến `configs/quant_research_protocol.yaml`.
+  - **Tệp tác động:** `src/evaluation/research_protocol.py`, `validation_evaluator.py`, `src/training/ppo_trainer.py`, `data_preparation.py`; config `configs/quant_research_protocol.yaml`.
   - **DoD (Nghiệm thu):**
     - Baseline 1/N, matched cash + alpha và untrained policy có cùng timeline, cost, cap. Lịch tái cân bằng và first allocation được ghi rõ.
     - Khi thêm overlay rủi ro, baseline áp dụng cùng quy tắc causal; không lấy cash/exposure nhìn lại từ PPO để tối ưu baseline.
     - Checkpoint lưu cả mức cải thiện so với epoch 0 và matched baseline; trường hợp không vượt margin đã định báo "chưa đạt gate", không trình bày fallback như kết quả đã học.
   - **Sản phẩm bàn giao:** Config có hash, baseline reference mới sau masking, bảng protocol và giới hạn holdout.
   - **Đặc tả bổ sung:** [QNT-002](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-002).
+  - **Nghiệm thu 18/10/2026:** đã triển khai và chạy dữ liệu thật; gate nghiên cứu **NO-GO**. [Báo cáo và artifact](NGHIEM_THU_SPRINT_5.md).
 
 <a id="qnt-003"></a>
 
-- [ ] **[QNT-003] — Đo tín hiệu ngoài mẫu và baseline tuyến tính (P0) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+- [x] **[QNT-003] — Đo tín hiệu ngoài mẫu và baseline tuyến tính (P0) [ĐỊNH LƯỢNG]**
+  - **Theo dõi:** ✅ Có IC/linear baseline theo fold; gate NO-GO.
   - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002
   - **Phạm vi:** Tính rank-IC ở horizon 1/5/20 trên nhãn thực thi được; hệ số, hướng tín hiệu và strength fit trên train/inner-val. Đánh giá riêng từng outer fold/giai đoạn phát triển, gồm 1/N lõi + tilt và matched baseline.
   - **Tệp tác động:** `scripts/analyze_feature_signal.py`, `scripts/evaluate_equal_weight_tilt.py`, `scripts/evaluate_tilt_robustness.py`.
   - **DoD (Nghiệm thu):** Purge các label train kéo vào kỳ đánh giá; IC có số mẫu và block CI; báo cáo turnover, chi phí, spread lợi suất giữa các nhóm score và độ ổn định dấu IC. Tham số không được chọn bằng outer fold/test.
   - **Sản phẩm bàn giao:** `signal_by_fold.csv`, `linear_baseline_by_fold.csv` và quyết định GO/NO-GO alpha modeling. Kết quả âm vẫn tính là hoàn thành ticket nếu implementation đúng.
   - **Đặc tả bổ sung:** [QNT-003](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-003).
+  - **Nghiệm thu 18/10/2026:** đã triển khai và chạy dữ liệu thật; gate nghiên cứu **NO-GO**. [Báo cáo và artifact](NGHIEM_THU_SPRINT_5.md).
 
 #### Công việc nền và H-MARL của sprint
 
@@ -264,6 +266,8 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
 - [x] **[EXP-001] Cài đặt đầy đủ các chỉ số tài chính chuẩn (P0)** _(đã chỉnh)_
   - _Tệp cần tạo:_ `src/evaluation/metrics.py`
   - Cung cấp tính toán Cumulative Return, Annualized Return, Volatility, Sharpe, MDD, Calmar, Turnover, Costs.
+
+> **Nghiệm thu bổ sung 18/10/2026:** [Sprint 5 đã chạy end-to-end theo protocol train/inner/outer development](NGHIEM_THU_SPRINT_5.md), không tự backtest giai đoạn test. QNT-002/QNT-003 hoàn thành triển khai; gate alpha NO-GO. Lệnh legacy có đánh giá test dưới đây vẫn được giữ để tương thích.
 
 > 🏆 **Definition of Done (DoD) Sprint 5:** Một command duy nhất chạy end-to-end: dữ liệu OHLCV $\rightarrow$ processed features $\rightarrow$ train/validation/test theo thời gian $\rightarrow$ PPO $\rightarrow$ backtest trên test $\rightarrow$ xuất bảng metrics so sánh với Equal Weight, Buy & Hold và Cash. Lệnh đã được triển khai trong `scripts/run_sprint5_backtest.py`; chỉ đánh dấu nghiệm thu sau khi chạy thành công với bộ dữ liệu thật.
 

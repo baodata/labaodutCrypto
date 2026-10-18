@@ -22,7 +22,10 @@ def train_multi_seed(args, *, train_fn=None, evaluate_fn=None) -> None:
     if train_fn is None:
         from src.training.ppo_trainer import train as train_fn
     if evaluate_fn is None:
-        from src.evaluation.ppo_evaluation import evaluate_test as evaluate_fn
+        if args.evaluation_scope == "validation":
+            from src.evaluation.validation_evaluator import evaluate_validation as evaluate_fn
+        else:
+            from src.evaluation.ppo_evaluation import evaluate_test as evaluate_fn
 
     seeds = [int(value.strip()) for value in args.seeds.split(",") if value.strip()]
     if len(seeds) < 2:
@@ -76,7 +79,7 @@ def train_multi_seed(args, *, train_fn=None, evaluate_fn=None) -> None:
         "training_config_inputs": args._training_config_inputs,
         "summary_path": str(summary_path), "metadata_path": str(metadata_path),
     })
-    print("\nTest mean ± std across seeds:")
+    print(f"\n{args.evaluation_scope.title()} mean ± std across seeds:")
     print(summary.to_string(float_format=lambda value: f"{value:.6f}"))
     print(f"Đã lưu tổng hợp nhiều seed: {summary_path}")
     print(f"Đã lưu metadata từng seed: {metadata_path}")
