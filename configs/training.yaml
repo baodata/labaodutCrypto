@@ -1,0 +1,31 @@
+# PPO run settings. Explicit CLI flags override this file.
+# Architecture/PPO loss: model.yaml; trading/reward: env.yaml.
+training:
+  epochs: 50
+  ppo_iters: 10
+  episodes_per_update: 32
+  batch_size: 256
+  microbatch_size: null        # Auto: GNN 16 CPU / 32 CUDA; otherwise batch_size.
+  window_min_days: 126
+  window_max_days: 252
+
+early_stopping:
+  min_epochs: 10
+  patience: 10                # 0 disables early stopping.
+
+checkpoint_selection:
+  metric: sharpe              # sharpe, cumulative_return, excess_sharpe, excess_return
+  window: 5
+  margin: 0.0
+
+evaluation:
+  train_eval_every: 5
+  bootstrap_block_size: 20
+  bootstrap_samples: 10000
+  matched_cash_ratio: null     # Auto: 1 / (number of stocks + 1).
+
+runtime:
+  cpu_threads: 4
+  cache_batch_size: 64
+  cache_temporal_batch_size: 32
+  progress_every: 10.0         # Seconds between progress updates.

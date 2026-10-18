@@ -4,6 +4,10 @@
 **Nguồn:** mã trong `src/`, các script và cấu hình tại thời điểm viết; đã bao gồm thay đổi history mask tường minh.  
 **Entry point chính:** `python -m src.training.train_ppo`.
 
+**Cập nhật cấu hình 18/10/2026:** tham số vòng lặp train, early stopping, chọn checkpoint, evaluation và runtime chuyển sang `configs/training.yaml`; CLI vẫn ghi đè. Các mô tả/thực nghiệm khác trong tài liệu giữ mốc ngày mô tả ở trên.
+
+**Cập nhật module 18/10/2026:** `train_ppo.py` là entry point tương thích; logic hiện thuộc các module data/env/evaluation/trainer/runner. Xem [bản đồ module và phân công A/B](KIEN_TRUC_MODULE_PPO.md). Các tham chiếu tới hàm ở entry point vẫn dùng được qua re-export.
+
 Tài liệu mô tả cách chương trình đang chạy. Với một kết quả đã lưu, dùng `manifest.json` và metadata checkpoint của run đó để biết phiên bản mã, cấu hình và dữ liệu đã thực sự được sử dụng. Run được khởi động trước sửa masking có thể dùng cơ chế cũ.
 
 ## Mục lục
@@ -82,6 +86,7 @@ Graph và feature được tính trước cho toàn lịch dữ liệu. Khi lấ
 | `configs/assets.yaml` | Danh sách cổ phiếu, SPY, ngành và nhóm agent |
 | `configs/env.yaml` | Vốn, commission/slippage, trần vị thế, lookback, reward và lãi tiền mặt |
 | `configs/model.yaml` | GNN, learning rate, gamma, KL, clipping, entropy, critic và Dirichlet κ |
+| `configs/training.yaml` | Epochs, PPO iterations, rollout/minibatch, early stopping, chọn checkpoint, evaluation và runtime |
 | CLI | Ghi đè các tham số được parser hỗ trợ; chọn seed, encoder, cửa sổ, số update và output |
 | `configs/tilt_robustness_gate.yaml` | Chiến lược tilt và cổng đánh giá riêng của script robustness |
 
@@ -118,7 +123,7 @@ Một số khóa YAML là mô tả: luồng train luôn gọi PPO; timeline hi�
 | Selection window / margin | 5 / 0 | 5 / 0 |
 | `min_epochs` / patience | 10 / 10 | 5 / 5 |
 
-Đối chiếu tham số thật bằng manifest của từng run; sửa YAML có thể thay giá trị của các cờ để mặc định `None`.
+Đối chiếu tham số thật bằng manifest của từng run; sửa YAML có thể thay giá trị của các cờ để mặc định `None`. Với tham số run, ưu tiên là CLI → `training.yaml` → mặc định dự phòng; `batch_size` lấy từ `training.yaml`. Các giá trị auto được lưu sau khi resolve trong `training_config.json` và `resolved_training_config` của manifest/checkpoint; `training_config_inputs` giữ đầu vào trước auto để đối chiếu khi resume.
 
 ### 3.3. Kích thước quan trọng
 

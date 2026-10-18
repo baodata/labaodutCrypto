@@ -21,6 +21,8 @@ _(DYNAMIC GRAPH + GNN/GAT + PPO BASELINE + LOW-LEVEL SECTOR MARL + GAT COMMUNICA
 
 ## 1. Các thư mục do Thành viên B chịu trách nhiệm trực tiếp
 
+**Phân công module PPO từ 18/10/2026:** B chủ trì entry point/CLI/config, `src/training/ppo_trainer.py`, `ppo_core.py`, `multi_seed.py`, `null_evaluation.py` và `run_artifacts.py`; A review. Đánh giá tài chính/factory/dữ liệu đi qua module A, tránh cùng sửa vòng lặp. [Chi tiết kiến trúc và điểm bàn giao](KIEN_TRUC_MODULE_PPO.md).
+
 ```text
 src/
 ├── graph/          # Xây dựng ma trận tương quan rolling, đồ thị quan hệ động

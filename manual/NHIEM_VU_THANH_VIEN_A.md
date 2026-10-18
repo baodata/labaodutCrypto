@@ -23,6 +23,8 @@ _(DATA + ENVIRONMENT + PPO BASELINE + HIGH-LEVEL MACRO AGENT + EVALUATION)_
 
 ## 1. Các thư mục do Thành viên A chịu trách nhiệm trực tiếp
 
+**Phân công module PPO từ 18/10/2026:** A chủ trì `src/training/data_preparation.py`, `src/training/env_factory.py`, `src/evaluation/policy_evaluator.py` và `src/evaluation/ppo_evaluation.py`; B review. Các ticket QNT về data/env/metrics ưu tiên sửa đúng module này. [Chi tiết kiến trúc và điểm bàn giao](KIEN_TRUC_MODULE_PPO.md).
+
 ```text
 src/
 ├── data/           # Mã nguồn tải, tiền xử lý và kiểm định dữ liệu

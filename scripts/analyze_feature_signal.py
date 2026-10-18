@@ -22,12 +22,9 @@ from src.evaluation.baselines import EqualWeightBaseline
 from src.features.pipeline import FeaturePipeline
 from src.features.scaler import MarketFeatureScaler
 from src.utils.artifacts import atomic_json, file_hashes
-from src.training.train_ppo import (
-    close_price_matrix,
-    create_env,
-    metric_summary,
-    open_price_matrix,
-)
+from src.training.data_preparation import close_price_matrix, open_price_matrix
+from src.training.env_factory import create_env
+from src.evaluation.policy_evaluator import metric_summary
 
 
 LINEAR_FEATURES = ("xs_rank_ret_20d", "mom_12_1", "excess_ret_20d")

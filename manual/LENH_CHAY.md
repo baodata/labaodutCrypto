@@ -7,11 +7,33 @@ cd /home/tuan/AI/AI_roject1
 source .venv/bin/activate
 ```
 
+## Cấu hình huấn luyện
+
+Entry point giữ nguyên sau khi tách module. Xem [kiến trúc module PPO và phân công A/B](KIEN_TRUC_MODULE_PPO.md) để biết file cần sửa cho từng trách nhiệm.
+
+Sửa [configs/training.yaml](../configs/training.yaml) để đổi epochs, rollout/minibatch, early stopping, chọn checkpoint, lịch đánh giá và runtime. Kiến trúc/loss PPO ở `configs/model.yaml`; môi trường/reward ở `configs/env.yaml`. `batch_size` đã chuyển từ `model.yaml` sang `training.yaml`.
+
+Thứ tự ưu tiên: **CLI được truyền rõ → training YAML → mặc định dự phòng**. File YAML tùy chỉnh có thể chỉ chứa các nhóm/khóa cần đổi; khóa bị gõ sai hoặc giá trị không hợp lệ sẽ báo lỗi. `patience: 0` tắt early stopping; `microbatch_size: null` và `matched_cash_ratio: null` chọn tự động theo model/device và số mã.
+
+```bash
+# Đọc các tham số từ configs/training.yaml.
+python -m src.training.train_ppo --encoder gnn
+
+# Chọn một training YAML riêng, đồng thời ghi đè patience bằng CLI.
+python -m src.training.train_ppo \
+  --training-config configs/training.yaml \
+  --encoder gnn --patience 0
+```
+
+Các cờ mô hình và môi trường hiện có như `--lookback`, `--action-alpha`, `--reward-baseline`, `--gamma` vẫn giữ cách dùng cũ. Seed, device và đường dẫn output tiếp tục chọn bằng CLI.
+
+Mỗi run lưu `training_config.json` và `resolved_training_config` trong manifest/checkpoint. Các giá trị tự động được cập nhật khi biết kích thước dữ liệu/device; manifest giữ thêm `training_config_inputs` trước khi tính tự động. Resume yêu cầu cùng training YAML, cấu hình CLI đã resolve và các điều kiện tái lập hiện có. Khi chạy nhiều seed, mỗi thư mục seed có snapshot riêng.
+
 ## 1. GAT + GRU nhỏ — 5 seed
 
 **Mục đích:** đánh giá độ ổn định qua seed và so với matched baseline cash 4%, cùng action alpha 0.25.
 
-Giữ nguyên `configs/model.yaml` và `configs/env.yaml` giữa các lần so sánh. Mỗi lần chạy dùng một thư mục `--run-dir` mới, chưa có artifact.
+Giữ nguyên `configs/model.yaml`, `configs/env.yaml` và `configs/training.yaml` giữa các lần so sánh. Mỗi lần chạy dùng một thư mục `--run-dir` mới, chưa có artifact.
 
 ```bash
 python -m src.training.train_ppo \

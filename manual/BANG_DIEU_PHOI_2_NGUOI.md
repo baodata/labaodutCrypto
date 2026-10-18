@@ -21,6 +21,8 @@
 
 ## 1. Bản đồ phân chia Module trong Source Code
 
+**Cập nhật PPO 18/10/2026:** [kiến trúc module PPO](KIEN_TRUC_MODULE_PPO.md) xác định A phụ trách data preparation/env factory/policy evaluation và báo cáo; B phụ trách entry point, trainer, PPO core, artifacts và multi-seed/null runner. `train_ppo.py` giữ API/lệnh cũ qua re-export; sửa triển khai tại module sở hữu tương ứng.
+
 ```text
 src/
 ├── data/           👉 THÀNH VIÊN A (Downloader, Validator, Alignment)

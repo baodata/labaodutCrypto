@@ -21,7 +21,7 @@ rl_agent:
   learning_rate: 0.0003          # Tốc độ học (3e-4 là chuẩn vàng của PPO)
   gamma: 0.95                   # Credit assignment ngắn hơn cho reward theo ngày
   clip_ratio: 0.2                # Giới hạn cập nhật policy để AI không bị "sốc"
-  batch_size: 256                # Minibatch PPO sau khi gom nhiều cửa sổ train
+  # Minibatch/rollout/early stopping được cấu hình tại configs/training.yaml.
   entropy_coef: 0.01             # Khuyến khích AI khám phá các chiến thuật mua bán mới mẻ
   target_kl: 0.03                # Không dừng quá sớm với Dirichlet nhiều chiều
   gae_lambda: 0.95                # Hệ số GAE-Lambda
