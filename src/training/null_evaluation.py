@@ -119,8 +119,10 @@ def _evaluate_untrained_null(args: argparse.Namespace, seeds: list[int]) -> pd.D
         raise ValueError(
             f"dirichlet_kappa ({dirichlet_kappa}) phải lớn hơn action_dim ({action_dim})."
         )
+    from src.training.quant_context import observation_context_dim
     model_kwargs: dict[str, Any] = {
         "encoder": encoder,
+        "portfolio_context_dim": observation_context_dim(scaled_full_tensor),
         "n_assets": n_assets,
         "n_features": n_features,
         "lookback": lookback,
@@ -154,8 +156,11 @@ def _evaluate_untrained_null(args: argparse.Namespace, seeds: list[int]) -> pd.D
             threshold=float(gnn_config.get("threshold_corr", 0.5)),
             graph_mode=str(gnn_config.get("graph_mode", "knn")).lower(),
             top_k=int(gnn_config.get("top_k", 5)),
-            sector_config_path=str(PROJECT_ROOT / "configs/assets.yaml"),
+            sector_config_path=str(args.assets_config),
+            covariance_bank=(scaled_full_tensor.quant_context or {}).get("graph_risk"),
         )
+        from src.training.quant_context import record_graph_diagnostics
+        record_graph_diagnostics(args, graph_adjacency_sequence, graph_edge_mask_sequence)
         model_kwargs.update(
             {
                 "gnn_architecture": architecture,

@@ -25,6 +25,13 @@ class BacktestResult:
     daily_rewards: np.ndarray
     weights_history: np.ndarray
     total_steps: int
+    daily_commission: np.ndarray | None = None
+    daily_slippage: np.ndarray | None = None
+    daily_impact: np.ndarray | None = None
+    daily_participation_max: np.ndarray | None = None
+    daily_hold: np.ndarray | None = None
+    daily_execution_weights: np.ndarray | None = None
+    extended_diagnostics: bool = False
 
 
 class DeterministicBacktester:
@@ -33,13 +40,15 @@ class DeterministicBacktester:
     def __init__(self, env: TradingEnv):
         self.env = env
         
-    def run_strategy(self, strategy_fn: Callable) -> BacktestResult:
+    def run_strategy(self, strategy_fn: Callable, *, on_step: Callable | None = None) -> BacktestResult:
         """
         Chạy một chiến lược cố định qua toàn bộ episode.
         
         Args:
             strategy_fn: Hàm nhận (obs, info), trả vector [N+1] hoặc PortfolioOrder
                 để giữ cổ phiếu hoặc ghi đè alpha cho riêng một lệnh rebalance.
+            on_step: Optional diagnostic callback receiving every execution info,
+                including the final step; it must not change the environment.
         """
         obs, info = self.env.reset()
         
@@ -49,6 +58,7 @@ class DeterministicBacktester:
         daily_turnover = []
         daily_costs = []
         daily_rewards = []
+        breakdown = {key: [] for key in ("commission_cost", "slippage_cost", "impact_cost", "participation_max", "hold", "execution_weights")}
         weights_history = [self.env.portfolio.weights.copy()]
         
         done = False
@@ -57,6 +67,8 @@ class DeterministicBacktester:
         while not done:
             action = strategy_fn(obs, info)
             obs, reward, terminated, truncated, info = self.env.step(action)
+            if on_step is not None:
+                on_step(info)
             done = terminated or truncated
             
             portfolio_values.append(self.env.portfolio.portfolio_value)
@@ -65,6 +77,8 @@ class DeterministicBacktester:
             daily_turnover.append(info.get('turnover', 0.0))
             daily_costs.append(info.get('transaction_cost', 0.0))
             daily_rewards.append(reward)
+            for key in breakdown:
+                breakdown[key].append(info.get(key, info.get("order_type") == "hold" if key == "hold" else 0.))
             weights_history.append(self.env.portfolio.weights.copy())
             steps += 1
             
@@ -76,7 +90,14 @@ class DeterministicBacktester:
             daily_costs=np.array(daily_costs),
             daily_rewards=np.array(daily_rewards),
             weights_history=np.array(weights_history),
-            total_steps=steps
+            total_steps=steps,
+            daily_commission=np.asarray(breakdown["commission_cost"]),
+            daily_slippage=np.asarray(breakdown["slippage_cost"]),
+            daily_impact=np.asarray(breakdown["impact_cost"]),
+            daily_participation_max=np.asarray(breakdown["participation_max"]),
+            daily_hold=np.asarray(breakdown["hold"], dtype=bool),
+            daily_execution_weights=np.asarray(breakdown["execution_weights"]),
+            extended_diagnostics=bool(self.env.quant_context),
         )
         
     def run_agent(self, agent_fn: Callable) -> BacktestResult:
@@ -113,6 +134,12 @@ class DeterministicBacktester:
                 daily_costs=result.daily_costs,
             )
             row = fm.summary_dict()
+            if self.env.quant_context:
+                for field in ('daily_commission','daily_slippage','daily_impact'):
+                    values = getattr(result, field, None)
+                    row['total_' + field.removeprefix('daily_')] = float(np.sum(values)) if values is not None else 0.
+                row['hold_fraction'] = float(np.mean(result.daily_hold)) if result.daily_hold is not None else 0.
+                row['participation_max'] = float(np.max(result.daily_participation_max)) if result.daily_participation_max is not None else 0.
             row['Strategy'] = name
             records.append(row)
             

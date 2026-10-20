@@ -1,0 +1,16 @@
+version: external-alpha-v1
+strict_pit: true
+vix:
+  path: /home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/normalized/macro_volatility.csv
+  max_age_days: 7
+fama_french:
+  path: /home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/normalized/ff3_daily.csv
+  window: 60
+  residual_window: 20
+  max_age_days: 90
+  ridge: 1.0e-08
+blackout:
+  events_path: /home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/normalized/events.csv
+  coverage_path: /home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/normalized/event_coverage.csv
+  pre_sessions: 2
+  post_sessions: 1

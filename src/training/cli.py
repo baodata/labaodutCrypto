@@ -20,6 +20,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--normalization-warmup", type=int, default=0, help="Warm-up causal bổ sung chung cho mọi nhánh ablation, không đổi ngày train giữa các nhánh.")
+    parser.add_argument("--quant-config", type=Path, default=None, help="Sprint 6 normalization/risk/execution/reward opt-in YAML.")
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
     parser.add_argument(
         "--processed-output", type=Path, default=PROJECT_ROOT / "data/processed/features.parquet"

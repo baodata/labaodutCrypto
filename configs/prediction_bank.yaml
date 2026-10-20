@@ -1,0 +1,12 @@
+# Fixed configuration: do not tune this on outer results and regenerate old OOF
+# forecasts as if that configuration had been selected in the past.
+version: prediction-research-v1
+model: ridge_fixed
+ridge_alpha: 1.0
+features: [xs_rank_ret_20d, mom_12_1, excess_ret_20d]
+horizons: [1, 5, 20]  # Open[t+1] -> Close[t+h]; number of trading sessions
+min_train_sessions: 252  # feature-ready sessions before first train_oof forecast
+retrain_every_sessions: 63  # expanding-window OOF blocks; not a hyperparameter search
+baselines:
+  momentum: {feature: mom_12_1, direction: 1}
+  mean_reversion: {feature: ret_5d, direction: -1}

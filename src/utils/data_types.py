@@ -37,6 +37,8 @@ class MarketDataTensor:
     dates: List[str]            # Danh sách T mốc thời gian theo đúng thứ tự trục 0
     warmup_sessions: int = 0    # Leading sessions before every feature is available.
 
+    quant_context: Optional[dict] = None  # date/ticker-aligned causal banks; not policy features
+
     @property
     def feature_ready(self) -> np.ndarray:
         return np.arange(len(self.dates)) >= self.warmup_sessions

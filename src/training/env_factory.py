@@ -41,4 +41,5 @@ def create_env(
         graph_adjacency_sequence=graph_adjacency_sequence,
         graph_edge_mask_sequence=graph_edge_mask_sequence,
         graph_start_index=graph_start_index,
+        quant_context=getattr(history_tensor if history_tensor is not None else tensor, "quant_context", None),
     )

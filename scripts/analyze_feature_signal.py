@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.split import TemporalSplitter
+from src.data.labels import LABEL_DEFINITION, decision_positions, executable_forward_returns
 from src.env.cost import resolve_transaction_cost_components
 from src.evaluation.backtester import DeterministicBacktester
 from src.evaluation.metrics import FinancialMetrics, block_bootstrap_excess_returns
@@ -78,13 +79,14 @@ def main() -> None:
     processed, full_tensor = FeaturePipeline().run_from_raw(
         raw_dir=args.raw_dir,
         export_parquet=False,
+        end_date=args.val_end,
     )
     split = TemporalSplitter(
         train_end=args.train_end,
         val_start=args.val_start,
         val_end=args.val_end,
         test_start=args.test_start,
-    ).split_market_data_tensor(full_tensor)
+    ).split_market_data_tensor(full_tensor, include_test=False)
     scaler = MarketFeatureScaler().fit(split.train)
     scaled_train = scaler.transform(split.train)
     scaled_val = scaler.transform(split.val)
@@ -94,7 +96,7 @@ def main() -> None:
     open_all = open_price_matrix(processed, tickers)
     dates = list(full_tensor.dates)
     date_to_index = {date: index for index, date in enumerate(dates)}
-    train_start = date_to_index[split.train.dates[0]]
+    train_start = max(date_to_index[split.train.dates[0]], full_tensor.warmup_sessions)
     train_end = date_to_index[split.train.dates[-1]] + 1
     val_start = date_to_index[split.val.dates[0]]
     val_end = date_to_index[split.val.dates[-1]] + 1
@@ -131,11 +133,11 @@ def main() -> None:
 
     # Fit on train dates only. The action executes at next open, so use only
     # the next session's open-to-close return as its immediate asset-selection label.
-    train_positions = np.arange(train_start, train_end - 1)
+    train_positions = decision_positions(len(dates), train_start, train_end, 1)
+    if not len(train_positions):
+        raise ValueError("Train has no executable labels after feature warm-up.")
     train_x = all_scaled[train_positions][:, :, feature_indices].reshape(-1, len(feature_indices))
-    train_forward_returns = (
-        close[train_positions + 1] / open_all[train_positions + 1] - 1.0
-    )
+    train_forward_returns = executable_forward_returns(open_all, close, train_positions, 1)
     train_y = (
         train_forward_returns - train_forward_returns.mean(axis=1, keepdims=True)
     ).reshape(-1)
@@ -263,6 +265,7 @@ def main() -> None:
         "linear_features": LINEAR_FEATURES, "ridge_alpha": args.ridge_alpha,
         "action_alpha": args.action_alpha, "cash_ratio": args.cash_ratio,
         "label": "next_session_open_to_close_cross_sectional_excess",
+        "label_definition": LABEL_DEFINITION, "horizon_unit": "trading_sessions",
         "label_endpoints_purged_at_split_boundaries": True,
         "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + [Path(__file__)], PROJECT_ROOT),
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),

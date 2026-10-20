@@ -1,0 +1,23 @@
+{
+  "availability": "current_vintage_research_only",
+  "availability_evidence": null,
+  "input_hashes": {
+    "raw/F-F_Research_Data_Factors_daily_CSV.zip": "2f29e22546069914890a712680a6f81f3680ebc3543b52864484d209ca13a7db"
+  },
+  "retrieved_at": "2026-10-20T03:39:07.711017+00:00",
+  "source_records": [
+    {
+      "bytes": 178184,
+      "content_type": "application/x-zip-compressed",
+      "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/F-F_Research_Data_Factors_daily_CSV.zip",
+      "final_url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
+      "last_modified": "Fri, 25 Sep 2026 21:55:02 GMT",
+      "name": "F-F_Research_Data_Factors_daily_CSV.zip",
+      "retrieved_at": "2026-10-20T03:39:07.711017+00:00",
+      "source": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
+      "status": "downloaded"
+    }
+  ],
+  "unit": "percent_return",
+  "warning": "Current release downloaded now. No historical available_at/vintage reconstruction."
+}

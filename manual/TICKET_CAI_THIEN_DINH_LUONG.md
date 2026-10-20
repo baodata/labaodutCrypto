@@ -84,6 +84,11 @@ Giai đoạn 2024–2025 đã được khảo sát nhiều lần. Các lần ch�
 | [QNT-023](#qnt-023) | Mục tiêu actor CVaR và gate tail risk | P2 | A / B | [8 — A](NHIEM_VU_THANH_VIEN_A.md#qnt-023) | QNT-022 |
 | [QNT-024](#qnt-024) | CPCV có purge/embargo, research only | P2 | A / B | [9 — A](NHIEM_VU_THANH_VIEN_A.md#qnt-024) | QNT-009 |
 | [QNT-025](#qnt-025) | Runner ablation, năm seed và báo cáo quyết định | P1 | B / A | [8 — B](NHIEM_VU_THANH_VIEN_B.md#qnt-025) | QNT-001, QNT-002; từng nhánh khi đánh giá |
+| [QNT-026](#qnt-026) | Tín hiệu VIX Term Structure và chế độ bão vĩ mô | P0 | A / B | [10+ — A](NHIEM_VU_THANH_VIEN_A.md#qnt-026) | QNT-002, QNT-010 |
+| [QNT-027](#qnt-027) | Bộ lọc sự kiện BCTC và lịch FOMC (Blackout) | P1 | A / B | [10+ — A](NHIEM_VU_THANH_VIEN_A.md#qnt-027) | QNT-001, QNT-013 |
+| [QNT-028](#qnt-028) | Cầu dao ngắt tài khoản & Stop-Loss cứng độc lập | P0 | A / B | [10+ — A](NHIEM_VU_THANH_VIEN_A.md#qnt-028) | QNT-013, QNT-023 |
+| [QNT-029](#qnt-029) | Trung hòa rủi ro đa nhân tố Fama-French/Barra | P1 | B / A | [10+ — B](NHIEM_VU_THANH_VIEN_B.md#qnt-029) | QNT-006, QNT-008 |
+| [QNT-030](#qnt-030) | Kết nối sàn Paper Trading và kiểm toán trượt giá live | P1 | A / B | [10+ — A](NHIEM_VU_THANH_VIEN_A.md#qnt-030) | QNT-012, QNT-028 |
 
 ## 4. Thứ tự thực hiện trong sprint A/B
 
@@ -97,6 +102,7 @@ Ticket mới xếp từ Sprint 5 để contract/protocol có trước các nâng
 | 8 — walk-forward/ablation/tail risk | QNT-009; QNT-023 (P2) | QNT-025; QNT-022 (P2) | 009 cấp folds cho 025; 022 → 023 trước báo cáo tail risk |
 | 9 — kiểm toán và mở rộng có điều kiện | QNT-024 (P2) | QNT-019, 020, 021 (P2) | 019 → 021; 020 độc lập; 024 kế thừa 009 |
 | 10 — báo cáo và tái lập | DOC-001/003, FINAL-001 | DOC-002/004, FINAL-001 | Tổng hợp những nhánh đã chạy, gồm FAIL và giới hạn holdout |
+| 10+ — sản phẩm thực chiến (production engine) | QNT-026, 027, 028, 030 | QNT-029 | 026 + 027 vào observation/rules → 028 bảo vệ vốn → 029 lọc alpha → 030 live execution |
 
 P0 làm trước nâng cấp; P1 vào sprint tương ứng; P2 chỉ mở theo gate và budget. Cùng một sprint có thể cần bàn giao A ↔ B; không hiểu tất cả task được chạy đồng thời. Mỗi QNT chỉ có **một checklist chính**. Hạ tầng QNT-025 có thể bắt đầu Sprint 5, nghiệm thu toàn ticket tại Sprint 8.
 
@@ -255,6 +261,16 @@ P0 làm trước nâng cấp; P1 vào sprint tương ứng; P2 chỉ mở theo g
 - **DoD:** target được chốt từ Close, execution cost dùng drift tại Open; không đọc Open tương lai để chọn tốc độ tại Close. Sau tốc độ từng mã, weights/cash/cap vẫn hợp lệ; hold bỏ rebalance. Blend không bị áp dụng hai lần.
 - **Bàn giao:** các baseline cùng execution controller, tỷ lệ hold, turnover, chi phí và signal decay. Nghịch đảo volatility chỉ là một heuristic để ablation; tốc độ Gârleanu–Pedersen cần giả định về cost và decay, không suy ra chỉ từ một công thức `alpha_i`. [Bài Gârleanu–Pedersen](https://www.nber.org/papers/w15205).
 
+#### Mở rộng QNT-013 ngày 19/10/2026
+
+- [ ] **QNT-013A — ER execution (A triển khai, B review):** Đã có causal ER bank và mode `efficiency_ratio`, tắt mặc định. Nghiệm thu ER0/ER1, chiều tăng/giảm, missing/warm-up, causality, date/ticker order và same-target replay; so matched baseline cùng controller, đối chiếu cash/risk/chi phí trước khi chọn.
+- [ ] **QNT-013B — Tốc độ mua/bán riêng (A triển khai, B review):** Đã có mode `asymmetric`; funding buy sau sell giữ tiền dư ở cash, không double blend. Chờ nghiệm thu gap, caps, hold và cost reconciliation. Mọi target reduction chưa được gọi là risk-off; liên kết QNT-028 nếu cần tín hiệu emergency riêng.
+- [ ] **QNT-013C — Conviction được hiệu chỉnh (P2, A/B nghiên cứu):** Backlog, chưa có z-score trigger. OOF calibration/net benefit theo horizon và độ bất định; z-score cắt ngang không phải xác suất đúng 99%. Threshold chỉ fit/chọn trên development train/inner.
+- [ ] **QNT-013D — GP dynamic benchmark (P2, A mô hình chi phí/decay, B tích hợp):** Code temporary-cost đã bàn giao, đang nghiệm thu development. Ước lượng chi phí bậc hai và signal dynamics/decay, xác định aim portfolio/rate; so với linear/square-root cost thực tế. Không thay nghiệm bằng `gamma*variance/cost`, không nhầm risk aversion với PPO gamma.
+  - **Triển khai 20/10/2026:** đã có forecast-step calibration, AR dynamics, conditional covariance, quadratic scenario, GP reference, constrained QP/MPC và final execution order. Full development walk-forward 84 case đã hoàn tất, cả GP constrained/MPC **NO-GO**; không dùng test, chưa nối teacher vào RL. [Code/lệnh/kết quả](TRIEN_KHAI_GP.md), [12 bước và D1–D9](KE_HOACH_TRIEN_KHAI_GP.md). Giữ ticket mở cho review/regression và cost calibration bằng fills; không đánh dấu alpha/promotion chỉ vì code đã chạy.
+
+Xem [đặc tả, giới hạn và lệnh replay](EXECUTION_ALPHA_THICH_NGHI.md). Các checklist chưa đóng vì mới có triển khai và pilot, chưa đủ nghiệm thu toàn protocol; QNT-013A/B không tự bật trong các benchmark đã khóa.
+
 <a id="qnt-014"></a>
 ### QNT-014 — Reward Differential Sharpe có state
 
@@ -389,6 +405,76 @@ P0 làm trước nâng cấp; P1 vào sprint tương ứng; P2 chỉ mở theo g
 - **File:** [train_ppo.py](../src/training/train_ppo.py), [seed_summary.py](../src/evaluation/seed_summary.py), [artifacts.py](../src/utils/artifacts.py), [LENH_CHAY.md](LENH_CHAY.md); script **dự kiến** `scripts/run_quant_ablations.py`.
 - **DoD:** mỗi run có data/source/config hash, fold/seed, checkpoint status/epoch, baseline ID, normalization/risk/graph/reward/solver schema và elapsed time. Tổng hợp numeric tách metadata; giữ kết quả seed thất bại/NO-GO, không chỉ các seed thắng.
 - **Bàn giao:** long-form per-fold/seed CSV, mean/std, paired block CI và quyết định retain/reject/needs-data. Không coi năm seed là năm giai đoạn thị trường độc lập; báo lại số cấu hình đã khảo sát.
+
+<a id="qnt-026"></a>
+### QNT-026 — Tín hiệu VIX Term Structure và chế độ bão vĩ mô
+
+**Checklist sprint:** [Sprint 10+ — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-026).
+
+- **P0 · Owner A · Review B · Phụ thuộc QNT-002, QNT-010**
+- **Cập nhật 20/10/2026:** Đã có bộ nạp availability/vintage, feature VIX và tương tác momentum/beta, tích hợp prediction bank/runner train OOF–inner. Chưa có dữ liệu PIT và chưa nghiệm thu alpha; cash/risk controller vẫn là phần riêng chưa bật. Xem [triển khai và hướng dẫn dữ liệu](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md).
+- **Mục tiêu thực chiến:** Khai thác mặt cong biến động từ thị trường phái sinh (Options proxy) để phát hiện sớm các đợt bán tháo và khủng hoảng vĩ mô.
+- **Phạm vi:** Tải dữ liệu `^VIX` (30 ngày) và `^VIX3M` (3 tháng) từ Yahoo Finance; tính toán tỷ lệ phân kỳ $\text{Ratio}_{\text{VIX}} = \text{VIX} / \text{VIX3M}$. Khi $\text{Ratio}_{\text{VIX}} > 1.0$ (Inverted Term Structure / Backwardation), thị trường bước vào chế độ "Bão vĩ mô". Tích hợp tỷ lệ này vào `portfolio_context_dim` của Actor-Critic và bộ điều khiển rủi ro cấp cao.
+- **File:** `src/features/macro_volatility.py`, `src/env/risk.py`, `src/models/actor_critic.py`, `configs/env.yaml`.
+- **DoD:** Dữ liệu VIX căn đúng lịch và thời điểm available; daily close VIX sau Close cổ phiếu không được dùng cùng ngày. Risk overlay với **mục tiêu cash tối thiểu** $\ge 50\%$ (khác với nâng trần cash) là ablation riêng, áp dụng cùng controller cho baseline. Ratio >1 không bảo đảm dự báo được crash.
+- **Bàn giao:** `macro_volatility_bank.csv`, ablation PPO có vs không có VIX Term Structure qua các đợt sập mạnh (Q4/2018, Covid 3/2020, Bear Market 2022).
+
+<a id="qnt-027"></a>
+### QNT-027 — Bộ lọc sự kiện BCTC và lịch FOMC (Blackout Overlay)
+
+**Checklist sprint:** [Sprint 10+ — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-027).
+
+- **P1 · Owner A · Review B · Phụ thuộc QNT-001, QNT-013**
+- **Cập nhật 20/10/2026:** Đã có loader revisions/coverage, feature sự kiện và API `blackout_target`. Chưa có lịch PIT, chưa nối overlay vào execution; ticket chưa hoàn tất. Xem [schema, lệnh và giới hạn](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md#5-earningsfomc-và-blackout).
+- **Mục tiêu thực chiến:** Đo khả năng giảm exposure quanh sự kiện đã biết trước; không bảo đảm tránh gap hoặc sự kiện bất ngờ.
+- **Phạm vi:** Tải và đồng bộ lịch BCTC (Earnings Calendar) cho 24 mã cổ phiếu và lịch họp FOMC của Fed. Thiết lập quy tắc "Vùng cấm giao dịch sự kiện" (Event Blackout): trước ngày ra tin 2 phiên, cấm mở vị thế mua mới; nếu đang nắm giữ tỷ trọng lớn, tự động hạ tỷ trọng mã đó xuống dưới ngưỡng an toàn (ví dụ $\le 2\%$).
+- **File:** `src/data/calendar_events.py`, `src/env/rebalance.py`, `src/env/trading_env.py`.
+- **DoD:** Không dùng ngày công bố hồi cứu bị sửa đổi (point-in-time dates); các vị thế bị giảm do blackout được giải phóng vốn chuyển vào Cash; sau khi sự kiện kết thúc 1 phiên, gỡ bỏ lệnh cấm và trả quyền tự quyết cho policy.
+- **Bàn giao:** Báo cáo so sánh Max Drawdown và Kurtosis đuôi lợi suất giữa danh mục có và không có Event Blackout.
+
+<a id="qnt-028"></a>
+### QNT-028 — Cầu dao ngắt tài khoản & Stop-Loss cứng độc lập
+
+**Checklist sprint:** [Sprint 10+ — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-028).
+
+- **P0 · Owner A · Review B · Phụ thuộc QNT-013, QNT-023**
+- **Mục tiêu thực chiến:** Lớp phanh an toàn tuyệt đối bảo vệ vốn thực, hoạt động độc lập và có quyền ghi đè toàn bộ quyết định của mạng nơ-ron AI.
+- **Phạm vi:** Xây dựng module `CircuitBreakerController` bọc ngoài TradingEnv và Execution Runner:
+  1. *Asset Hard Stop-Loss:* Giám sát giá vốn bình quân (Cost Basis) của từng vị thế; nếu giá giảm vượt quá $-7\%$ từ đỉnh cục bộ (Trailing Stop-loss) $\rightarrow$ Ép bán 100% vị thế mã đó tại phiên kế tiếp.
+  2. *Portfolio Drawdown Breaker:* Nếu NAV danh mục sụt giảm vượt quá $-8\%$ trong vòng 20 phiên rolling $\rightarrow$ Tự động thanh lý toàn bộ cổ phiếu, chuyển $100\%$ về Cash, khóa giao dịch trong 5 phiên và gửi cảnh báo khẩn.
+  3. *Concentration Caps:* Giới hạn tỷ trọng tối đa 1 cổ phiếu $\le 15\%$, tối đa 1 ngành $\le 35\%$.
+- **File:** `src/env/circuit_breaker.py`, `src/env/trading_env.py`, `tests/env/test_circuit_breaker.py`.
+- **DoD:** Circuit Breaker hoạt động xác định (deterministic), không phụ thuộc vào gradient hay weights của PPO; 100% unit tests pass các kịch bản crash giả lập; log chi tiết mọi sự kiện kích hoạt cầu dao.
+- **Bàn giao:** Báo cáo Stress-testing các pha Flash Crash và phân tích độ trễ phục hồi vốn.
+
+<a id="qnt-029"></a>
+### QNT-029 — Trung hòa rủi ro đa nhân tố Fama-French/Barra
+
+**Checklist sprint:** [Sprint 10+ — Thành viên B](NHIEM_VU_THANH_VIEN_B.md#qnt-029).
+
+- **P1 · Owner B · Review A · Phụ thuộc QNT-006, QNT-008**
+- **Cập nhật 20/10/2026:** Đã có FF3 release/vintage loader và predictor features beta/residual momentum/residual volatility. Còn thiếu daily PIT vintages, residual graph/covariance và nghiệm thu exposure/alpha; không đánh dấu hoàn tất. Xem [triển khai](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md#4-famafrench-3-factors).
+- **Mục tiêu thực chiến:** Đo đóng góp phần dư sau kiểm soát Market/Size/Value. FF3 không có Momentum và không chứng minh alpha thuần hoặc trung hòa mọi rủi ro.
+- **Phạm vi:** Nạp chuỗi dữ liệu 3 nhân tố Fama-French (Market Mkt-RF, Size SMB, Value HML). Tại mỗi ngày $t$, thực hiện hồi quy rolling causal trên cửa sổ $W=60$ phiên để bóc tách phần dư lợi suất đặc thù (Residual Returns): $\epsilon_{i,t} = R_{i,t} - (\alpha_i + \beta_{m} Mkt_t + \beta_{s} SMB_t + \beta_{h} HML_t)$. Dựng đồ thị tương quan và tính toán tín hiệu dự báo thuần túy từ chuỗi phần dư này.
+- **File:** `src/features/factor_risk.py`, `src/graph/residual_graph.py`, `src/risk/covariance.py`.
+- **DoD:** Hồi quy stock return trừ RF trên intercept/Mkt-RF/SMB/HML; beta chỉ fit các dòng quá khứ đã phát hành, residual u dùng beta fit trước u. Ngày quan sát không thay thế ngày phát hành; cấm dùng revision tương lai. Ma trận hiệp phương sai phần dư đối xứng và PSD; thêm feature không tự bảo đảm neutral exposure.
+- **Bàn giao:** So sánh Factor Exposure của danh mục trước và sau trung hòa; biểu đồ Cumulative Return bóc tách giữa Factor Return và Alpha Return.
+
+<a id="qnt-030"></a>
+### QNT-030 — Kết nối sàn Paper Trading và kiểm toán trượt giá live
+
+**Checklist sprint:** [Sprint 10+ — Thành viên A](NHIEM_VU_THANH_VIEN_A.md#qnt-030).
+
+- **P1 · Owner A · Review B · Phụ thuộc QNT-012, QNT-028**
+- **Mục tiêu thực chiến:** Đưa toàn bộ hệ thống vào vận hành tự động trên tài khoản Paper Trading (tiền ảo với dữ liệu thời gian thực) của sàn quốc tế (Alpaca / Interactive Brokers) trước khi giải ngân vốn thật.
+- **Phạm vi:** Xây dựng module kết nối API:
+  1. Đọc danh mục hiện tại và số dư tiền mặt từ Broker.
+  2. Nạp dữ liệu giá ngày đóng cửa, chạy inference mô hình H-MARL để lấy vector tỷ trọng mới.
+  3. Bộ điều phối sinh lệnh mua/bán (Order Generator) kèm thuật toán chia nhỏ lệnh theo thời gian (TWAP) để hạn chế trượt giá.
+  4. Gửi lệnh lên sàn Paper Trading qua API và ghi log kết quả khớp lệnh (Fill price vs Expected price).
+- **File:** `src/execution/broker_api.py`, `src/execution/order_router.py`, `scripts/run_live_paper_trading.py`.
+- **DoD:** Xử lý đầy đủ lỗi mạng, lệnh bị từ chối (rejected), khớp một phần (partial fill); cơ chế ngắt an toàn nếu API broker mất kết nối; tự động lưu nhật ký giao dịch vào SQLite hoặc CSV.
+- **Bàn giao:** Dashboard theo dõi NAV thời gian thực, bảng kiểm toán sai lệch trượt giá thực tế (Live Slippage vs Model Square-root Impact).
 
 ## 6. Ma trận thí nghiệm tối thiểu
 

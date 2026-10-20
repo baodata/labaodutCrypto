@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from src.data.labels import LABEL_DEFINITION, decision_positions, executable_forward_returns
 from src.evaluation.metrics import block_bootstrap_excess_returns
 
 
@@ -30,16 +31,15 @@ def rank_ic_table(
         ("forward_close_to_close", horizon) for horizon in horizons
     ] + [("forward_open_to_close", horizon) for horizon in horizons if horizon > 1]
     for label_name, horizon in label_specs:
-        daily_indices = range(start, max(start, end - horizon))
+        daily_indices = decision_positions(len(open_prices), start, end, horizon)
+        executable = label_name != "forward_close_to_close"
+        forward = executable_forward_returns(open_prices, close_prices, daily_indices, horizon) if executable else (
+            np.asarray(close_prices)[daily_indices + horizon] / np.asarray(close_prices)[daily_indices] - 1.0
+        )
         for feature_index, feature_name in enumerate(feature_names):
             ics: list[float] = []
-            for t in daily_indices:
-                if label_name == "next_session_intraday":
-                    asset_returns = close_prices[t + 1] / open_prices[t + 1] - 1.0
-                elif label_name == "forward_open_to_close":
-                    asset_returns = close_prices[t + horizon] / open_prices[t + 1] - 1.0
-                else:
-                    asset_returns = close_prices[t + horizon] / close_prices[t] - 1.0
+            for row_index, t in enumerate(daily_indices):
+                asset_returns = forward[row_index]
                 x = features[t, :, feature_index]
                 if not np.isfinite(x).all() or not np.isfinite(asset_returns).all():
                     continue
@@ -59,7 +59,10 @@ def rank_ic_table(
             rows.append(
                 {
                     "horizon_days": horizon,
+                    "horizon_sessions": horizon,
                     "target": label_name,
+                    "executable": executable,
+                    "label_definition": LABEL_DEFINITION if executable else "close_to_close_diagnostic_only",
                     "feature": feature_name,
                     "n_dates": len(values),
                     "mean_rank_ic": float(values.mean()) if len(values) else float("nan"),

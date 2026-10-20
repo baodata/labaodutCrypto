@@ -32,7 +32,7 @@ class PortfolioState:
         
         # weights có kích thước N + 1. Vị trí cuối cùng [-1] là Tiền mặt (Cash).
         # Khởi tạo: 0% cổ phiếu, 100% tiền mặt.
-        self.weights = np.zeros(self.num_assets + 1, dtype=np.float32)
+        self.weights = np.zeros(self.num_assets + 1, dtype=np.float64)
         self.weights[-1] = 1.0
 
     def update(self, new_value: float, new_weights: np.ndarray):
@@ -54,7 +54,7 @@ class PortfolioState:
             raise ValueError("new_weights phải không âm và có tổng bằng 1.")
 
         self.portfolio_value = float(new_value)
-        self.weights = weights.astype(np.float32)
+        self.weights = weights.copy()
 
     @property
     def cash_weight(self) -> float:

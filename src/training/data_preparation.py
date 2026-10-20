@@ -141,7 +141,7 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         val_end = val_end or cfg_splits.get("val_end")
         test_start = test_start or cfg_splits.get("test_start")
 
-    include_test = getattr(args, "evaluation_scope", "test") != "validation"
+    include_test = getattr(args, "evaluation_scope", "validation") != "validation"
     if not include_test and not (train_end and val_start and val_end):
         raise ValueError("Validation-only yêu cầu mốc train/validation tường minh.")
     protocol = getattr(args, "_research_protocol", None)
@@ -160,6 +160,10 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     tensor_start = pd.Timestamp(full_tensor.dates[0])
     tensor_end = pd.Timestamp(full_tensor.dates[-1])
 
+    # Validation-only needs no test dates. Its end cutoff can fall on a
+    # weekend/holiday after the last observed trading session.
+    if not include_test and test_start is None:
+        test_start = (pd.Timestamp(val_end) + pd.Timedelta(days=1)).date().isoformat()
     need_auto = False
     if not (train_end and val_start and val_end and test_start):
         need_auto = True
@@ -168,7 +172,8 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         v_start = pd.Timestamp(val_start)
         v_end = pd.Timestamp(val_end)
         t_start = pd.Timestamp(test_start)
-        if not (tensor_start <= t_end < v_start <= v_end < t_start and v_end <= tensor_end
+        if not (tensor_start <= t_end < v_start <= v_end < t_start
+                and v_end <= tensor_end + pd.Timedelta(days=7)
                 and (not include_test or t_start <= tensor_end)):
             need_auto = True
 
@@ -189,6 +194,12 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
             test_start=test_start,
         )
 
+    args._resolved_split_dates = {
+        name: getattr(splitter, name).date().isoformat()
+        for name in ('train_end', 'val_start', 'val_end', 'test_start')
+    }
+    if hasattr(args, '_manifest'):
+        args._manifest['resolved_split_dates'] = args._resolved_split_dates.copy()
     split = splitter.split_market_data_tensor(full_tensor, include_test=include_test)
     with args.env_config.open("r", encoding="utf-8") as stream:
         configured_lookback = yaml.safe_load(stream)["environment"].get("lookback_window", 20)
@@ -205,18 +216,63 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
         )
         split.dates_info["train_range"] = f"{split.train.dates[0]} -> {split.train.dates[-1]} (T={len(split.train.dates)}; warm-up excluded)"
 
-    scaler = MarketFeatureScaler()
+    from src.training.quant_context import load_quant_config
+    quant_config = load_quant_config(args)
+    normalization = quant_config.get("normalization", {})
+    if normalization.get("enabled", False):
+        from src.features.normalization import CausalFeatureScaler
+        scaler = CausalFeatureScaler(**{k:v for k,v in normalization.items() if k != "enabled"})
+        if any(scaler.mode(f) == "rolling_zscore" for f in full_tensor.feature_names):
+            first_ready = full_tensor.warmup_sessions + scaler.min_periods + lookback - 1
+            if first_ready >= len(full_tensor.dates):
+                raise ValueError("Insufficient history for rolling normalization and lookback.")
+            keep = np.asarray(split.train.dates, dtype="datetime64[ns]") >= np.datetime64(full_tensor.dates[first_ready])
+            split.train = MarketDataTensor(split.train.tensor[keep].copy(), list(full_tensor.tickers),
+                list(full_tensor.feature_names), list(np.asarray(split.train.dates)[keep]))
+            split.train.validate()
+            split.dates_info["train_range"] = f"{split.train.dates[0]} -> {split.train.dates[-1]} (T={len(split.train.dates)}; causal normalization warm-up excluded)"
+    else:
+        scaler = MarketFeatureScaler()
+    shared_warmup = int(getattr(args, 'normalization_warmup', 0))
+    if shared_warmup < 0:
+        raise ValueError("normalization-warmup must be nonnegative.")
+    if shared_warmup:
+        first_ready = full_tensor.warmup_sessions + shared_warmup + lookback - 1
+        if first_ready >= len(full_tensor.dates):
+            raise ValueError("Insufficient shared normalization warm-up.")
+        keep = np.asarray(split.train.dates, dtype="datetime64[ns]") >= np.datetime64(full_tensor.dates[first_ready])
+        split.train = MarketDataTensor(split.train.tensor[keep].copy(), list(full_tensor.tickers),
+            list(full_tensor.feature_names), list(np.asarray(split.train.dates)[keep]))
+        split.train.validate()
+        split.dates_info['train_range'] = f"{split.train.dates[0]} -> {split.train.dates[-1]} (T={len(split.train.dates)}; shared causal warm-up excluded)"
     scaler.fit(split.train)
-    if args.resume is not None:
-        previous = args._resume_payload
-        if previous.get("scaler_params") != scaler.to_dict():
-            raise ValueError("Scaler của resume không khớp dữ liệu/split train.")
-        if previous.get("split_dates") != split.dates_info:
-            raise ValueError("Resume yêu cầu cùng split_dates.")
-    train_tensor = scaler.transform(split.train)
-    val_tensor = scaler.transform(split.val)
-    test_tensor = scaler.transform(split.test) if include_test else None
     scaled_full_tensor = scaler.transform(full_tensor)
+    if normalization.get('enabled',False) and hasattr(args,'_run_dir'):
+        from src.utils.artifacts import atomic_csv
+        atomic_csv(scaler.last_batch_diagnostics,args._run_dir/'normalization_daily_diagnostics.csv',index=False)
+    def scaled_partition(partition):
+        if partition is None:
+            return None
+        index = pd.DatetimeIndex(full_tensor.dates).get_indexer(pd.DatetimeIndex(partition.dates))
+        return MarketDataTensor(scaled_full_tensor.tensor[index].copy(), list(partition.tickers),
+            list(partition.feature_names), list(partition.dates))
+    train_tensor = scaled_partition(split.train)
+    val_tensor = scaled_partition(split.val)
+    test_tensor = scaled_partition(split.test) if include_test else None
+    if normalization.get("enabled", False):
+        from src.utils.artifacts import atomic_json
+        # Fitted statistics stay frozen; inference starts with causal state through train end.
+        train_end_index = pd.DatetimeIndex(full_tensor.dates).get_loc(pd.Timestamp(split.train.dates[-1]))
+        prefix = MarketDataTensor(full_tensor.tensor[:train_end_index+1], list(full_tensor.tickers),
+            list(full_tensor.feature_names), list(full_tensor.dates[:train_end_index+1]), full_tensor.warmup_sessions)
+        scaler.transform(prefix)
+        scaler = CausalFeatureScaler.from_dict(scaler.last_batch_state)
+        scaler.set_session_calendar(full_tensor.dates)
+        if hasattr(args, "_run_dir"):
+            atomic_json(args._run_dir / "normalization_train_state.json", scaler.to_dict())
+    if args.resume is not None:
+        if args._resume_payload.get("scaler_params") != scaler.to_dict() or args._resume_payload.get("split_dates") != split.dates_info:
+            raise ValueError("Resume scaler/split mismatch.")
     args.scaler_output.parent.mkdir(parents=True, exist_ok=True)
     scaler.save(args.scaler_output)
     args._scaler_params = scaler.to_dict()
@@ -227,6 +283,19 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     tickers = list(full_tensor.tickers)
     all_open_prices = open_price_matrix(processed_data, tickers)
     all_close_prices = close_price_matrix(processed_data, tickers, full_tensor.dates)
+    from src.training.quant_context import prepare_quant_context
+    scaled_full_tensor.quant_context = prepare_quant_context(args, processed_data, full_tensor, all_close_prices)
+    if normalization.get('enabled',False) and scaler.context_features:
+        scaled_full_tensor.quant_context['market_context'] = np.stack([scaler.market_context(x) for x in full_tensor.tensor])
+        scaled_full_tensor.quant_context['market_context_features'] = list(scaler.context_features)
+        if hasattr(args,'_run_dir'):
+            atomic_json(args._run_dir/'market_context_metadata.json',dict(features=scaler.context_features,
+                channels_per_feature=['train_scaled_cross_section_mean','cross_section_std_over_train_std'],
+                tickers=list(full_tensor.tickers)))
+    for partition in (train_tensor,val_tensor,test_tensor):
+        if partition is not None:
+            partition.quant_context = scaled_full_tensor.quant_context
+    args._quant_config = quant_config
     fold = getattr(args, "_research_protocol_fold", None)
     if fold:
         dates = pd.DatetimeIndex(pd.to_datetime(full_tensor.dates))

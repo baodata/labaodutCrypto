@@ -1,0 +1,17 @@
+# Fixed comparison, separate from the frozen temporal protocol. No outer tuning.
+version: signal-allocation-v1
+models: [ridge_fixed, momentum, mean_reversion]
+horizons: [5, 20]
+tilt_fraction: 0.25  # maximum relative deviation from each 1/N core asset weight
+risk_aversion: 10.0
+cost_multiplier: 1.0
+risk:
+  method: ledoit_wolf
+  window: 60
+  min_periods: 60
+  decay: 0.94
+  jitter: 0.000000000001
+execution:
+  accounting: cash_funded
+  impact_eta: 0.0
+  rebalance_every_sessions: 1  # preserve protocol schedule; h is planning horizon

@@ -5,13 +5,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import argparse
-import warnings
 
 from torch import nn
 import numpy as np
 import pandas as pd
 
-from src.data.split import TemporalSplitter
 from src.evaluation.backtester import DeterministicBacktester
 from src.evaluation.baselines import BuyAndHoldBaseline
 from src.evaluation.baselines import CashBaseline
@@ -99,13 +97,9 @@ def _evaluate_test(
     model: nn.Module,
     context: dict[str, Any],
 ) -> pd.DataFrame:
-    if args.test_start == TemporalSplitter.DEFAULT_TEST_START:
-        warnings.warn(
-            "Giai đoạn test mặc định 2024–2025 đã được xem qua trong nhiều vòng phân tích; "
-            "hãy coi đây là kết quả exploratory, không phải holdout độc lập.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+    from src.evaluation.periods import describe_test_period, warn_for_explored_test
+    period = describe_test_period(context['test_tensor'], 'test')
+    warn_for_explored_test(period)
     print("[4/6] Backtest trên giai đoạn test đã cấu hình (tính độc lập chưa được bảo đảm)...")
     test_env = create_env(
         context["test_tensor"],
@@ -281,6 +275,9 @@ def _evaluate_test(
     metrics["checkpoint_epoch"] = np.nan
     metrics["checkpoint_status"] = "none"
     metrics["sharpe_convention"] = FinancialMetrics.SHARPE_CONVENTION
+    metrics["test_period_status"] = period["status"]
+    metrics["evaluation_start"] = period["start"]
+    metrics["evaluation_end"] = period["end"]
     metrics.loc["PPO", "checkpoint_epoch"] = float(context.get("checkpoint_epoch", -1))
     metrics.loc["PPO", "checkpoint_status"] = str(context.get("checkpoint_status", "unknown"))
     metrics["cbb_excess_annual_vs_1n_cash"] = np.nan
@@ -388,7 +385,8 @@ def _evaluate_test(
         daily = pd.DataFrame({name: result.daily_net_returns for name, result in results.items()}, index=context["test_tensor"].dates[1:])
         daily.index.name = "date"
         atomic_csv(daily, context["run_dir"] / "daily_returns.csv")
-        finish_run_manifest(args, "completed", best_epoch=context["checkpoint_epoch"])
+        finish_run_manifest(args, "completed", best_epoch=context["checkpoint_epoch"],
+                            test_period=period, resolved_split_dates=context.get("resolved_split_dates", {}))
 
         print("[5/6] Metrics test (profit và costs theo đơn vị tiền tài khoản):")
     print(metrics.to_string(float_format=lambda value: f"{value:.6f}"))

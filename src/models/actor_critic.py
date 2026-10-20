@@ -92,6 +92,7 @@ class SimplexActorCritic(PolicyDiagnostics, nn.Module):
         action_dim: int,
         hidden_dim: int = 128,
         dirichlet_kappa: float | None = None,
+        portfolio_context_dim: int = 0,
     ):
         super().__init__()
         if observation_dim <= 0 or action_dim <= 1 or hidden_dim <= 0:
@@ -200,6 +201,7 @@ class _RecurrentActorCritic(PolicyDiagnostics, nn.Module):
         rnn_cell: str = "lstm",
         dropout: float = 0.0,
         dirichlet_kappa: float | None = None,
+        portfolio_context_dim: int = 0,
     ):
         super().__init__()
         if n_assets <= 0 or n_features <= 0 or lookback <= 0:
@@ -211,6 +213,9 @@ class _RecurrentActorCritic(PolicyDiagnostics, nn.Module):
         if dropout != 0.0:
             raise ValueError("PPO LSTM/GRU yêu cầu dropout=0 để log-prob rollout/evaluate nhất quán.")
 
+        self.portfolio_context_dim = int(portfolio_context_dim)
+        if self.portfolio_context_dim < 0:
+            raise ValueError("portfolio_context_dim must be nonnegative.")
         self.n_assets = n_assets
         self.n_features = n_features
         self.lookback = lookback
@@ -244,7 +249,7 @@ class _RecurrentActorCritic(PolicyDiagnostics, nn.Module):
             raise ValueError(f"rnn_cell phải là 'lstm' hoặc 'gru', nhận: {rnn_cell!r}")
 
         # Portfolio state: [N weights + 1 cash_ratio]
-        portfolio_state_dim = n_assets + 1
+        portfolio_state_dim = n_assets + 1 + self.portfolio_context_dim
 
         # Keep the temporal representation shared, but separate actor/critic
         # trunks so the value objective cannot directly overwrite policy layers.
@@ -277,7 +282,7 @@ class _RecurrentActorCritic(PolicyDiagnostics, nn.Module):
 
         B = obs.shape[0]
         hist_dim = self.lookback * self.n_assets * self.n_features
-        port_dim = self.n_assets + 1
+        port_dim = self.n_assets + 1 + self.portfolio_context_dim
         expected_dim = hist_dim + port_dim
         if obs.shape[1] != expected_dim:
             raise ValueError(f"Expected obs dim {expected_dim}, got {obs.shape[1]}")
@@ -394,6 +399,7 @@ class LSTMActorCritic(_RecurrentActorCritic):
         rnn_layers: int = 1,
         dropout: float = 0.0,
         dirichlet_kappa: float | None = None,
+        portfolio_context_dim: int = 0,
     ):
         super().__init__(
             n_assets=n_assets,
@@ -405,6 +411,7 @@ class LSTMActorCritic(_RecurrentActorCritic):
             rnn_cell="lstm",
             dropout=dropout,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
 
 
@@ -425,6 +432,7 @@ class GRUActorCritic(_RecurrentActorCritic):
         rnn_layers: int = 1,
         dropout: float = 0.0,
         dirichlet_kappa: float | None = None,
+        portfolio_context_dim: int = 0,
     ):
         super().__init__(
             n_assets=n_assets,
@@ -436,6 +444,7 @@ class GRUActorCritic(_RecurrentActorCritic):
             rnn_cell="gru",
             dropout=dropout,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
 
 
@@ -457,12 +466,16 @@ class DynamicGraphActorCritic(PolicyDiagnostics, nn.Module):
         temporal_layers: int = 1,
         temporal_dropout: float = 0.0,
         dirichlet_kappa: float | None = None,
+        portfolio_context_dim: int = 0,
     ):
         super().__init__()
         if n_assets <= 0 or n_features <= 0 or lookback <= 0:
             raise ValueError("n_assets, n_features và lookback phải lớn hơn 0.")
         if action_dim != n_assets + 1:
             raise ValueError("action_dim phải gồm mỗi asset và một chân tiền mặt.")
+        self.portfolio_context_dim = int(portfolio_context_dim)
+        if self.portfolio_context_dim < 0:
+            raise ValueError("portfolio_context_dim must be nonnegative.")
         self.n_assets = n_assets
         self.n_features = n_features
         self.lookback = lookback
@@ -533,9 +546,9 @@ class DynamicGraphActorCritic(PolicyDiagnostics, nn.Module):
             batch_first=True,
             dropout=0.0,
         )
-        self.asset_pool_score = nn.Linear(hidden_dim, 1)
+        self.asset_pool_scorez = nn.Linear(hidden_dim, 1)
         self.critic_pool_score = nn.Linear(hidden_dim, 1)
-        global_input_dim = hidden_dim + n_assets + 1
+        global_input_dim = hidden_dim + n_assets + 1 + self.portfolio_context_dim
         self.actor_global_trunk = nn.Sequential(
             nn.Linear(global_input_dim, hidden_dim),
             nn.Tanh(),
@@ -566,7 +579,7 @@ class DynamicGraphActorCritic(PolicyDiagnostics, nn.Module):
             obs = obs.unsqueeze(0)
         batch_size = obs.shape[0]
         history_dim = self.lookback * self.n_assets * self.n_features
-        expected_dim = history_dim + self.n_assets + 1
+        expected_dim = history_dim + self.n_assets + 1 + self.portfolio_context_dim
         if obs.ndim != 2 or obs.shape[1] != expected_dim:
             raise ValueError(f"Expected obs shape [B, {expected_dim}], got {tuple(obs.shape)}")
         history = obs[:, :history_dim].reshape(
@@ -879,6 +892,7 @@ class GNNActorCritic(nn.Module):
         tickers: list[str] | None = None,
         knn_k: int = 5,
         corr_threshold: float = 0.5,
+        portfolio_context_dim: int = 0,
         config_path: str = "configs/assets.yaml",
     ):
         super().__init__()
@@ -893,6 +907,9 @@ class GNNActorCritic(nn.Module):
             raise ValueError("hidden_dim phải lớn hơn 0.")
 
         self.gnn_type = gnn_type
+        self.portfolio_context_dim = int(portfolio_context_dim)
+        if self.portfolio_context_dim < 0:
+            raise ValueError("portfolio_context_dim must be nonnegative.")
         self.n_assets = n_assets
         self.n_features = n_features
         self.lookback = lookback
@@ -954,7 +971,7 @@ class GNNActorCritic(nn.Module):
 
         B = obs.shape[0]
         hist_dim = self.lookback * self.n_assets * self.n_features
-        port_dim = self.n_assets + 1
+        port_dim = self.n_assets + 1 + self.portfolio_context_dim
         expected_dim = hist_dim + port_dim
         if obs.shape[1] != expected_dim:
             raise ValueError(f"Expected obs dim {expected_dim}, got {obs.shape[1]}")
@@ -1096,18 +1113,20 @@ def build_actor_critic(
     gnn_knn: int = 5,
     temporal_encoder: str = "gru",
     dirichlet_kappa: float | None = None,
+    portfolio_context_dim: int = 0,
     tickers: list[str] | None = None,
     config_path: str = "configs/assets.yaml",
 ) -> nn.Module:
     """Create an actor-critic from serializable architecture metadata."""
     encoder = encoder.lower()
     if encoder == "mlp":
-        observation_dim = lookback * n_assets * n_features + n_assets + 1
+        observation_dim = lookback * n_assets * n_features + n_assets + 1 + portfolio_context_dim
         return SimplexActorCritic(
             observation_dim=observation_dim,
             action_dim=action_dim,
             hidden_dim=hidden_dim,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
     if encoder == "lstm":
         return LSTMActorCritic(
@@ -1119,6 +1138,7 @@ def build_actor_critic(
             rnn_layers=rnn_layers,
             dropout=rnn_dropout,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
     if encoder == "gru":
         return GRUActorCritic(
@@ -1130,6 +1150,7 @@ def build_actor_critic(
             rnn_layers=rnn_layers,
             dropout=rnn_dropout,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
     if encoder == "gnn":
         return DynamicGraphActorCritic(
@@ -1146,8 +1167,11 @@ def build_actor_critic(
             temporal_layers=rnn_layers,
             temporal_dropout=rnn_dropout,
             dirichlet_kappa=dirichlet_kappa,
+            portfolio_context_dim=portfolio_context_dim,
         )
     if encoder in {"gat", "gcn"}:
+        if portfolio_context_dim:
+            raise ValueError("DSR state requires mlp/gru/lstm/gnn; legacy snapshot GCN/GAT is unsupported.")
         return GNNActorCritic(
             gnn_type=encoder,
             n_assets=n_assets,

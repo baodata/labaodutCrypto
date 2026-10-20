@@ -43,3 +43,29 @@ env.step(PortfolioOrder.rebalance(target_weights, action_alpha=1.0))
 - Mask dựa trên lịch sử có sẵn, không dựa trên việc feature có bằng 0 hay không. Padding được thêm sau chuẩn hóa; inference adapter cũng đưa phần bị mask về 0 sau chuẩn hóa.
 - Mask đi riêng qua buffer tới cả rollout và reevaluate; không tăng kích thước vector observation hay đổi shape tham số checkpoint.
 - GRU/LSTM/GNN chuyển timestep hợp lệ lên đầu trước khi pack; history rỗng có hidden state 0. API legacy thiếu mask giả định history đầy đủ.
+
+
+## 7. Opt-in Sprint 6
+
+`--quant-config configs/quant_sprint6.yaml` thêm causal risk/liquidity banks. Normalization, graph source, impact, adaptive execution và DSR bật độc lập; xem [contract đầy đủ và lệnh chạy](TRIEN_KHAI_SPRINT_6.md).
+
+- ADV/volatility/covariance để quyết định tại Close[t] không dùng dữ liệu t+1. Impact dùng actual stock dollar legs tại Open[t+1], không tính cash leg.
+- Khi bật impact/controller, execution trả phí từ cash và giảm buy nếu thiếu tiền; log commission/slippage/impact riêng. Controller chọn tốc độ và dollar cap từ Close, Open chỉ thực thi; no-trade giữ lượng cổ phiếu. Đường controller off/eta=0/accounting=legacy giữ accounting cũ. Có cash-funded control để tách ảnh hưởng accounting khỏi impact/controller.
+- DSR thêm `reward_state=[A,B,count]` trước cập nhật vào observation; XS normalization giữ market context. Các context làm tăng observation width theo model metadata; history mask vẫn đi riêng.
+- MARL thêm local `agent_state=[observed_budget,target_budget]`, mặc định equal sector budgets và shared reward. Sector-active reward là attribution, cash vẫn pooled.
+- Các contract mới chưa được nghiệm thu runtime trong lượt triển khai; không trình bày như bằng chứng cải thiện alpha.
+
+
+## 8. Bản sửa precision/evaluation 19/10/2026
+
+- `PortfolioState.weights`, projection và `info.execution_weights` là float64; `market_history`, observation portfolio/cash và PPO buffer vẫn float32. PnL credit được đối chiếu với delta NAV ở precision kế toán.
+- CLI/training YAML mặc định validation. Test cần chọn `--evaluation-scope test`; protocol phát triển tiếp tục chặn test. Cutoff validation có thể ở cuối tuần/ngày nghỉ (tolerance coverage 7 ngày).
+- Lưu cả resolved cutoff dates và actual test session dates. Test tensor có phiên thuộc 2024–2025 được gắn reused exploratory dù không truyền CLI date hoặc bắt đầu trước 2024. Không tự xác nhận period chưa biết là holdout độc lập.
+
+## 9. Execution alpha nghiên cứu
+
+`execution.speed_mode` mặc định `cost_aware` giữ đường blend-then-brake cũ. Khi bật `fixed`, `efficiency_ratio` hoặc `asymmetric`, tốc độ từng mã thay thế action_alpha, không blend hai lần. Close proposal funding buy từ cash + sell; Open chỉ áp drift, cap/funding và phí. Per-order alpha override thay requested speed của lệnh, không bỏ giới hạn thực thi. ER không phải confidence/risk-off và không bảo đảm alpha. Xem [contract đầy đủ](EXECUTION_ALPHA_THICH_NGHI.md).
+
+## 10. Final Close proposal cho GP
+
+`PortfolioOrder.execution(weights, hold_mask=..., notional_caps=...)` đánh dấu proposal đã hoạch định tốc độ tại Close. Chỉ dùng cùng cash-funded engine, adaptive/scalar execution controller off; env không áp alpha lần hai. Bool hold mask và dollar caps chốt từ dữ liệu Close; Open chỉ drift/fill/funding/fees. Vector action và rebalance/hold cũ giữ nhánh API cũ. GP budget/risk/cost assumptions và kết quả NO-GO được ghi tại [GP_CONVENTIONS](GP_CONVENTIONS.md) và [triển khai GP](TRIEN_KHAI_GP.md).

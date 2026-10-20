@@ -60,6 +60,10 @@ def test_real_training_path_embeds_scaler_and_saves_reproducible_state(training_
     assert context["split"].train.dates[0] > context["full_tensor"].dates[252]
     assert (run / "scaler.json").exists()
     assert args.scaler_output.parent == run
+    assert last["accounting_precision"] == "float64"
+    assert last["resolved_split_dates"]["train_end"] == args.train_end
+    assert last["test_period_status"] == "not_evaluated_validation_only"
+    assert context["test_tensor"] is None
 
 
 def test_interrupted_run_resumes_identical_model_optimizer_and_rng(training_fixture, monkeypatch):
@@ -109,7 +113,7 @@ def test_reported_sharpe_delta_and_bootstrap_share_the_same_baseline(training_fi
     tmp, flags = training_fixture
     args = train_ppo.build_parser().parse_args(flags + ["--encoder", "mlp", "--epochs", "1",
         "--matched-cash-ratio", "0.07", "--bootstrap-block-size", "5", "--bootstrap-samples", "99",
-        "--run-dir", str(tmp / "metrics")])
+        "--run-dir", str(tmp / "metrics"), "--evaluation-scope", "test"])
     model, context = train_ppo.train(args)
     metrics = train_ppo.evaluate_test(args, model, context)
     baseline = metrics.loc["PPO", "cbb_baseline"]
@@ -154,3 +158,45 @@ def test_actual_multiseed_cli_writes_numeric_summary_and_separate_metadata(train
     for seed in (7, 17):
         assert (run / f"seed_{seed}/checkpoints/last.pth").exists()
         assert (run / f"seed_{seed}/scaler.json").exists()
+
+
+def test_resolved_asset_cutoffs_are_recorded_without_cli_dates(training_fixture):
+    tmp, flags = training_fixture
+    parser_args = train_ppo.build_parser().parse_args(flags)
+    assets = AssetsConfig().raw_config
+    for key in ('train_end', 'val_start', 'val_end', 'test_start'):
+        assets['date_range'][key] = getattr(parser_args, key)
+    asset_path = tmp/'assets.yaml'
+    asset_path.write_text(yaml.safe_dump(assets))
+    date_flags = {'--train-end','--val-start','--val-end','--test-start'}
+    without_dates = []
+    iterator = iter(flags)
+    for flag in iterator:
+        if flag in date_flags:
+            next(iterator)
+        else:
+            without_dates.append(flag)
+    args = train_ppo.build_parser().parse_args(without_dates + ['--assets-config',str(asset_path),
+        '--encoder','mlp','--epochs','1','--evaluation-scope','test','--run-dir',str(tmp/'resolved'),
+        '--bootstrap-samples','99'])
+    _, context = train_ppo.train(args)
+    checkpoint = torch.load(args._run_dir/'checkpoints/last.pth',weights_only=False)
+    assert args.test_start is None
+    assert checkpoint['resolved_split_dates']['test_start'] == parser_args.test_start
+    assert context['resolved_split_dates'] == checkpoint['resolved_split_dates']
+    assert checkpoint['test_period']['start'] == context['test_tensor'].dates[0]
+    assert checkpoint['test_period_status'] == 'custom_period_freshness_unverified'
+
+
+def test_validation_end_on_weekend_keeps_configured_cutoff(training_fixture):
+    tmp, flags = training_fixture
+    original = train_ppo.build_parser().parse_args(flags)
+    sunday = pd.Timestamp(original.val_end).to_period('W-SUN').end_time.normalize()
+    monday = sunday + pd.Timedelta(days=1)
+    args = train_ppo.build_parser().parse_args(flags + ['--encoder','mlp','--epochs','1',
+        '--val-end',sunday.date().isoformat(),'--test-start',monday.date().isoformat(),
+        '--run-dir',str(tmp/'weekend')])
+    _, context = train_ppo.train(args)
+    assert context['test_tensor'] is None
+    assert context['resolved_split_dates']['val_end'] == sunday.date().isoformat()
+    assert pd.Timestamp(context['val_tensor'].dates[-1]).weekday() == 4

@@ -1,0 +1,60 @@
+# Sprint 6 opt-in infrastructure. Change ONE mechanism per ablation.
+normalization:
+  enabled: false
+  default_mode: static_train
+  preserve_market_context: true
+  window: 252
+  min_periods: 252
+  clip_range: [-10.0, 10.0]
+  eps: 0.00000001
+  modes:
+    xs_rank_ret_20d: identity
+    xs_rank_ret_60d: identity
+    rsi_14: identity
+    # ret_20d: xs_zscore
+    # mom_12_1: rolling_zscore
+risk:
+  enabled: true
+  method: ledoit_wolf  # sample | ewma | ledoit_wolf
+  window: 60
+  min_periods: 60
+  decay: 0.94
+  jitter: 0.000000000001
+liquidity:
+  enabled: true
+  window: 20
+  min_periods: 20
+graph:
+  covariance_source: legacy  # legacy | risk | residual
+  residual_window: 60
+  missing_benchmark: error
+execution:
+  enabled: false
+  # cost_aware preserves the old blend-then-brake path. New modes REPLACE
+  # action_alpha: fixed / efficiency_ratio / asymmetric; compare separately.
+  speed_mode: cost_aware
+  cost_risk_brake: true
+  er_window: 10
+  alpha_min: 0.05
+  alpha_max: 0.80
+  alpha_buy: 0.25
+  alpha_sell: 0.75
+  no_trade_band: 0.002
+  participation_cap: 0.01
+  cost_aversion: 1.0
+  risk_aversion: 1.0
+impact:
+  accounting: legacy  # legacy | cash_funded; impact/adaptive execution require cash-funded legs
+  eta: 0.0
+  participation_warning: 0.01
+reward:
+  mode: excess_return  # excess_return | differential_sharpe
+  reference: risk_free  # risk_free | equal_weight
+  eta: 0.01
+  epsilon: 0.00000001
+  warmup: 20
+  clip: 10.0
+  scaling: 1.0
+marl:
+  reward_mode: shared  # shared | sector_active
+  sector_cash_ratio: 0.04

@@ -1,5 +1,8 @@
 # Luồng và cơ chế chạy hiện tại của hệ thống
 
+> **Cập nhật 19/10/2026:** evaluation mặc định đã chuyển sang validation; test cần `--evaluation-scope test`. Accounting nội bộ dùng float64, observation policy vẫn float32. Helper GAT entropy tính theo node/head và chưa bật trong PPO loss. Các ví dụ test ở dưới cần chọn scope test tường minh; xem [bản sửa](SUA_LOI_KIEM_CHUNG_2026_10_19.md).
+
+
 **Ngày mô tả:** 14/10/2026.  
 **Nguồn:** mã trong `src/`, các script và cấu hình tại thời điểm viết; đã bao gồm thay đổi history mask tường minh.  
 **Entry point chính:** `python -m src.training.train_ppo`.

@@ -1,0 +1,32 @@
+# Fixed research specification. No parameter search or test access.
+version: gp-research-v1
+methods: [matched_1n, convex, aim_fixed, aim_gp, gp_constrained, gp_mpc, gp_zero_forecast]
+risk_aversion: 10.0
+discount_factor: 0.995
+tilt_fraction: 0.25
+mpc_horizon: 3
+calibration:
+  minimum_samples: 126
+  ridge: 5.0
+  max_persistence: 0.995
+  covariance_method: ledoit_wolf
+  jitter: 0.0000000001
+  oof_refit_sessions: 63
+cost:
+  planning_nav: 100000.0
+  scenario_eta: 0.1
+  multiplier: 1.0
+  weight_grid: [0.001, 0.005, 0.01, 0.02]
+  minimum_eigenvalue: 0.00000001
+execution:
+  cash_ratio: 0.04
+  ramp_alpha: 0.25
+  participation_cap: 0.01
+  no_trade_band: 0.0
+  realized_impact_eta: 0.1
+solver:
+  bellman_tolerance: 0.0000000001
+  bellman_max_iterations: 10000
+  qp_tolerance: 0.000000001
+  qp_gap_tolerance: 0.000000001
+  qp_max_iterations: 300

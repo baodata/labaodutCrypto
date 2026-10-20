@@ -121,7 +121,7 @@ class TestTradingEnv:
 
         assert np.isclose(info["turnover"], 0.5)
         assert np.isclose(info["cost_rate"], 0.0005)
-        assert env.portfolio.weights.dtype == np.float32
+        assert env.portfolio.weights.dtype == np.float64
 
     def test_action_rejects_nonfinite_weights(self, mock_data, make_env):
         market_tensor, open_prices = mock_data

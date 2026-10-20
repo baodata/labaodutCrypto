@@ -68,6 +68,7 @@ def build_dynamic_graph_sequence(
     graph_mode: Literal["threshold", "knn", "dynamic_threshold"] = "threshold",
     top_k: int = 5,
     sector_config_path: str = "configs/assets.yaml",
+    covariance_bank=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build causal, date-aligned multi-relation graph tensors.
 
@@ -112,7 +113,12 @@ def build_dynamic_graph_sequence(
     from src.graph.correlation import compute_rolling_correlation
     from src.graph.multi_relation_graph import GRAPH_RELATIONS, MultiRelationGraphBuilder
 
-    rolling_corr = compute_rolling_correlation(aligned_returns, window_size=window_size)
+    if covariance_bank is not None:
+        if covariance_bank.tickers != list(tickers) or not pd.DatetimeIndex(covariance_bank.dates).equals(date_index):
+            raise ValueError("Covariance graph dates/ticker order mismatch.")
+        rolling_corr = None
+    else:
+        rolling_corr = compute_rolling_correlation(aligned_returns, window_size=window_size)
     builder = MultiRelationGraphBuilder(
         tickers=list(tickers),
         rolling_corr_df=rolling_corr,
@@ -130,9 +136,13 @@ def build_dynamic_graph_sequence(
     )
     edge_mask = np.zeros_like(adjacency)
     for time_index, timestamp in enumerate(date_index):
-        for relation_index, (edge_index, edge_weight) in enumerate(
-            builder.build_relations_at_time(timestamp)
-        ):
+        if covariance_bank is None:
+            relations = builder.build_relations_at_time(timestamp)
+        else:
+            from src.risk.covariance import covariance_to_correlation
+            matrix = covariance_to_correlation(covariance_bank.covariance[time_index]) if covariance_bank.ready[time_index] else np.zeros((asset_count, asset_count))
+            relations = builder.build_relations_from_matrix(matrix)
+        for relation_index, (edge_index, edge_weight) in enumerate(relations):
             if edge_index.numel() == 0:
                 continue
             source = edge_index[0].cpu().numpy()

@@ -65,6 +65,8 @@ def evaluate_policy_with_actions(
         return action
 
     result = DeterministicBacktester(env).run_agent(act)
+    if env.cash_funded_execution:
+        blended_targets = result.daily_execution_weights
     return result, np.asarray(policy_actions), np.asarray(blended_targets)
 
 
@@ -112,6 +114,11 @@ def metric_summary(
         daily_turnover=result.daily_turnover,
         daily_costs=result.daily_costs,
     ).summary_dict()
+    if result.extended_diagnostics:
+        for field in ('daily_commission','daily_slippage','daily_impact'):
+            summary['total_'+field.removeprefix('daily_')] = float(np.sum(getattr(result, field)))
+        summary['hold_fraction'] = float(np.mean(result.daily_hold))
+        summary['participation_max'] = float(np.max(result.daily_participation_max))
     summary["profit"] = float(result.portfolio_values[-1] - result.portfolio_values[0])
     summary["final_value"] = float(result.portfolio_values[-1])
     return summary

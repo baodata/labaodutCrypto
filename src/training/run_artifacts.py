@@ -24,7 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 def runtime_versions() -> dict[str, str]:
     versions = {"python": platform.python_version()}
-    for name in ("numpy", "pandas", "torch", "torch-geometric", "gymnasium"):
+    for name in ("numpy", "pandas", "torch", "torch-geometric", "gymnasium", "scikit-learn"):
         try:
             versions[name] = version(name)
         except PackageNotFoundError:
@@ -36,6 +36,8 @@ def configure_run_artifacts(args, kind="ppo"):
     resolve_training_config(args)
     if hasattr(args, "_run_dir"):
         return
+    from src.training.quant_context import load_quant_config
+    load_quant_config(args)
     if min(args.cpu_threads, args.cache_batch_size, args.cache_temporal_batch_size) <= 0 or (args.microbatch_size is not None and args.microbatch_size <= 0):
         raise ValueError("Thread count và batch sizes phải lớn hơn 0.")
     if not np.isfinite(args.progress_every) or args.progress_every <= 0:
@@ -61,6 +63,8 @@ def configure_run_artifacts(args, kind="ppo"):
     }
     if getattr(args, "research_protocol", None) is not None:
         hashes["config_hashes"].update(file_hashes([args.research_protocol], PROJECT_ROOT))
+    if getattr(args, "quant_config", None) is not None:
+        hashes["config_hashes"].update(file_hashes([args.quant_config], PROJECT_ROOT))
     if args.resume is not None:
         previous = torch.load(args.resume, map_location="cpu", weights_only=False)
         for key, current in hashes.items():
@@ -87,6 +91,7 @@ def configure_run_artifacts(args, kind="ppo"):
         "status": "running", "kind": kind, "run_dir": str(run_dir),
         "arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items() if not k.startswith("_")},
         "runtime": runtime_versions(),
+        "accounting_precision": "float64",
         "training_config_inputs": copy.deepcopy(args._training_config_inputs),
         "research_protocol": getattr(args, "_research_protocol", None),
         "research_protocol_hash": getattr(args, "_research_protocol_hash", None),

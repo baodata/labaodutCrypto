@@ -1,0 +1,113 @@
+[
+  {
+    "error": "<urlopen error [Errno 104] Connection reset by peer>",
+    "name": "VIX_History.csv",
+    "source": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "status": "failed"
+  },
+  {
+    "error": "<urlopen error [Errno 104] Connection reset by peer>",
+    "name": "VIX3M_History.csv",
+    "source": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv",
+    "status": "failed"
+  },
+  {
+    "bytes": 81086,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2015_20140605b.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20140605b.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:57:20 GMT",
+    "name": "fomc_2015_20140605b.html",
+    "retrieved_at": "2026-10-20T03:39:06.387142+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20140605b.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 81051,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2016_20150511a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20150511a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:53:49 GMT",
+    "name": "fomc_2016_20150511a.html",
+    "retrieved_at": "2026-10-20T03:39:06.780011+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20150511a.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80590,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2017_20160628a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20160628a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:50:19 GMT",
+    "name": "fomc_2017_20160628a.html",
+    "retrieved_at": "2026-10-20T03:39:07.085595+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20160628a.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80608,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2018_20170511b.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20170511b.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:46:48 GMT",
+    "name": "fomc_2018_20170511b.html",
+    "retrieved_at": "2026-10-20T03:39:07.678338+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20170511b.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 178184,
+    "content_type": "application/x-zip-compressed",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/F-F_Research_Data_Factors_daily_CSV.zip",
+    "final_url": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
+    "last_modified": "Fri, 25 Sep 2026 21:55:02 GMT",
+    "name": "F-F_Research_Data_Factors_daily_CSV.zip",
+    "retrieved_at": "2026-10-20T03:39:07.711017+00:00",
+    "source": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80350,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2019_20180525a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20180525a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:43:17 GMT",
+    "name": "fomc_2019_20180525a.html",
+    "retrieved_at": "2026-10-20T03:39:07.872126+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20180525a.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80453,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2021_20200702a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200702a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:36:17 GMT",
+    "name": "fomc_2021_20200702a.html",
+    "retrieved_at": "2026-10-20T03:39:08.921456+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200702a.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80442,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2020_20190517a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20190517a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:39:47 GMT",
+    "name": "fomc_2020_20190517a.html",
+    "retrieved_at": "2026-10-20T03:39:08.921981+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20190517a.htm",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 80455,
+    "content_type": "text/html",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/fomc_2022_20210604a.html",
+    "final_url": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210604a.htm",
+    "last_modified": "Thu, 26 Feb 2026 22:32:47 GMT",
+    "name": "fomc_2022_20210604a.html",
+    "retrieved_at": "2026-10-20T03:39:08.992709+00:00",
+    "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210604a.htm",
+    "status": "downloaded"
+  }
+]

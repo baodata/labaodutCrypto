@@ -1,0 +1,49 @@
+{
+  "artifact_hashes": {
+    "normalized/event_coverage.csv": "972a2de57ca5c5a395d87435a53168733b99d95ece4b5bc6b2059e7503b2092d",
+    "normalized/events.csv": "b755aeae7d200c2d70bc3da648f17be1a04c50fc7a4ca65930218f0d760479e5",
+    "normalized/events.json": "5879e678f4d2472d3cbe1172ff707c8d5fac75a36e8e1f441c73f42ab7d34ab1",
+    "normalized/ff3_daily.csv": "05b450761054727e0f70e16dc086e9409dec1ca326669ce464d0fc5009417542",
+    "normalized/ff3_daily.json": "ffd934ae71d7ed08f6e85058a8ebfe79eea5c56e8ce1a9b8245d667863df627b",
+    "raw/F-F_Research_Data_Factors_daily_CSV.zip": "2f29e22546069914890a712680a6f81f3680ebc3543b52864484d209ca13a7db",
+    "raw/fomc_2015_20140605b.html": "d433bee53c0c022d305a89c0cfa6cf2d355719091fd9d67368dde75bb41ed3e9",
+    "raw/fomc_2016_20150511a.html": "99280e2e020d33e999a5b5293aad7889bd498ea0a25026c323c1cfb3a7db9f91",
+    "raw/fomc_2017_20160628a.html": "6656f4a4d965d0d34be555884ed88f75d40d22f06b0cdad42f1206895d69deaf",
+    "raw/fomc_2018_20170511b.html": "9ce730ef44512080df958acc6cc33b2f7e72fe01afd5773e5c535199d60507a6",
+    "raw/fomc_2019_20180525a.html": "4af48cd57e898ed0a29c3c76598fe665477021830acfb1e749a915b20fc93b46",
+    "raw/fomc_2020_20190517a.html": "fd997fa33d9b94435b06240798e549d44ba9cf22ed42aa0e69e11cbd04e65a2a",
+    "raw/fomc_2021_20200702a.html": "e92daf22621b27c7e0e57557e18842514c4e31552c77b5c7da0e19ab899368b9",
+    "raw/fomc_2022_20210604a.html": "f278111731d56e00c951142387641fd3cafbceb0da7dc0556837323a215f06c3"
+  },
+  "data_root": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020",
+  "inventory": [
+    {
+      "group": "macro_volatility",
+      "rows": 0,
+      "status": "download_failed",
+      "strict_history_ready": false
+    },
+    {
+      "first_date": "1926-07-01",
+      "group": "ff3_daily",
+      "last_date": "2026-08-31",
+      "rows": 26317,
+      "status": "downloaded_current_vintage",
+      "strict_history_ready": false
+    },
+    {
+      "group": "blackout",
+      "rows": 72,
+      "status": "partial_fomc_no_earnings_or_coverage",
+      "strict_history_ready": false
+    }
+  ],
+  "no_historical_availability_invented": true,
+  "retrieved_sources": 9,
+  "source_hashes": {
+    "scripts/download_alpha_sources.py": "7aa58e4d37ab3e15eb83dc6adf818cbc17be3e2883286ef58dce7e3b5deb2fb7",
+    "scripts/import_alpha_sources.py": "9b2ac6bed3a53e6e52a764dc75edb93cdb58162cdd28002e89857421b3e63367"
+  },
+  "status": "downloaded_partial_not_training_ready",
+  "strict_history_ready": false
+}

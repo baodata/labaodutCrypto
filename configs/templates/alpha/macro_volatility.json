@@ -1,0 +1,6 @@
+{
+  "availability": "point_in_time",
+  "availability_evidence": "",
+  "unit": "index_points",
+  "note": "Fill with archived release evidence; this empty template is not historical data."
+}

@@ -217,6 +217,9 @@ class MarketFeatureScaler:
 
     @classmethod
     def from_dict(cls, data: dict) -> "MarketFeatureScaler":
+        if data.get("kind") == "causal_feature_scaler":
+            from src.features.normalization import CausalFeatureScaler
+            return CausalFeatureScaler.from_dict(data)
         if not data.get("is_fitted"):
             raise ValueError("Scaler checkpoint chưa được fit.")
         names = data["feature_names"]

@@ -14,11 +14,10 @@ Mục đích:
 Nâng cấp: GNN-005 (Thành viên B)
 4. Thêm Residual / Skip Connections giữa các lớp GATv2 để chống Over-smoothing.
    Khi đồ thị tiệm cận Fully Connected (do Market Correlation Spike), residual
-   đảm bảo mỗi cổ phiếu vẫn giữ lại "bản sắc riêng" (idiosyncratic features)
-   sau khi tổng hợp thông tin từ hàng xóm.
-5. Thêm Entropy Regularization Loss để ép Attention weights phân bố "sắc nét"
-   (sharp attention), tránh hiện tượng GATv2 chia đều trọng số 1/N cho tất cả
-   hàng xóm khi chúng quá giống nhau trong giai đoạn khủng hoảng.
+   hỗ trợ giữ đặc trưng riêng khi tổng hợp hàng xóm; mức phân biệt embedding
+   cần được đo trực tiếp, không được bảo đảm chỉ bởi residual.
+5. Cung cấp helper entropy theo node/head cho ablation attention. Helper chưa
+   tham gia PPO loss mặc định; entropy trong PPO là entropy của Dirichlet action.
 """
 import torch
 import torch.nn as nn
@@ -72,7 +71,7 @@ class GATEncoder(nn.Module):
                               Output = (1 - α)*GATv2(x) + α*x_projected
                               α = 0.0 → không dùng residual (giống code gốc).
                               α = 0.5 → cân bằng giữa thông tin mới và cũ (mặc định).
-                              α = 1.0 → chỉ giữ nguyên đặc trưng gốc (không học được).
+                              α = 1.0 → chỉ dùng skip projection, không dùng message passing.
         """
         super(GATEncoder, self).__init__()
         self.dropout = dropout
@@ -166,30 +165,55 @@ class GATEncoder(nn.Module):
         return x
 
 
-def compute_attention_entropy_loss(alpha: torch.Tensor) -> torch.Tensor:
+def compute_attention_entropy_loss(
+    alpha: torch.Tensor,
+    edge_index: torch.Tensor,
+    num_nodes: int | None = None,
+    *,
+    normalize_by_degree: bool = False,
+) -> torch.Tensor:
+    """Mean incoming-neighbor entropy across active destination nodes/heads.
+
+    Pass the edge_index RETURNED with alpha, including GAT-added self-loops.
+    Alpha must be normalized per destination/head (before attention dropout,
+    or with dropout=0). Missing/isolated nodes are excluded; degree-one nodes
+    have entropy zero. Optional log(degree) normalization makes uniform
+    attention score one for every degree > 1.
+
+    This differentiable helper is not enabled in the PPO objective by default.
+    Minimizing entropy is an attention ablation, not proof against oversmoothing.
     """
-    Tính Entropy Regularization Loss từ Attention weights của GATv2.
-
-    Mục đích: Ép buộc GATv2 phân bổ Attention "sắc nét" (sharp / peaked),
-    tránh hiện tượng Attention đồng đều (uniform) khi đồ thị gần Fully Connected —
-    đặc biệt trong giai đoạn Market Correlation Spike (khủng hoảng).
-
-    Hàm mất mát Entropy:
-        L_ent = (1/|E|) * Σ_{(i,j) in E} [ -α_{ij} * log(α_{ij} + ε) ]
-
-    Đưa vào tổng hàm mất mát như:
-        L_total = L_RL + λ_ent * L_ent    (λ_ent nhỏ, ví dụ: 0.01)
-
-    Minimize L_ent → GATv2 bị buộc phải chọn ra một số ít cạnh trọng yếu,
-    thay vì chia đều 1/N cho tất cả hàng xóm.
-
-    Args:
-        alpha: Attention weight tensor [E, heads] hoặc [E, 1] từ GATv2.
-
-    Returns:
-        Scalar tensor: giá trị entropy loss trung bình trên tất cả các cạnh.
-    """
-    eps = 1e-8  # Tránh log(0)
-    # Entropy = -sum(alpha * log(alpha)) — tính trung bình trên toàn bộ cạnh
-    entropy = -torch.sum(alpha * torch.log(alpha + eps), dim=-1)
+    if alpha.ndim == 1:
+        alpha = alpha[:, None]
+    if alpha.ndim != 2 or alpha.shape[1] == 0 or not alpha.is_floating_point():
+        raise ValueError("alpha must be floating [E, heads] with at least one head.")
+    if edge_index.ndim != 2 or edge_index.shape != (2, alpha.shape[0]):
+        raise ValueError("edge_index must be [2,E] aligned with returned alpha.")
+    if edge_index.dtype != torch.long or edge_index.device != alpha.device:
+        raise ValueError("edge_index must be int64 on the same device as alpha.")
+    if not torch.isfinite(alpha).all() or torch.any(alpha < 0) or torch.any(alpha > 1):
+        raise ValueError("Attention probabilities must be finite and in [0,1].")
+    if edge_index.numel() and torch.any(edge_index < 0):
+        raise ValueError("Node indices must be nonnegative.")
+    inferred = int(edge_index.max().item()) + 1 if edge_index.numel() else 0
+    if num_nodes is None:
+        num_nodes = inferred
+    if not isinstance(num_nodes, int) or num_nodes < inferred or num_nodes < 0:
+        raise ValueError("num_nodes must include every source/destination node.")
+    if alpha.shape[0] == 0:
+        return alpha.sum() * 0.0
+    target = edge_index[1]  # default PyG source_to_target message flow
+    degree = torch.bincount(target, minlength=num_nodes)
+    active = degree > 0
+    mass = alpha.new_zeros((num_nodes, alpha.shape[1])).index_add(0, target, alpha)
+    tolerance = max(1e-6, 8 * torch.finfo(alpha.dtype).eps)
+    if not torch.allclose(mass[active], torch.ones_like(mass[active]), atol=tolerance, rtol=tolerance):
+        raise ValueError("Alpha must sum to one per destination/head; use attention before dropout.")
+    epsilon = max(1e-12, torch.finfo(alpha.dtype).tiny)
+    terms = -alpha * alpha.clamp_min(epsilon).log()
+    entropy = alpha.new_zeros((num_nodes, alpha.shape[1])).index_add(0, target, terms)[active]
+    if normalize_by_degree:
+        log_degree = degree[active].to(alpha.dtype).log()[:, None]
+        entropy = torch.where(log_degree > 0, entropy / log_degree.clamp_min(epsilon),
+                              torch.zeros_like(entropy))
     return entropy.mean()

@@ -1,0 +1,6 @@
+{
+  "availability": "point_in_time",
+  "availability_evidence": "",
+  "unit": "percent_return",
+  "note": "Use each archived vintage's actual release timestamp; do not backdate today's revised file."
+}

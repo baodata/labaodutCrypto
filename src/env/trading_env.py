@@ -20,7 +20,7 @@ from src.env.returns import PortfolioReturnEngine
 from src.env.rebalance import RebalanceEngine
 from src.env.cost import TransactionCostEngine, resolve_transaction_cost_components
 from src.env.drawdown import DrawdownTracker
-from src.env.reward import RewardEngine
+from src.env.reward import RewardEngine, DifferentialSharpeReward
 from src.utils.data_types import MarketDataTensor
 
 
@@ -49,6 +49,7 @@ class TradingEnv(gym.Env):
         graph_start_index: int = 0,
         close_prices: np.ndarray | None = None,
         environment_config: dict | None = None,
+        quant_context: dict | None = None,
     ):
         """
         Khởi tạo môi trường.
@@ -233,14 +234,56 @@ class TradingEnv(gym.Env):
         self.drawdown_tracker = DrawdownTracker()
         self.reward_engine = RewardEngine(beta=self.config["reward_beta"], scaling_factor=self.config["reward_scaling"])
         
+        self.quant_context = quant_context if quant_context is not None else (getattr(self.history_tensor, "quant_context", None) or {})
+        self.quant_config = self.quant_context.get("config", {})
+        if self.quant_context and self.quant_context['tickers'] != list(self.market_tensor.tickers):
+            raise ValueError("Quant bank ticker order mismatch.")
+        self.bank_indices = None
+        if self.quant_context:
+            import pandas as pd
+            self.bank_indices = pd.DatetimeIndex(self.quant_context['dates']).get_indexer(pd.DatetimeIndex(self.market_tensor.dates))
+            if np.any(self.bank_indices < 0):
+                raise ValueError("Quant bank missing episode dates.")
+        from src.env.rebalance import ExecutionController
+        if 'market_context' in self.quant_context:
+            dimension = self.quant_context['market_context'].shape[-1]
+            self.observation_space.spaces['market_context'] = spaces.Box(low=-np.inf,high=np.inf,shape=(dimension,),dtype=np.float32)
+        self.execution_controller = ExecutionController(self.quant_config.get('execution', {}))
+        self.impact_eta = float(self.quant_config.get('impact', {}).get('eta', 0.))
+        if not np.isfinite(self.impact_eta) or self.impact_eta < 0:
+            raise ValueError("Impact eta must be finite and nonnegative.")
+        self.cash_funded_execution = self.execution_controller.enabled or self.impact_eta > 0 or self.quant_config.get('impact', {}).get('accounting') == 'cash_funded'
+        if self.cash_funded_execution and 'liquidity' not in self.quant_context:
+            raise ValueError("Impact/execution require a causal liquidity bank.")
+        if self.execution_controller.enabled and 'risk' not in self.quant_context:
+            raise ValueError("Adaptive execution requires causal full risk covariance.")
+        if self.execution_controller.enabled and self.execution_controller.speed_mode == 'efficiency_ratio':
+            trend = self.quant_context.get('trend')
+            if (trend is None or trend.tickers != list(self.market_tensor.tickers)
+                    or not pd.DatetimeIndex(trend.dates).equals(pd.DatetimeIndex(self.quant_context['dates']))
+                    or trend.metadata['window'] != self.execution_controller.er_window):
+                raise ValueError("ER execution requires an aligned trend bank with the configured window.")
+        reward_config = self.quant_config.get('reward', {})
+        self.dsr = None
+        if reward_config.get('mode') == 'differential_sharpe':
+            if reward_config.get('reference', 'risk_free') not in {'risk_free','equal_weight'}:
+                raise ValueError("DSR reference must be risk_free or equal_weight.")
+            if self.config['reward_beta'] != 1.:
+                raise ValueError("DSR uses realized net returns; reward_beta must be 1.")
+            self.dsr = DifferentialSharpeReward(**{k:v for k,v in reward_config.items() if k not in {'mode','reference'}})
+            self.observation_space.spaces['reward_state'] = spaces.Box(low=-np.inf, high=np.inf, shape=(3,), dtype=np.float32)
         self.current_step = 0
-        
+
     def reset(self, seed=None, options=None):
         """Khôi phục môi trường về trạng thái nguyên thủy."""
         super().reset(seed=seed)
         self.current_step = 0
         
         self.portfolio.reset()
+        if self.dsr is not None:
+            self.dsr.reset()
+            if options and "reward_state" in options:
+                self.dsr.load_state_dict(options["reward_state"])
         self.drawdown_tracker.reset(self.config["initial_balance"])
         
         obs = self._get_obs()
@@ -294,6 +337,10 @@ class TradingEnv(gym.Env):
             observation["graph_edge_mask_history"] = np.asarray(
                 edge_mask_history, dtype=np.float32
             )
+        if 'market_context' in self.quant_context:
+            observation['market_context'] = self.quant_context['market_context'][self.bank_indices[self.current_step]].astype(np.float32)
+        if self.dsr is not None:
+            observation['reward_state'] = np.asarray([self.dsr.a, self.dsr.b, self.dsr.count], dtype=np.float32)
         return observation
         
     def _get_info(self):
@@ -311,7 +358,7 @@ class TradingEnv(gym.Env):
         current_weights: np.ndarray | None = None,
         action_alpha: float | None = None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """Return the capped policy target and the final blended execution target."""
+        """Return policy and Close execution proposals (before Open caps/costs)."""
         action = np.asarray(action, dtype=np.float64)
         if action.shape != (self.N + 1,):
             raise ValueError("Action phải có shape [N + 1], gồm cổ phiếu và tiền mặt.")
@@ -323,6 +370,9 @@ class TradingEnv(gym.Env):
         )
         if current_weights is None:
             current_weights = self.portfolio.weights
+        if self.execution_controller.replaces_action_alpha:
+            proposed, _, _, _ = self._execution_plan(current_weights, policy_target, action_alpha)
+            return policy_target, np.append(proposed, max(0., 1-proposed.sum()))
         blended_target = (
             (1.0 - alpha) * np.asarray(current_weights, dtype=np.float64)
             + alpha * policy_target
@@ -331,6 +381,20 @@ class TradingEnv(gym.Env):
             blended_target, max_asset_weight=self.max_asset_weight
         )
         return policy_target, execution_target
+
+    def _execution_plan(self, current_weights, target_weights, alpha_override=None):
+        """Pure Close-only plan; safe to call for diagnostics before step()."""
+        bank_index = self.bank_indices[self.current_step]
+        liquidity, risk = self.quant_context['liquidity'], self.quant_context['risk']
+        trend = self.quant_context.get('trend')
+        return self.execution_controller.decide(
+            current_weights, target_weights, self.portfolio.portfolio_value,
+            liquidity.dollar_adv[bank_index], liquidity.volatility[bank_index],
+            risk.covariance[bank_index], liquidity.ready[bank_index] & risk.ready[bank_index],
+            self.transaction_fee_pct+self.slippage_pct, base_alpha=self.action_alpha,
+            efficiency_ratio=trend.efficiency_ratio[bank_index] if trend is not None else None,
+            trend_ready=trend.ready[bank_index] if trend is not None else None,
+            return_diagnostics=True, alpha_override=alpha_override)
         
     def step(self, action: np.ndarray | PortfolioOrder):
         """
@@ -347,16 +411,50 @@ class TradingEnv(gym.Env):
             return self._get_obs(), 0.0, False, True, self._get_info()
 
         hold = isinstance(action, PortfolioOrder) and action.target_weights is None
+        final_order = isinstance(action, PortfolioOrder) and action.final_execution
         current_weights = self.portfolio.weights.copy()
         if not hold:
             order_alpha = action.action_alpha if isinstance(action, PortfolioOrder) else None
             target = action.target_weights if isinstance(action, PortfolioOrder) else action
             # Rebalance targets are fixed at Close[t], before the unseen gap.
-            _, target_weights = self.project_action(
-                target, current_weights=current_weights, action_alpha=order_alpha
-            )
+            if final_order:
+                if not self.cash_funded_execution or self.execution_controller.enabled:
+                    raise ValueError('Final proposals require cash-funded execution and the scalar controller disabled.')
+                target_weights = np.asarray(target, dtype=np.float64).copy()
+                if (target_weights.shape != (self.N+1,)
+                        or np.any(target_weights[:-1] > np.maximum(current_weights[:-1], self.max_asset_weight)+1e-8)):
+                    raise ValueError('Final Close proposal violates asset shape/cap.')
+            else:
+                policy_target, target_weights = self.project_action(
+                    target, current_weights=current_weights, action_alpha=order_alpha
+                )
 
         t = self.current_step
+        controlled_hold = None
+        execution_diagnostics = None
+        if not hold and self.cash_funded_execution:
+            bank_index = self.bank_indices[t]
+            liquidity = self.quant_context['liquidity']
+            adv, sigma = liquidity.dollar_adv[bank_index], liquidity.volatility[bank_index]
+            ready = liquidity.ready[bank_index]
+            if final_order:
+                if not ready.all():
+                    raise ValueError('Final execution requires ready causal liquidity.')
+                proposed = target_weights[:-1].copy()
+                controlled_hold = action.hold_mask.copy()
+                notional_caps = action.notional_caps.copy()
+                execution_diagnostics = dict(speed_mode='final_close_proposal_no_second_blend',
+                    close_proposed_weights=target_weights.copy(), hold_mask=controlled_hold.copy())
+                if controlled_hold.all():
+                    hold = True
+            elif self.execution_controller.enabled:
+                controller_target = policy_target if self.execution_controller.replaces_action_alpha else target_weights
+                proposed, controlled_hold, notional_caps, execution_diagnostics = self._execution_plan(
+                    current_weights, controller_target, order_alpha)
+                if controlled_hold.all():
+                    hold = True
+            elif not ready.all():
+                raise ValueError("Liquidity not ready for impact execution; warm up before trading.")
         previous_value = self.portfolio.portfolio_value
         daily_rf = self.returns_engine.daily_rf
         subperiod_rf = float(np.sqrt(1.0 + daily_rf) - 1.0)
@@ -373,6 +471,11 @@ class TradingEnv(gym.Env):
 
         # A hold keeps the overnight-drifted share quantities. Returning the
         # previous close weights as a rebalance target would create a trade.
+        if not hold and controlled_hold is not None:
+            target_weights = self.execution_controller.fill(proposed, controlled_hold,
+                notional_caps, open_weights, previous_value*(1+overnight_gross), self.max_asset_weight)
+            if np.allclose(target_weights, open_weights, atol=1e-12, rtol=0):
+                hold = True
         if hold:
             target_weights = open_weights
             turnover = 0.0
@@ -384,6 +487,19 @@ class TradingEnv(gym.Env):
         transaction_cost = value_at_open * cost_rate
         commission_cost = value_at_open * self.transaction_fee_pct * turnover
         slippage_cost = value_at_open * self.slippage_pct * turnover
+        stock_costs = value_at_open * (self.transaction_fee_pct+self.slippage_pct) * np.abs(target_weights[:-1]-open_weights[:-1]) if not hold else np.zeros(self.N)
+        impact_cost = 0.
+        participation = np.zeros(self.N)
+        if not hold and self.cash_funded_execution:
+            from src.env.cost import execute_cash_funded_trade
+            target_weights, costs = execute_cash_funded_trade(open_weights, target_weights,
+                value_at_open, self.transaction_fee_pct, self.slippage_pct, adv, sigma,
+                self.impact_eta, self.max_asset_weight)
+            transaction_cost = costs['transaction_cost']
+            commission_cost, slippage_cost = costs['commission_cost'], costs['slippage_cost']
+            impact_cost, participation = costs['impact_cost'], costs['participation']
+            turnover, cost_rate = costs['turnover'], costs['cost_rate']
+            stock_costs = costs['stock_costs']
         value_after_cost = value_at_open - transaction_cost
 
         # New holdings earn only the Open[t+1] -> Close[t+1] intraday return.
@@ -416,13 +532,19 @@ class TradingEnv(gym.Env):
             cost_fraction,
             benchmark_return=benchmark_return,
         )
+        if self.dsr is not None:
+            reference = (float(np.mean(self.close_prices[t+1]/self.close_prices[t]-1))
+                if self.quant_config['reward'].get('reference', 'risk_free') == 'equal_weight' else daily_rf)
+            reward = self.dsr.update(net_return-reference)
         self.current_step += 1
         
         obs = self._get_obs()
         info = self._get_info()
         info["execution_date"] = str(self.market_tensor.dates[t + 1])
         info["order_type"] = "hold" if hold else "rebalance"
-        info["execution_weights"] = np.asarray(target_weights, dtype=np.float32).copy()
+        info["execution_weights"] = np.asarray(target_weights, dtype=np.float64).copy()
+        if execution_diagnostics is not None:
+            info['execution_controller'] = execution_diagnostics
         info["overnight_return"] = float(overnight_gross)
         info["intraday_return"] = float(intraday_gross)
         info["gross_return"] = float(gross_return)
@@ -432,6 +554,16 @@ class TradingEnv(gym.Env):
         info["transaction_cost"] = transaction_cost
         info["commission_cost"] = commission_cost
         info["slippage_cost"] = slippage_cost
+        info['impact_cost'] = impact_cost
+        info['participation_max'] = float(participation.max())
+        info['participation_warning'] = bool(participation.max() > self.quant_config.get('impact', {}).get('participation_warning', .01))
+        if self.dsr is not None:
+            info['reward_state'] = self.dsr.state_dict()
+            info['dsr_ready'] = self.dsr.ready
+        info['asset_net_pnl'] = previous_value*current_weights[:-1]*overnight_returns + value_after_cost*target_weights[:-1]*intraday_returns - stock_costs
+        info['cash_pnl'] = previous_value*current_weights[-1]*subperiod_rf + value_after_cost*target_weights[-1]*subperiod_rf
+        info['previous_value'] = previous_value
+        info['asset_costs'] = stock_costs
         info["reward"] = reward
         info["benchmark_return"] = benchmark_return
         
@@ -440,10 +572,22 @@ class TradingEnv(gym.Env):
         
         return obs, reward, terminated, truncated, info
 
+    def reward_state_dict(self):
+        return self.dsr.state_dict() if self.dsr is not None else None
+
+    def load_reward_state_dict(self, state):
+        if self.dsr is None:
+            if state is not None:
+                raise ValueError("Cannot load DSR state into return reward environment.")
+        else:
+            self.dsr.load_state_dict(state)
+
     def _compute_gross_return(
         self, weights: np.ndarray, asset_returns: np.ndarray, cash_return: float
     ) -> float:
         """Portfolio return for one subperiod, including its cash yield."""
+        weights = np.asarray(weights, dtype=np.float64)
+        asset_returns = np.asarray(asset_returns, dtype=np.float64)
         return float(
             np.dot(weights[:-1], asset_returns) + weights[-1] * cash_return
         )

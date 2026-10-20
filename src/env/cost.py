@@ -116,3 +116,73 @@ class TransactionCostEngine:
         
         # Phí giao dịch tỷ lệ thuận với Turnover
         return float(self.c * turnover)
+
+
+def square_root_impact(notionals, dollar_adv, daily_volatility, eta=0.):
+    """Return per-stock dollar impact and participation, using causal ADV.
+
+    Trade notionals are measured at execution. No cash leg is accepted.
+    Missing capacity blocks active impact trades, rather than charging zero.
+    """
+    q, adv, sigma = np.broadcast_arrays(np.asarray(notionals, float),
+        np.asarray(dollar_adv, float), np.asarray(daily_volatility, float))
+    if not np.isfinite(eta) or eta < 0 or not np.isfinite(q).all() or (q < 0).any():
+        raise ValueError("Invalid impact coefficient/notional.")
+    active = q > 1e-12
+    if eta > 0 and np.any(active & (~np.isfinite(adv) | (adv <= 0) | ~np.isfinite(sigma) | (sigma < 0))):
+        raise ValueError("Active impact trades require valid causal ADV and volatility.")
+    participation = np.divide(q, adv, out=np.zeros_like(q), where=np.isfinite(adv) & (adv > 0))
+    impact = np.zeros_like(q)
+    if eta > 0:
+        impact[active] = q[active] * eta * sigma[active] * np.sqrt(participation[active])
+    return impact, participation
+
+
+def execute_cash_funded_trade(open_weights, target_weights, nav, commission, slippage,
+                              adv, sigma, eta=0., max_asset_weight=1.):
+    """Execute actual stock dollar legs and deduct fees from cash.
+
+    Scale only buys if fees cannot be funded; holds and sales retain their
+    intended quantities. Also cap new buys against NAV AFTER costs.
+    """
+    old = np.asarray(open_weights[:-1], float) * nav
+    desired = np.asarray(target_weights[:-1], float) * nav
+    delta = desired - old
+    sells = np.minimum(delta, 0.)
+    buys = np.maximum(delta, 0.)
+    cash_available = float(open_weights[-1]*nav - sells.sum())
+    scale = 1.
+    for _ in range(100):
+        traded = sells + buys*scale
+        q = np.abs(traded)
+        impact, participation = square_root_impact(q, adv, sigma, eta)
+        fee = q.sum()*(commission+slippage) + impact.sum()
+        if fee >= nav:
+            raise ValueError("Execution costs exhaust NAV; reduce participation/impact.")
+        capped = np.maximum(max_asset_weight*(nav-fee)-old-sells, 0.)
+        limited_buys = np.minimum(buys, capped)
+        # All buy legs are scaled together only for cash funding.
+        if np.any(limited_buys < buys-1e-12):
+            buys = limited_buys
+            scale = min(scale, 1.)
+            continue
+        affordable = max(0., cash_available-fee)
+        next_scale = min(scale, affordable / buys.sum()) if buys.sum() > 0 else 1.
+        if abs(next_scale-scale) <= 1e-12:
+            break
+        scale = next_scale
+    else:
+        raise RuntimeError("Execution cash/fee fixed point did not converge.")
+    traded = sells + buys*scale
+    q = np.abs(traded)
+    impact, participation = square_root_impact(q, adv, sigma, eta)
+    commission_cost, slippage_cost = q.sum()*commission, q.sum()*slippage
+    cost = float(commission_cost+slippage_cost+impact.sum())
+    new_assets = old+traded
+    new_cash = nav-new_assets.sum()-cost
+    if new_cash < -1e-7 or cost >= nav:
+        raise ValueError("Execution cannot fund fees without a negative cash balance.")
+    weights = np.append(new_assets, max(0.,new_cash))/(nav-cost)
+    return weights, dict(transaction_cost=cost, commission_cost=float(commission_cost),
+        slippage_cost=float(slippage_cost), impact_cost=float(impact.sum()),
+        participation=participation, stock_costs=q*(commission+slippage)+impact, turnover=float(q.sum()/nav), cost_rate=cost/nav)

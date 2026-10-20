@@ -42,10 +42,10 @@ date_range:
   # Train:      start_date -> train_end (2015-01-01 -> 2019-12-31: 5 năm)
   # Validation: val_start  -> val_end   (2020-01-01 -> 2022-12-31: 3 năm)
   # Test (OOS): test_start -> end_date   (2023-01-01 -> 2025-12-31: 3 năm)
-  train_end: "2019-12-31"
-  val_start: "2020-01-01"
-  val_end: "2022-12-31"
-  test_start: "2023-01-01"
+  train_end: "2022-12-31"
+  val_start: "2023-01-01"
+  val_end: "2024-12-31"
+  test_start: "2025-01-01"
 
 # Tiền mặt (cash): tài sản thứ N + 1 trong action, không phải cổ phiếu.
 # risk_free_rate_annual dùng để tính Sharpe Ratio (và có thể dùng làm lãi tiền mặt).

@@ -44,6 +44,9 @@ def evaluate_validation(args, model, context):
     metrics = pd.DataFrame({name: metric_summary(result, risk_free) for name, result in results.items()}).T
     metrics.index.name = "Strategy"
     metrics["sharpe_delta_vs_matched_baseline"] = metrics.sharpe_ratio - metrics.loc["Matched 1/N + Cash", "sharpe_ratio"]
+    if getattr(args, "quant_config", None):
+        metrics["sharpe_delta_vs_matched_asset_baseline"] = metrics["sharpe_delta_vs_matched_baseline"]
+        metrics["matched_baseline"] = "Matched 1/N + Cash"
     metrics["evaluation_scope"] = "validation"
     metrics["checkpoint_status"] = "none"
     metrics["checkpoint_epoch"] = np.nan

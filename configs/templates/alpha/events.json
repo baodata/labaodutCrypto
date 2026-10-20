@@ -1,0 +1,5 @@
+{
+  "availability": "point_in_time",
+  "availability_evidence": "",
+  "note": "Coverage assertions need archived snapshots. Empty events alone do not mean no events."
+}

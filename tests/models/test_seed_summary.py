@@ -27,10 +27,17 @@ def test_numeric_seed_summary_preserves_checkpoint_metadata():
     assert ppo_metadata.loc[17, "checkpoint_status"] == "untrained_fallback"
 
 
-def test_multiseed_entrypoint_writes_summary_and_metadata_without_training(monkeypatch, tmp_path):
+@pytest.mark.parametrize("scope", ["validation", "test"])
+def test_multiseed_entrypoint_writes_summary_and_metadata_without_training(monkeypatch, tmp_path, scope):
     monkeypatch.setattr(train_ppo, "train", lambda args: (None, {"seed": args.seed}))
-    monkeypatch.setattr(train_ppo, "evaluate_test", lambda args, model, context: metrics_for_seed(context["seed"]))
-    train_ppo.main(["--seeds", "7,17", "--metrics-output", str(tmp_path / "metrics.csv"), "--run-dir", str(tmp_path / "ensemble")])
+    def evaluate(args, model, context):
+        assert args.evaluation_scope == scope
+        return metrics_for_seed(context["seed"])
+
+    monkeypatch.setattr(train_ppo, f"evaluate_{scope}", evaluate)
+    other_scope = "test" if scope == "validation" else "validation"
+    monkeypatch.setattr(train_ppo, f"evaluate_{other_scope}", lambda *args: pytest.fail("Wrong evaluation scope"))
+    train_ppo.main(["--seeds", "7,17", "--evaluation-scope", scope, "--metrics-output", str(tmp_path / "metrics.csv"), "--run-dir", str(tmp_path / "ensemble")])
     summary = pd.read_csv(tmp_path / "metrics_seeds_summary.csv", header=[0, 1], index_col=0)
     metadata = pd.read_csv(tmp_path / "metrics_seeds_metadata.csv")
     assert summary.loc["PPO", ("sharpe_ratio", "mean")] == pytest.approx(1.5)

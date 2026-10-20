@@ -20,7 +20,7 @@ def test_portfolio_state_update():
     state.update(99000.0, new_weights)
     
     assert state.portfolio_value == 99000.0
-    assert state.weights.dtype == np.float32
+    assert state.weights.dtype == np.float64
     assert np.isclose(state.cash_weight, 0.2)
     assert np.isclose(state.cash_value, 19800.0)
     assert np.isclose(state.assets_value, 79200.0)

@@ -35,7 +35,7 @@ SETTINGS = {
         ("margin", "selection_margin", float, 0.0),
     ),
     "evaluation": (
-        ("scope", "evaluation_scope", str, "test"),
+        ("scope", "evaluation_scope", str, "validation"),
         ("train_eval_every", "train_eval_every", int, 5),
         ("bootstrap_block_size", "bootstrap_block_size", int, 20),
         ("bootstrap_samples", "bootstrap_samples", int, 10000),

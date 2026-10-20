@@ -148,17 +148,17 @@ _Lý do tách sprint: Sau khi phân tích kỹ, kiến trúc hiện tại (Thres
   - _Hàm:_ `generate_correlation_edges(corr_matrix, mode="knn", top_k=5)`.
   - _Unit test:_ Chạy `pytest tests/test_graph.py` — kiểm tra số cạnh đầu ra bằng $N \times K$ cho mode knn.
 
-- [x] **[GNN-005] Nâng cấp GATv2 Encoder: Thêm Residual Connections & Entropy Regularization (P0) `[MỐC B]`**
-  - _Tệp đã nâng cấp:_ `src/models/gnn/gat_encoder.py`
-  - _Vấn đề giải quyết:_ Kể cả khi đồ thị đã được kiểm soát độ thưa, input features của các cổ phiếu trong giai đoạn khủng hoảng vẫn rất giống nhau (cùng giảm sàn, RSI đỏ rực). GATv2 do đó vẫn có thể học được Attention gần đồng đều → Over-smoothing ở cấp độ đặc trưng.
-  - _Giải pháp đã cài đặt:_
-    1. **Residual Connections** (tham số `residual_alpha`): $\mathbf{h}_i^{(l+1)} = (1-\alpha)\cdot\text{GATv2}(\mathbf{h}_i^{(l)}) + \alpha \cdot \mathbf{W}\mathbf{h}_i^{(l)}$. Giữ lại "bản sắc riêng" của mỗi cổ phiếu sau khi tổng hợp thông tin hàng xóm. Mặc định: $\alpha = 0.5$.
-    2. **Entropy Regularization Loss** (hàm `compute_attention_entropy_loss`): $\mathcal{L}_{\text{ent}} = -\frac{1}{|E|}\sum_{(i,j)\in E} \alpha_{ij} \log \alpha_{ij}$. Ép GATv2 chọn ra một số ít cạnh trọng yếu (sharp attention) thay vì chia đều. Đưa vào tổng Loss: $\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{RL}} + \lambda_{\text{ent}} \cdot \mathcal{L}_{\text{ent}}$ (với $\lambda_{\text{ent}} \approx 0.01$).
-  - _Sử dụng trong training:_
+- [x] **[GNN-005] Bổ sung Residual Connections và helper entropy attention (P0) `[MỐC B]`**
+  - _Tệp:_ `src/models/gnn/gat_encoder.py`.
+  - **Residual** (`residual_alpha=0.5`) hỗ trợ giữ đặc trưng đầu vào. Cần đo độ phân biệt embeddings; residual không tự chứng minh đã ngăn over-smoothing.
+  - **Helper entropy** nhận `alpha` và `edge_index` do GAT trả về, cộng entropy theo node đích và trung bình node/head. Isolated nodes được bỏ qua, degree=1 có entropy 0; `normalize_by_degree=True` chia cho log(degree) với degree>1.
+  - **Trạng thái tích hợp:** PPO hiện dùng entropy của Dirichlet action. Helper GAT **chưa tham gia loss mặc định**; muốn thêm regularizer cần ablation riêng, hệ số riêng và diagnostics embeddings. Không dùng việc giảm attention entropy để kết luận có alpha hoặc đã giải quyết over-smoothing.
+  - _Ví dụ tính helper cho ablation, với attention trước dropout hoặc dropout=0:_
     ```python
     emb, (att_idx, att_alpha) = encoder(x, edge_index, edge_weight, return_attention_weights=True)
-    loss_ent = compute_attention_entropy_loss(att_alpha)
-    loss_total = loss_rl + 0.01 * loss_ent
+    loss_ent = compute_attention_entropy_loss(att_alpha, att_idx, num_nodes=x.shape[0])
+    # Chỉ trong ablation đã cấu hình riêng:
+    loss_total = loss_rl + lambda_attention_entropy * loss_ent
     ```
 
 ---
@@ -214,7 +214,12 @@ _Mục tiêu: Chứng minh pipeline RL hoạt động trơn tru trước khi ph�
 
 ### 🏁 SPRINT 6: Tích hợp Dynamic GNN & Xây dựng Multi-Agent RL (MARL)
 
+**QNT-013D, bàn giao 20/10/2026:** B đã có signal-step calibration, AR dynamics, GP Bellman reference, constrained QP/MPC và adapter; A có conditional risk, quadratic scenario và execution/accounting. Xem [triển khai GP](TRIEN_KHAI_GP.md). Giữ nghiệm thu/gate riêng, chưa warm-start PPO/MARL bằng GP.
+
 _Mục tiêu: Chia việc ra quyết định cho nhiều Agent chuyên trách theo từng nhóm ngành._
+
+**Bàn giao code 18/10/2026:** [Triển khai Sprint 6](TRIEN_KHAI_SPRINT_6.md). Đã bổ sung module và wiring; chưa chạy kiểm chứng/ablation/training đầy đủ nên checkbox DoD còn mở. QNT-006 do A sở hữu, B nhận bank qua QNT-007/008.
+
 
 #### Ticket định lượng của Sprint 6
 
@@ -223,7 +228,7 @@ _Mục tiêu: Chia việc ra quyết định cho nhiều Agent chuyên trách th
 <a id="qnt-007"></a>
 
 - [ ] **[QNT-007] — Graph từ correlation sau shrinkage (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Chờ A giao QNT-006.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** B · **Reviewer:** A · **Phụ thuộc:** QNT-006 (A bàn giao)
   - **Phạm vi:** Nhận ma trận covariance đã shrink (Ledoit-Wolf) từ QNT-006 của A, chuyển thành correlation rồi dựng đồ thị; giữ nguyên 3 quan hệ (dương, âm, cùng ngành) và k-NN theo `abs(corr)`. Sample Pearson vẫn là baseline đối chứng.
   - **Tệp tác động:** `src/graph/dynamic_graph.py`, `src/graph/multi_relation_graph.py`, `src/graph/builder.py`, `src/training/train_ppo.py`.
@@ -234,7 +239,7 @@ _Mục tiêu: Chia việc ra quyết định cho nhiều Agent chuyên trách th
 <a id="qnt-008"></a>
 
 - [ ] **[QNT-008] — Residual graph sau hồi quy SPY (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** B · **Reviewer:** A · **Phụ thuộc:** QNT-007
   - **Phạm vi:** Hồi quy causal từng cổ phiếu theo SPY trên cửa sổ trailing; dựng correlation của chuỗi phần dư (residual returns). Chốt rõ cách tính beta và residual trong cửa sổ tại $t$; SPY tiếp tục là benchmark, không đưa vào action space.
   - **Tệp tác động:** `src/features/relative.py`, `src/graph/correlation.py`, `src/graph/dynamic_graph.py`, `src/graph/multi_relation_graph.py`.
@@ -527,3 +532,21 @@ _Mục tiêu: Hoàn thiện báo cáo khoa học và đóng gói source code._
     3. - Ownership Edges
     4. - Macro Nodes
   - Phân tích xem loại thông tin phi giá nào mang lại Alpha vượt trội nhất cho danh mục đầu tư.
+
+---
+
+### 🚀 GIAI ĐOẠN SẢN PHẨM THỰC CHIẾN (PRODUCTION TRADING ENGINE)
+
+_Mục tiêu: Bóc tách rủi ro nhân tố, tinh lọc lợi nhuận đặc thù thuần khiết (Pure Alpha) cho hệ thống GNN._
+
+<a id="qnt-029"></a>
+
+- [ ] **[QNT-029] — Trung hòa rủi ro đa nhân tố Fama-French/Barra (P1) [ĐỊNH LƯỢNG / THỰC CHIẾN]**
+  - **Theo dõi:** Đã có FF3 loader và beta/residual features cho predictor (20/10/2026); chờ daily PIT vintages, residual graph/covariance và ablation. [Hướng dẫn](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md).
+  - **Mức độ:** P1 · **Owner:** B · **Reviewer:** A · **Phụ thuộc:** QNT-006, QNT-008
+  - **Phạm vi:** Nạp chuỗi dữ liệu 3 nhân tố Fama-French (Market Mkt-RF, Size SMB, Value HML). Tại mỗi ngày $t$, thực hiện hồi quy rolling causal trên cửa sổ $W=60$ phiên để bóc tách phần dư lợi suất đặc thù (Residual Returns): $\epsilon_{i,t} = R_{i,t} - (\alpha_i + \beta_{m} Mkt_t + \beta_{s} SMB_t + \beta_{h} HML_t)$. Dựng đồ thị tương quan và tính toán tín hiệu dự báo thuần túy từ chuỗi phần dư này.
+  - **Tệp tác động:** `src/features/factor_risk.py`, `src/graph/residual_graph.py`, `src/risk/covariance.py`.
+  - **DoD (Nghiệm thu):** Các hệ số beta nhân tố chỉ tính trên dữ liệu quá khứ $[t-W: t)$; ma trận hiệp phương sai phần dư đối xứng và PSD; không rò rỉ nhân tố tương lai.
+  - **Sản phẩm bàn giao:** So sánh Factor Exposure của danh mục trước và sau trung hòa; biểu đồ Cumulative Return bóc tách giữa Factor Return và Alpha Return.
+  - **Đặc tả bổ sung:** [QNT-029](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-029).
+

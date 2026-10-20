@@ -58,3 +58,53 @@ class RewardEngine:
             Lợi nhuận ròng (Net Return) = R_p,t - TC_t
         """
         return float(gross_return - transaction_cost)
+
+
+class DifferentialSharpeReward:
+    """QNT-014: DSR computed with PRE-update EMA moments of net excess.
+
+    Reference is explicit at the environment: risk-free or equal-weight active.
+    State is [A, B, count], with readiness deterministically derived from count.
+    Degenerate variance emits zero; optional clipping is applied after DSR.
+    """
+    def __init__(self, eta=.01, epsilon=1e-8, warmup=20, clip=10., scaling=1.):
+        import numpy as np
+        if not 0 < eta <= 1 or epsilon <= 0 or warmup < 2 or clip <= 0 or not np.isfinite([eta,epsilon,clip,scaling]).all():
+            raise ValueError("Invalid DSR configuration.")
+        self.eta, self.epsilon, self.warmup, self.clip, self.scaling = eta, epsilon, warmup, clip, scaling
+        self.reset()
+
+    def reset(self):
+        self.a = self.b = 0.
+        self.count = 0
+        self.last_raw = 0.
+        self.clipped = 0
+
+    @property
+    def ready(self):
+        return self.count >= self.warmup
+
+    def state_dict(self):
+        return dict(a=self.a, b=self.b, count=self.count, last_raw=self.last_raw, clipped=self.clipped)
+
+    def load_state_dict(self, state):
+        import numpy as np
+        if not np.isfinite([state['a'], state['b']]).all() or state['b'] < 0 or state['count'] < 0:
+            raise ValueError("Invalid DSR state.")
+        self.a, self.b, self.count = float(state['a']), float(state['b']), int(state['count'])
+        self.last_raw, self.clipped = state.get('last_raw', 0.), state.get('clipped', 0)
+
+    def update(self, net_excess_return):
+        import numpy as np
+        r = float(net_excess_return)
+        if not np.isfinite(r):
+            raise ValueError("DSR requires finite realized returns.")
+        da, db = r-self.a, r*r-self.b
+        variance = self.b-self.a*self.a
+        raw = (self.b*da - .5*self.a*db) / max(variance, self.epsilon)**1.5 if self.ready and variance > self.epsilon else 0.
+        self.a += self.eta*da
+        self.b += self.eta*db
+        self.count += 1
+        self.last_raw = float(raw)
+        self.clipped += int(abs(raw) > self.clip)
+        return float(np.clip(raw, -self.clip, self.clip)*self.scaling)

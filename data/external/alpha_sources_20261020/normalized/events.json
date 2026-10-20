@@ -1,0 +1,84 @@
+{
+  "availability": "point_in_time",
+  "availability_evidence": [
+    {
+      "announcement_date": "2014-06-05",
+      "raw_hashes": {
+        "raw/fomc_2015_20140605b.html": "d433bee53c0c022d305a89c0cfa6cf2d355719091fd9d67368dde75bb41ed3e9"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20140605b.htm",
+      "year": 2015
+    },
+    {
+      "announcement_date": "2015-05-11",
+      "raw_hashes": {
+        "raw/fomc_2016_20150511a.html": "99280e2e020d33e999a5b5293aad7889bd498ea0a25026c323c1cfb3a7db9f91"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20150511a.htm",
+      "year": 2016
+    },
+    {
+      "announcement_date": "2016-06-28",
+      "raw_hashes": {
+        "raw/fomc_2017_20160628a.html": "6656f4a4d965d0d34be555884ed88f75d40d22f06b0cdad42f1206895d69deaf"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20160628a.htm",
+      "year": 2017
+    },
+    {
+      "announcement_date": "2017-05-11",
+      "raw_hashes": {
+        "raw/fomc_2018_20170511b.html": "9ce730ef44512080df958acc6cc33b2f7e72fe01afd5773e5c535199d60507a6"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20170511b.htm",
+      "year": 2018
+    },
+    {
+      "announcement_date": "2018-05-25",
+      "raw_hashes": {
+        "raw/fomc_2019_20180525a.html": "4af48cd57e898ed0a29c3c76598fe665477021830acfb1e749a915b20fc93b46"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20180525a.htm",
+      "year": 2019
+    },
+    {
+      "announcement_date": "2019-05-17",
+      "raw_hashes": {
+        "raw/fomc_2020_20190517a.html": "fd997fa33d9b94435b06240798e549d44ba9cf22ed42aa0e69e11cbd04e65a2a"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20190517a.htm",
+      "year": 2020
+    },
+    {
+      "announcement_date": "2020-07-02",
+      "raw_hashes": {
+        "raw/fomc_2021_20200702a.html": "e92daf22621b27c7e0e57557e18842514c4e31552c77b5c7da0e19ab899368b9"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20200702a.htm",
+      "year": 2021
+    },
+    {
+      "announcement_date": "2021-06-04",
+      "raw_hashes": {
+        "raw/fomc_2022_20210604a.html": "f278111731d56e00c951142387641fd3cafbceb0da7dc0556837323a215f06c3"
+      },
+      "rows": 9,
+      "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210604a.htm",
+      "year": 2022
+    }
+  ],
+  "completeness": "partial_original_regular_FOMC_schedules_only",
+  "coverage_status": "unknown_no_assertions_written",
+  "earnings_status": "needs_PIT_vendor_or_archived_announcements",
+  "known_at_precision": "conservative_end_of_announcement_day_New_York",
+  "revisions_status": "subsequent_changes_cancellations_and_unscheduled_meetings_not_collected",
+  "scheduled_at_precision": "meeting_end_date_only_23:59:59_is_not_actual_event_hour",
+  "use": "source_records_only_not_ready_for_blackout_backtest"
+}

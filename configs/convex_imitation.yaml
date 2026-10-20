@@ -1,0 +1,16 @@
+# Capacity/optimization diagnostic; fixed budget, no inner checkpoint selection.
+version: convex-imitation-v1
+fold: development_2021
+seed: 7
+method: ppo
+hidden_dim: 32
+action_std: 0.10
+epochs: 200
+batch_size: 64
+learning_rate: 0.001
+max_grad_norm: 1.0
+evaluate_every: 20
+cpu_threads: 1
+train_probe_windows: 3
+train_probe_days: 126
+inverse_clip_epsilon: 0.0001

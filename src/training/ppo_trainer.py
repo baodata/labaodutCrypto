@@ -16,7 +16,6 @@ import pandas as pd
 import torch
 import yaml
 
-from src.data.split import TemporalSplitter
 from src.env.cost import resolve_transaction_cost_components
 from src.evaluation.metrics import FinancialMetrics
 from src.evaluation.research_protocol import checkpoint_learning_gate
@@ -183,7 +182,9 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     matched_cash = 1.0 / (n_assets + 1) if args.matched_cash_ratio is None else float(args.matched_cash_ratio)
     if not np.isfinite(matched_cash) or not 0 <= matched_cash < 1:
         raise ValueError("matched-cash-ratio phải thuộc [0,1).")
-    obs_dim = lookback * n_assets * n_features + n_assets + 1
+    from src.training.quant_context import observation_context_dim
+    reward_state_dim = observation_context_dim(scaled_full_tensor)
+    obs_dim = lookback * n_assets * n_features + n_assets + 1 + reward_state_dim
     action_dim = n_assets + 1
     encoder = getattr(args, "encoder", "gru")
     if encoder not in {"mlp", "lstm", "gru", "gnn", "gcn", "gat"}:
@@ -214,6 +215,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         raise ValueError(f"--dirichlet-kappa ({dirichlet_kappa}) phải lớn hơn action_dim ({action_dim}).")
     model_config = {
         "encoder": encoder,
+        "portfolio_context_dim": reward_state_dim,
         "n_assets": n_assets,
         "n_features": n_features,
         "lookback": lookback,
@@ -264,10 +266,16 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             threshold=corr_threshold,
             graph_mode=graph_mode,
             top_k=graph_top_k,
-            sector_config_path=str(PROJECT_ROOT / "configs/assets.yaml"),
+            sector_config_path=str(args.assets_config),
+            covariance_bank=(scaled_full_tensor.quant_context or {}).get("graph_risk"),
         )
+        from src.training.quant_context import record_graph_diagnostics
+        record_graph_diagnostics(args, graph_adjacency_sequence, graph_edge_mask_sequence)
         graph_metadata = {
             "source": "close_to_close_rolling_correlation_plus_sector_edges",
+            "covariance_source": getattr(args, '_quant_config', {}).get('graph', {}).get('covariance_source', 'legacy'),
+            "covariance_metadata": ((scaled_full_tensor.quant_context or {}).get('graph_risk').metadata
+                if (scaled_full_tensor.quant_context or {}).get('graph_risk') is not None else None),
             "relation_channels": list(GRAPH_RELATIONS),
             "correlation_window": corr_window,
             "correlation_threshold": corr_threshold,
@@ -363,24 +371,28 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
     best_validation_metrics: dict[str, float] = {}
     recent_validation_scores: list[float] = []
     epochs_without_improvement = 0
+    last_episode_reward_state = None
 
     def checkpoint_metadata(epoch: int, val_metrics: dict[str, float]) -> dict[str, Any]:
-        reused_historical_test = args.test_start == TemporalSplitter.DEFAULT_TEST_START
+        from src.evaluation.periods import describe_test_period
+        period = describe_test_period(_test_tensor, args.evaluation_scope)
         return {
             "epoch": epoch,
             "checkpoint_status": "untrained_fallback" if epoch == 0 else "trained",
+            "quant_config": getattr(args, '_quant_config', {}),
+            "market_context_features": (scaled_full_tensor.quant_context or {}).get("market_context_features", []),
+            "last_episode_reward_state": last_episode_reward_state,
+            "reward_state_convention": "reset_each_episode_state_in_observation" if getattr(args, "_quant_config", {}).get("reward", {}).get("mode") == "differential_sharpe" else None,
             "reward_beta": reward_beta,
             "reward_scaling": reward_scaling,
             "reward_baseline": args.reward_baseline,
             "return_convention": "adjusted_close_scaled_open_close_total_return",
             "sharpe_convention": FinancialMetrics.SHARPE_CONVENTION,
             "universe_methodology": "fixed_current_asset_list_without_point_in_time_membership",
-            "test_period_status": (
-                "not_evaluated_validation_only" if args.evaluation_scope == "validation" else
-                "reused_exploratory_period_not_independent_holdout"
-                if reused_historical_test
-                else "custom_period_freshness_unverified"
-            ),
+            "test_period_status": period['status'],
+            "test_period": period,
+            "resolved_split_dates": args._resolved_split_dates,
+            "accounting_precision": "float64",
             "transaction_fee_pct": transaction_fee_pct,
             "slippage_pct": slippage_pct,
             "transaction_cost_rate": transaction_cost_rate,
@@ -443,6 +455,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
             ),
             "matched_validation_metrics": matched_val_metrics,
             "training_parameters": {
+                "normalization_warmup": getattr(args, "normalization_warmup", 0),
                 "epochs": args.epochs, "ppo_iters": args.ppo_iters, "batch_size": batch_size,
                 "window_min": window_min, "window_max": window_max,
                 "gamma": gamma, "gae_lambda": float(rl_config.get("gae_lambda", 0.95)),
@@ -868,6 +881,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     last_value = float(last_value_tensor.item())
                 buffer.finish_path(last_val=last_value)
 
+                last_episode_reward_state = episode_env.reward_state_dict()
                 episode_rewards.append(episode_reward)
 
             step_rewards = buffer.rew_buf[:buffer.ptr]
@@ -1059,6 +1073,13 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
                     for name, value in val_blended_weights.items()
                 }
             )
+            for prefix, values in (('train',train_eval_metrics),('validation',val_metrics)):
+                for name in ('total_commission','total_slippage','total_impact','hold_fraction','participation_max'):
+                    if name in values:
+                        training_row[f'{prefix}_{name}'] = values[name]
+            if last_episode_reward_state is not None:
+                training_row['last_episode_dsr_raw'] = last_episode_reward_state['last_raw']
+                training_row['last_episode_dsr_clipped_fraction'] = last_episode_reward_state['clipped']/max(last_episode_reward_state['count'],1)
             training_rows.append(training_row)
             training_row.update({
                 "validation_sharpe_delta_vs_untrained": learning_gate["sharpe_delta_vs_untrained"],
@@ -1277,6 +1298,7 @@ def _train(args: argparse.Namespace) -> tuple[nn.Module, dict[str, Any]]:
         "graph_edge_mask_sequence": graph_edge_mask_sequence,
         "action_alpha": args.action_alpha,
         "env_config": env_config,
+        "resolved_split_dates": args._resolved_split_dates,
         "best_validation_metrics": best_validation_metrics,
         "checkpoint_epoch": int(checkpoint.get("epoch", -1)),
         "checkpoint_status": checkpoint_status,

@@ -1,11 +1,74 @@
 # Sổ lệnh chạy
 
+## Predictor alpha: VIX, Blackout, Fama–French
+
+Chuẩn bị banks/readiness (chưa train; thiếu dữ liệu ghi `needs_data`):
+
+```bash
+python scripts/research_alpha_features.py
+```
+
+Khi đã có lịch sử đầu vào đạt contract trong `configs/alpha_features.yaml`:
+
+```bash
+python scripts/research_alpha_features.py --groups vix --run-ablation
+python scripts/research_alpha_features.py --groups vix,fama_french,blackout --run-ablation
+```
+
+Chỉ train OOF/inner, cùng allocator/cost. [Schema, nguồn và cách chuẩn bị dữ liệu](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md). Chưa có dữ liệu PIT nên chưa có kết quả alpha mới.
+
+## Thêm GRU/GNN-GRU predictor, giữ nguyên allocator
+
+```bash
+python scripts/compare_signal_allocators.py \
+  --prediction-config configs/prediction_bank_neural.yaml \
+  --allocation-config configs/signal_allocation_neural.yaml
+```
+
+Đọc thêm `comparison/predictor_contribution_summary.csv` cho các cặp GRU−Ridge và GNN-GRU−GRU. [Kiến trúc, causal fit, checkpoint và nghiệm thu](GRU_GNN_GRU_PREDICTOR_ABLATION.md).
+
+## Ridge + momentum/mean-reversion so với matched 1/N và allocator chi phí
+
+```bash
+python scripts/compare_signal_allocators.py
+```
+
+Tạo prediction bank ba model và chạy đối chiếu inner/outer trên các fold phát triển, horizon 5/20 phiên. Kết quả: `models/runs/signal_allocation_*/comparison/outer_summary.csv`. [Cơ chế, phí, ràng buộc và cách đọc](RIDGE_MOMENTUM_VA_ALLOCATOR_CHI_PHI.md).
+
+## Prediction bank và nhãn giao dịch — 19/10/2026
+
+```bash
+python scripts/build_prediction_bank.py \
+  --prediction-config configs/prediction_bank.yaml \
+  --research-protocol configs/quant_research_protocol.yaml
+```
+
+Tạo run mới chứa dự báo Ridge `train_oof`/`inner`/`outer` và nhãn riêng, horizon 1/5/20 phiên; chỉ dùng giai đoạn phát triển. [Hợp đồng dữ liệu, artifact và API đọc](PREDICTION_BANK_VA_NHAN_GIAO_DICH.md).
+
 Chạy các lệnh từ thư mục gốc dự án, sau khi kích hoạt môi trường:
 
 ```bash
 cd /home/tuan/AI/AI_roject1
 source .venv/bin/activate
 ```
+
+Nếu Sprint 6 báo `ModuleNotFoundError: No module named 'sklearn'`, cài dependency đã khai báo vào đúng virtualenv rồi chạy lại lệnh:
+
+```bash
+.venv/bin/python -m pip install 'scikit-learn>=1.3.0'
+```
+
+## Mặc định evaluation — sửa 19/10/2026
+
+CLI và YAML mặc định dùng **validation**, không tạo test tensor. Để backtest giai đoạn test lịch sử, chọn tường minh `--evaluation-scope test`; không dùng cờ này cùng research protocol. Mốc/cảnh báo test lấy từ phiên dữ liệu thực tế đã resolve (CLI → assets → auto split), không chỉ từ tham số CLI. Giai đoạn chồng lấn 2024–2025 luôn được ghi exploratory; period khác chưa tự được xác nhận là final holdout.
+
+```bash
+python -m src.training.train_ppo --encoder gru
+# Chỉ khi chủ động đánh giá giai đoạn test đã cấu hình:
+python -m src.training.train_ppo --encoder gru --evaluation-scope test
+```
+
+Run trước/sau bản sửa float64 dùng phiên bản accounting/source khác nhau. Giữ artifact cũ để tham chiếu; dùng run-dir mới cho bản sửa. Provenance guard sẽ từ chối resume qua source/config hash đã thay đổi. Không gộp các seed khác phiên bản vào một so sánh kiểm soát.
 
 ## Cấu hình huấn luyện
 
@@ -114,3 +177,58 @@ Test 2024–2025 đã được dùng nhiều lần để khảo sát; kết qu�
 - Nhận xét:
 
 Sao chép mục này để ghi thêm các lần thử.
+
+
+## Sprint 6 — A và bàn giao covariance cho B
+
+### GP temporary-cost: development OOF/inner
+
+```bash
+python scripts/compare_gp_allocators.py \
+  --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
+  --gp-config configs/gp_allocator.yaml \
+  --fold development_2021
+```
+
+Bỏ `--fold` để chạy bốn fold OOF/inner, vẫn không outer/test. Xem [contract, lệnh full development outer và resume](GP_CONVENTIONS.md). Mọi nhánh dùng common cash ramp của protocol dẫn xuất; không so metrics như thể giữ nguyên execution của run cũ.
+
+### Đối chứng execution ER và mua/bán riêng
+
+```bash
+python scripts/compare_execution_speeds.py \
+  --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
+  --execution-config configs/execution_speed_research.yaml
+```
+
+Không train lại predictor/actor; chỉ train OOF + inner, không outer/test. Cùng convex target tape và matched 1/N ở mỗi controller; xem [cách đọc và giới hạn](EXECUTION_ALPHA_THICH_NGHI.md).
+
+### Khóa predictor → đối chứng cơ chế phân bổ
+
+Actor imitation convex targets: [phương pháp, kết quả và lệnh](BAT_CHUOC_CONVEX_TARGETS.md).
+
+```bash
+python scripts/train_convex_imitation.py \
+  --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
+  --imitation-config configs/convex_imitation.yaml
+```
+
+Learning curves sau khi sửa patience: [quy tắc và lệnh development-only](SUA_PATIENCE_VA_TRAIN_PROBE.md).
+
+Xem [contract và cách đọc kết quả](LOCK_PREDICTOR_VA_SO_SANH_ALLOCATOR.md).
+
+```bash
+python scripts/compare_portfolio_decisions.py \
+  --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
+  --allocation-config configs/signal_allocation_neural.yaml \
+  --decision-config configs/portfolio_decision.yaml
+```
+
+Khóa có sẵn chọn bằng inner IC tại horizon 5; cùng 5 seed cho PPO, sector MARL và H-MARL. Runner không train lại predictor và không dùng test.
+
+Xem [phạm vi, cấu hình, lệnh bank/stress, ablation và sector PPO](TRIEN_KHAI_SPRINT_6.md#5-lệnh-triển-khai-thực-nghiệm). Các nhánh bật riêng từng cơ chế, validation-only; các lệnh mới chưa chạy nghiệm thu.
+
+```bash
+python scripts/evaluate_sprint6_banks.py --quant-config configs/quant_sprint6.yaml --research-protocol configs/quant_research_protocol.yaml --evaluation-scope validation
+python scripts/run_sprint6_ablation.py --variants gru_control,control
+python -m src.training.train_marl --encoder gru --seed 7 --quant-config configs/quant_sprint6.yaml --research-protocol configs/quant_research_protocol.yaml --evaluation-scope validation
+```

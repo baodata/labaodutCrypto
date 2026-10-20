@@ -1,0 +1,27 @@
+# Fixed predictor ablation: same features/labels as Ridge, no outer tuning.
+version: prediction-research-v1
+model: ridge_fixed
+ridge_alpha: 1.0
+features: [xs_rank_ret_20d, mom_12_1, excess_ret_20d]
+horizons: [5, 20]
+min_train_sessions: 252
+retrain_every_sessions: 63
+baselines:
+  momentum: {feature: mom_12_1, direction: 1}
+  mean_reversion: {feature: ret_5d, direction: -1}
+neural:
+  models: [gru, gnn_gru]
+  seed: 7
+  lookback: 20
+  hidden_dim: 16
+  epochs: 5
+  batch_size: 64
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  device: cpu
+  cpu_threads: 1
+  graph:
+    window: 60
+    threshold: 0.5
+    mode: knn
+    top_k: 6

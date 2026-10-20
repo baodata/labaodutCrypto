@@ -277,6 +277,9 @@ _Mục tiêu: Hoàn thiện môi trường Gym tiêu chuẩn và chạy được
 
 _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức độ rủi ro gánh chịu._
 
+**Bàn giao code 18/10/2026:** [Triển khai Sprint 6](TRIEN_KHAI_SPRINT_6.md). Đã bổ sung module và wiring; chưa chạy kiểm chứng/ablation/training đầy đủ nên checkbox DoD còn mở. QNT-006 do A sở hữu, B nhận bank qua QNT-007/008.
+
+
 #### Ticket định lượng của Sprint 6
 
 **Thứ tự phối hợp:** QNT-004 → QNT-005; QNT-006 bàn giao cho B/QNT-007 → QNT-008; QNT-011 → QNT-012 → QNT-013 (cần thêm QNT-006). QNT-014 là ablation reward riêng; không bật đồng thời mọi thay đổi khi đo tác động.
@@ -284,7 +287,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-004"></a>
 
 - [ ] **[QNT-004] — Chuẩn hóa cross-sectional theo feature (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002
   - **Phạm vi:** Thêm chế độ `static_train`, `xs_zscore`, `xs_rank` và tùy chọn gaussian rank. Cấu hình theo tên feature; feature vốn là rank/RSI hữu hạn không tự động chuẩn hóa lần nữa.
   - **Tệp tác động:** `src/features/scaler.py`, `src/features/pipeline.py`, `src/models/policy_adapter.py`; module dự kiến `src/features/normalization.py`.
@@ -295,7 +298,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-005"></a>
 
 - [ ] **[QNT-005] — Causal rolling normalization và state inference (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-004
   - **Phạm vi:** Rolling z-score theo từng mã/feature, cửa sổ ban đầu 252 phiên; chốt `statistics[t-252:t)` để chuẩn hóa feature t. Các horizon khác chỉ chọn trong inner-val.
   - **Tệp tác động:** `src/features/scaler.py`, `src/utils/data_types.py`, `src/training/train_ppo.py`.
@@ -306,7 +309,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-006"></a>
 
 - [ ] **[QNT-006] — Risk bank covariance EWMA/Ledoit–Wolf (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Bàn giao cho B.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001, QNT-002
   - **Phạm vi:** Một bộ ước lượng covariance causal theo ngày dùng chung cho graph (bàn giao cho B), risk overlay và allocator; gồm baseline sample covariance, EWMA và Ledoit–Wolf tuyến tính.
   - **Tệp tác động:** `src/env/risk.py`, `src/graph/correlation.py`, `src/utils/data_types.py`; module dự kiến `src/risk/covariance.py`.
@@ -317,7 +320,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-011"></a>
 
 - [ ] **[QNT-011] — Thanh khoản ADV, volatility và data contract (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001
   - **Phạm vi:** Trailing dollar ADV (Average Daily Volume) và daily volatility theo từng mã; thông tin để quyết định ở Close[t] chỉ dùng dữ liệu đến t.
   - **Tệp tác động:** `src/features/pipeline.py`, `src/data/alignment.py`, `src/utils/data_types.py`; module dự kiến `src/features/liquidity.py`.
@@ -328,7 +331,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-012"></a>
 
 - [ ] **[QNT-012] — Square-root impact và phân rã chi phí (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-011, QNT-002
   - **Phạm vi:** Optional impact trên commission/spread baseline: $\text{impact\_rate}_i = \eta \cdot \sigma_i \cdot \sqrt{Q_i / \text{dollar\_ADV}_i}$, với $Q_i$ là notional giao dịch thực tế tại Open kế tiếp.
   - **Tệp tác động:** `src/env/cost.py`, `src/env/trading_env.py`, `src/evaluation/metrics.py`, `configs/env.yaml`.
@@ -339,7 +342,9 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-013"></a>
 
 - [ ] **[QNT-013] — Tốc độ execution thích nghi và vùng hold (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **QNT-013D 20/10:** đã có nhánh GP temporary-cost riêng (A: conditional risk, cost proxy, NAV/fill; B: calibration/dynamics, Bellman/QP/MPC). Xem [contract và nghiệm thu](TRIEN_KHAI_GP.md); chưa đóng gate/warm-start RL.
+  - **Mở rộng 19/10:** QNT-013A ER và QNT-013B mua/bán riêng đã có code, tắt mặc định; QNT-013C calibration conviction và QNT-013D GP là backlog. B review tính nhân quả, funding/caps và same-target replay. Xem [contract và lệnh](EXECUTION_ALPHA_THICH_NGHI.md).
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-012, QNT-006
   - **Phạm vi:** Tốc độ tái cân bằng từng mã dựa trên chi phí, thanh khoản và rủi ro causal; vùng không giao dịch (no-trade band) và participation cap.
   - **Tệp tác động:** `src/env/rebalance.py`, `src/env/trading_env.py`.
@@ -350,7 +355,7 @@ _Mục tiêu: Đo lường chính xác hiệu quả đầu tư so với mức đ
 <a id="qnt-014"></a>
 
 - [ ] **[QNT-014] — Reward Differential Sharpe có state (P1) [ĐỊNH LƯỢNG]**
-  - **Theo dõi (kế thừa):** 📝 Sẵn sàng.
+  - **Theo dõi (kế thừa):** 💻 Code đã bàn giao; chờ chạy nghiệm thu và ablation theo [hướng dẫn Sprint 6](TRIEN_KHAI_SPRINT_6.md).
   - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001, QNT-002
   - **Phạm vi:** Reward mode riêng cho Differential Sharpe Ratio (DSR); trước cập nhật EMA, dùng moments $A, B$ của bước trước và delta từ return ròng hiện tại. Chốt rõ excess return so với risk-free hay active return so với benchmark.
   - **Tệp tác động:** `src/env/reward.py`, `src/env/trading_env.py`, `src/training/train_ppo.py`.
@@ -533,3 +538,48 @@ _Mục tiêu: Hoàn tất tài liệu nghiên cứu và đảm bảo chạy lạ
 
 - [ ] **[FINAL-001] Tái lập kết quả từ môi trường sạch (P0 - Chung)**
   - Clone repo ra một máy/môi trường mới, chạy script từ bước tải data đến xuất báo cáo kết quả xem có lỗi nào không.
+
+---
+
+### 🚀 GIAI ĐOẠN SẢN PHẨM THỰC CHIẾN (PRODUCTION TRADING ENGINE)
+
+_Mục tiêu: Đưa hệ thống vào vận hành tiền thật, bảo vệ vốn tuyệt đối và kết nối API sàn giao dịch._
+
+<a id="qnt-026"></a>
+
+- [ ] **[QNT-026] — Tín hiệu VIX Term Structure và chế độ bão vĩ mô (P0) [ĐỊNH LƯỢNG / THỰC CHIẾN]**
+  - **Theo dõi:** Đã có bộ nạp/feature/runner predictor (20/10/2026); chờ dữ liệu PIT và ablation, risk overlay chưa bật. [Hướng dẫn](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md).
+  - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-002, QNT-010
+  - **Phạm vi:** Tải dữ liệu `^VIX` và `^VIX3M` từ Yahoo Finance; tính toán tỷ lệ $\text{Ratio}_{\text{VIX}} = \text{VIX} / \text{VIX3M}$. Khi tỷ lệ này $> 1.0$ (đường cong đảo ngược), tự động kích hoạt chế độ "Bão vĩ mô" nâng trần tiền mặt Cash $\ge 50\%$.
+  - **Tệp tác động:** `src/features/macro_volatility.py`, `src/env/risk.py`, `src/models/actor_critic.py`, `configs/env.yaml`.
+  - **Đặc tả bổ sung:** [QNT-026](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-026).
+
+<a id="qnt-027"></a>
+
+- [ ] **[QNT-027] — Bộ lọc sự kiện BCTC và lịch FOMC (Blackout Overlay) (P1) [ĐỊNH LƯỢNG / THỰC CHIẾN]**
+  - **Theo dõi:** Đã có loader revisions/coverage, feature và API giới hạn target (20/10/2026); chờ lịch PIT và tích hợp overlay. [Hướng dẫn](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md).
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-001, QNT-013
+  - **Phạm vi:** Tích hợp lịch công bố BCTC (Earnings Calendar) và FOMC Dates. Trước ngày ra tin 2 phiên, cấm mở vị thế mua mới; tự động hạ tỷ trọng mã đó xuống dưới $2\%$ để tránh rủi ro sập gap giá may rủi.
+  - **Tệp tác động:** `src/data/calendar_events.py`, `src/env/rebalance.py`, `src/env/trading_env.py`.
+  - **Đặc tả bổ sung:** [QNT-027](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-027).
+
+<a id="qnt-028"></a>
+
+- [ ] **[QNT-028] — Cầu dao ngắt tài khoản & Stop-Loss cứng độc lập (P0) [ĐỊNH LƯỢNG / THỰC CHIẾN]**
+  - **Theo dõi:** 📝 Sẵn sàng.
+  - **Mức độ:** P0 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-013, QNT-023
+  - **Phạm vi:** Module `CircuitBreakerController` hoạt động độc lập với AI:
+    1. Cắt lỗ cứng từng mã: Rơi quá $-7\%$ từ đỉnh cục bộ $\rightarrow$ Ép bán sạch vị thế.
+    2. Cầu dao tài khoản: NAV tụt quá $-8\%$ trong 20 phiên $\rightarrow$ Đóng 100% vị thế về Cash và khóa giao dịch 5 phiên.
+    3. Giới hạn tỷ trọng tối đa 1 cổ phiếu $\le 15\%$, 1 ngành $\le 35\%$.
+  - **Tệp tác động:** `src/env/circuit_breaker.py`, `src/env/trading_env.py`, `tests/env/test_circuit_breaker.py`.
+  - **Đặc tả bổ sung:** [QNT-028](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-028).
+
+<a id="qnt-030"></a>
+
+- [ ] **[QNT-030] — Kết nối sàn Paper Trading và kiểm toán trượt giá live (P1) [ĐỊNH LƯỢNG / THỰC CHIẾN]**
+  - **Theo dõi:** 📝 Sẵn sàng.
+  - **Mức độ:** P1 · **Owner:** A · **Reviewer:** B · **Phụ thuộc:** QNT-012, QNT-028
+  - **Phạm vi:** Tạo cổng API kết nối sàn thực tế (Alpaca / Interactive Brokers API); tự động nhận tỷ trọng từ mô hình H-MARL, sinh lệnh TWAP chia nhỏ theo thời gian, gửi lên tài khoản Paper Trading và kiểm toán sai lệch trượt giá thực tế so với mô hình.
+  - **Tệp tác động:** `src/execution/broker_api.py`, `src/execution/order_router.py`, `scripts/run_live_paper_trading.py`.
+  - **Đặc tả bổ sung:** [QNT-030](TICKET_CAI_THIEN_DINH_LUONG.md#qnt-030).

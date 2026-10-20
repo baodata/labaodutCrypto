@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from src.data.labels import LABEL_DEFINITION, decision_positions, executable_forward_returns
 from src.env.cost import resolve_transaction_cost_components
 from src.evaluation.backtester import DeterministicBacktester
 from src.evaluation.baselines import EqualWeightBaseline
@@ -34,8 +35,8 @@ def _slice(tensor, start, end):
 def _ic(features, names, opening, closing, dates, start, end, horizons, bootstrap):
     rows = []
     for horizon in horizons:
-        positions = np.arange(start, end - horizon)
-        returns = closing[positions + horizon] / opening[positions + 1] - 1.0
+        positions = decision_positions(len(opening), start, end, horizon)
+        returns = executable_forward_returns(opening, closing, positions, horizon)
         yr = pd.DataFrame(returns).rank(axis=1).to_numpy(copy=True)
         yr -= yr.mean(axis=1, keepdims=True)
         for j, name in enumerate(names):
@@ -56,6 +57,8 @@ def _ic(features, names, opening, closing, dates, start, end, horizons, bootstra
             bottom = np.take_along_axis(returns[valid], order[:, :k], axis=1).mean(axis=1)
             rows.append({
                 "feature": name, "horizon_days": horizon, "target": "forward_open_to_close",
+                "horizon_sessions": horizon,
+                "executable": True, "label_definition": LABEL_DEFINITION,
                 "n_dates": len(values), "mean_rank_ic": float(values.mean()),
                 "std_rank_ic": float(values.std(ddof=1)),
                 "block_ci_lower_95": ci["ci_lower_95"] / 252,
@@ -73,11 +76,11 @@ def _ic(features, names, opening, closing, dates, start, end, horizons, bootstra
 def _fit(tensor, opening, closing, start, end, horizon, feature_indices, alpha):
     scaler = MarketFeatureScaler().fit(_slice(tensor, start, end))
     full = scaler.transform(tensor)
-    positions = np.arange(start, end - horizon)
+    positions = decision_positions(len(opening), start, end, horizon)
     if not len(positions):
         raise ValueError("Không đủ ngày để fit nhãn đã purge.")
     x = full.tensor[positions][:, :, feature_indices].astype(np.float64).reshape(-1, len(feature_indices))
-    forward = closing[positions + horizon] / opening[positions + 1] - 1.0
+    forward = executable_forward_returns(opening, closing, positions, horizon)
     y = (forward - forward.mean(axis=1, keepdims=True)).reshape(-1)
     coefficients, center, intercept = _fit_ridge(x, y, alpha)
     predictions = (x - center) @ coefficients + intercept
@@ -225,7 +228,9 @@ def _run(protocol, raw_dir, env_path, assets_path, output, manifest):
                     "coefficients": coefficients.tolist(), "ridge_alpha": ridge, "tilt_fraction": tilt,
                     "feature_center": center.tolist(), "intercept": intercept,
                     "prediction_scale": scale, "feature_names": signal["features"],
-                    "last_fit_label_date": dates[inner_end-1], "label_purge_sessions": signal["label_horizon"]})
+                    "last_fit_label_date": dates[inner_end-1], "label_purge_sessions": signal["label_horizon"],
+                    "label_definition": LABEL_DEFINITION, "prediction_unit": "decimal_cross_sectional_excess_return",
+                    "horizon_unit": "trading_sessions"})
         atomic_csv(pd.concat(ic_parts), output / "signal_by_fold.csv", index=False)
         atomic_csv(pd.DataFrame(metrics_rows), output / "linear_baseline_by_fold.csv", index=False)
         atomic_csv(pd.DataFrame(selections), output / "inner_search.csv", index=False)
