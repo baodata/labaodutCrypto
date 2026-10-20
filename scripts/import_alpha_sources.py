@@ -1,4 +1,29 @@
-"""Import locally downloaded official Cboe/French files without inventing PIT history."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/import_alpha_sources.py
+MỤC ĐÍCH:
+    Nhập và làm sạch (import & clean) các file dữ liệu Cboe/French đã tải sẵn về máy
+    cục bộ (dành cho môi trường không có mạng Internet).
+    Hỗ trợ giải nén file ZIP của Ken French, căn chỉnh ngày giao dịch, kiểm tra
+    các giá trị rỗng/sentinel (-99.99, -999) và chuẩn hóa thành chuỗi chỉ số.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/import_alpha_sources.py \\
+        --vix-csv path/to/VIX_History.csv \\
+        --vix3m-csv path/to/VIX3M_History.csv \\
+        --french-daily path/to/F-F_Research_Data_Factors_daily_CSV.zip \\
+        --output-dir data/external_alpha/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Các file CSV hoặc ZIP gốc từ Cboe hoặc Ken French
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - <output-dir>/
+        + macro_volatility.csv, ff3_daily.csv
+        + import_manifest.json: Mã băm SHA-256 các file đã nhập
+==============================================================================
+"""
 from __future__ import annotations
 
 import argparse

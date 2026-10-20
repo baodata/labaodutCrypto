@@ -1,4 +1,34 @@
-"""Evaluate one frozen RSI/momentum tilt against scheduled 1/N baselines."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/evaluate_tilt_robustness.py
+MỤC ĐÍCH:
+    Kiểm định độ bền vững (robustness test) cho bộ tham số chiến lược 1/N Tilt
+    (RSI & Momentum 12-1) đã được chọn từ scripts/evaluate_equal_weight_tilt.py.
+    Sử dụng phương pháp Circular Block Bootstrap (95% CI) trên các thời kỳ thị trường
+    khác nhau để kiểm tra xem chiến lược có vượt qua tiêu chuẩn (acceptance gate)
+    về Sharpe, Maximum Drawdown degradation và Net Excess Return hay không.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy kiểm định robustness mặc định:
+    python scripts/evaluate_tilt_robustness.py
+
+    # 2. Tùy chỉnh file cổng nghiệm thu gate:
+    python scripts/evaluate_tilt_robustness.py \\
+        --gate-config configs/research/tilt_acceptance_gate.yaml \\
+        --output-dir experiments/tilt_robustness/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Dữ liệu nến thô trong: data/raw/*.parquet
+    - configs/research/tilt_acceptance_gate.yaml (Tiêu chuẩn nghiệm thu)
+    - configs/core/env.yaml, configs/core/assets.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - experiments/tilt_robustness/tilt_robustness_periods.csv: Kết quả theo từng thời kỳ
+    - experiments/tilt_robustness/tilt_robustness_gate.csv: Bảng tổng kết đạt/không đạt gate
+    - In ra màn hình: Overall gate (all baselines): PASS hoặc FAIL
+==============================================================================
+"""
 
 from __future__ import annotations
 

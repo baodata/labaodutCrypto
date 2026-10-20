@@ -1,8 +1,34 @@
-"""Run predefined Sprint 6 ablations sequentially, one change per run.
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/run_sprint6_ablation.py
+MỤC ĐÍCH:
+    Chạy tự động chuỗi thực nghiệm đối chứng (Ablation Study) của Sprint 6:
+        - So sánh mô hình Đồ thị GNN vs Chuỗi thời gian GRU
+        - So sánh các phương pháp chuẩn hóa: Cross-sectional vs Rolling vs Hybrid
+        - So sánh các bộ ước lượng rủi ro: Sample vs EWMA vs Ledoit-Wolf
+    Chạy lần lượt qua nhiều hạt giống (seeds) trên tập Validation cố định để
+    tính Mean và Standard Deviation cho bảng báo cáo khoa học.
 
-No test backtest. Each variant uses the same frozen fold/seed and records its
-resolved quant YAML. Defaults select just the control. Full experiments are
-explicitly selected, never started as a side effect of importing the script.
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy biến thể mặc định (control):
+    python scripts/run_sprint6_ablation.py
+
+    # 2. Chạy so sánh nhiều biến thể và nhiều seed:
+    python scripts/run_sprint6_ablation.py \\
+        --variants control,xs,rolling,hybrid,graph_ledoit_wolf \\
+        --seeds 7,17 --epochs 50
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - configs/core/quant.yaml, configs/core/quant_research_protocol.yaml
+    - Dữ liệu nến thô trong data/raw/*.parquet
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/sprint6_ablation_<timestamp>/
+        + validation_comparison.csv: Tổng hợp kết quả tất cả các lần chạy
+        + validation_comparison_mean_std.csv: Bảng thống kê Mean và Std của từng biến thể
+        + ablation_manifest.json: Trạng thái và lệnh chạy chi tiết
+==============================================================================
 """
 from pathlib import Path
 import argparse

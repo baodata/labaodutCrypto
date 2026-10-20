@@ -1,7 +1,31 @@
-"""Recompute a paired report from saved returns; never retrain or select policies."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/summarize_portfolio_decisions.py
+MỤC ĐÍCH:
+    Tái tổng hợp báo cáo so sánh ghép cặp (paired summary report) từ chuỗi lợi nhuận
+    (daily returns) của một lượt chạy compare_portfolio_decisions đã hoàn tất.
+    Không huấn luyện lại, không chọn lại mô hình.
+    
+    LƯU Ý GỘP: Chức năng này đã được tích hợp trực tiếp vào script:
+        python scripts/compare_portfolio_decisions.py --summary-only ...
+    Script này được duy trì để đảm bảo tính tương thích ngược cho các lệnh CLI cũ.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/summarize_portfolio_decisions.py \\
+        --run-dir models/runs/portfolio_decision_.../ \\
+        --output-dir reports/derived_summary_run1/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Thư mục run cũ chứa metrics_by_fold.csv, daily_returns.csv, predictor_lock.json
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - paired_comparison.csv: Bảng tổng kết thống kê ghép cặp
+    - manifest.json: Nhật ký nguồn gốc dữ liệu
+==============================================================================
+"""
+
 import argparse
-import hashlib
-import json
 from pathlib import Path
 import sys
 
@@ -9,35 +33,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import pandas as pd
-from src.evaluation.portfolio_decision import summarize_decisions
-from src.utils.artifacts import atomic_json, atomic_csv, file_hashes
+from scripts.compare_portfolio_decisions import run_summary
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-dir", required=True, type=Path)
-    parser.add_argument("--output-dir", required=True, type=Path, help="New derived report directory; original run is preserved.")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--run-dir", required=True, type=Path,
+                        help="Thư mục kết quả portfolio decisions đã hoàn thành.")
+    parser.add_argument("--output-dir", required=True, type=Path,
+                        help="Thư mục mới lưu báo cáo tái tạo (không được trùng thư mục cũ).")
     args = parser.parse_args()
-    if args.output_dir.exists() and any(args.output_dir.iterdir()):
-        raise ValueError("Derived report directory already contains artifacts.")
-    root = args.run_dir.resolve()
-    lock = json.loads((root / "predictor_lock.json").read_text())
-    bank_manifest = Path(lock["prediction_bank"]) / "prediction_bank_manifest.json"
-    if hashlib.sha256(bank_manifest.read_bytes()).hexdigest() != lock["bank_manifest_sha256"]:
-        raise ValueError("Bank protocol snapshot differs from the run lock.")
-    metadata = json.loads(bank_manifest.read_text())
-    metrics, daily = pd.read_csv(root / "metrics_by_fold.csv"), pd.read_csv(root / "daily_returns.csv")
-    report = summarize_decisions(metrics, daily, metadata["protocol"], lock["horizon_sessions"])
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    atomic_csv(report, args.output_dir / "paired_comparison.csv", index=False)
-    atomic_json(args.output_dir / "manifest.json", dict(status="completed", source_run=str(root),
-        predictor_lock_digest=lock["lock_digest"], policy_or_checkpoint_changes=False,
-        transformation="paired_summary_only_float64_noise_tolerance_1e-12_decimal_returns",
-        input_hashes=file_hashes([root / "metrics_by_fold.csv", root / "daily_returns.csv",
-                                root / "predictor_lock.json", bank_manifest], ROOT),
-        source_hashes=file_hashes([ROOT / "src/evaluation/portfolio_decision.py", Path(__file__)], ROOT)))
-    print(report.to_string(index=False))
+    run_summary(args.run_dir, args.output_dir)
 
 
 if __name__ == "__main__":

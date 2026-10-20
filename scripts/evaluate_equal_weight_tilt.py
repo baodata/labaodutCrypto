@@ -1,8 +1,32 @@
-"""Explore low-turnover 1/N-core portfolios tilted by RSI and 12-1 momentum.
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/evaluate_equal_weight_tilt.py
+MỤC ĐÍCH:
+    Quét lưới tham số (exploratory validation sweep) cho chiến lược danh mục đều 1/N
+    kết hợp độ lệch (tilt) theo chỉ số RSI và Động lượng 12-1 (Momentum 12-1).
+    Khảo sát các chu kỳ tái cân bằng (rebalance periods) và tỷ lệ tilt để tìm
+    bộ tham số tối ưu hóa Sharpe Ratio so với benchmark 1/N truyền thống.
+    
+    BƯỚC TIẾP THEO: Sau khi tìm được tham số tối ưu, chạy scripts/evaluate_tilt_robustness.py
+    để kiểm định độ bền vững (robustness test) bằng phương pháp Bootstrap.
 
-The signal is cross-sectional and uses only features available at Close[t].
-The environment executes the resulting target at Open[t+1]. This is an
-exploratory validation sweep, not a final out-of-sample claim.
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy quét tham số mặc định và lưu bảng kết quả:
+    python scripts/evaluate_equal_weight_tilt.py --output experiments/tilt_sweep.csv
+
+    # 2. Tùy chỉnh chi phí giao dịch hoặc tỷ lệ tiền mặt:
+    python scripts/evaluate_equal_weight_tilt.py --cash-ratio 0.05 --action-alpha 0.25
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Dữ liệu nến thô trong: data/raw/*.parquet
+    - configs/core/env.yaml, configs/core/assets.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - File kết quả CSV (mặc định: experiments/tilt_sweep.csv)
+    - File manifest JSON lưu hash dữ liệu và cấu hình
+    - In ra bảng Top 12 bộ tham số tilt có Sharpe Delta cao nhất
+==============================================================================
 """
 
 from __future__ import annotations

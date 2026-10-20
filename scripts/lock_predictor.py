@@ -1,4 +1,28 @@
-"""Lock the best inner-IC predictor per fold at a predeclared horizon."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/lock_predictor.py
+MỤC ĐÍCH:
+    Chọn và khóa (Lock) mô hình có hệ số Inner-Fold Rank-IC cao nhất cho từng fold
+    từ Ngân hàng dự báo (Prediction Bank) tại một chân trời dự báo xác định (horizon).
+    Tạo ra chữ ký số SHA-256 bất biến để ngăn chặn việc cherry-pick mô hình
+    trong các bước phân bổ danh mục tiếp theo.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # Khóa mô hình tốt nhất với chân trời dự báo 5 phiên (horizon=5):
+    python scripts/lock_predictor.py \\
+        --prediction-bank models/runs/prediction_bank/ \\
+        --output models/runs/predictor_lock.json \\
+        --horizon 5
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Thư mục Prediction Bank đã tạo từ scripts/build_prediction_bank.py
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/predictor_lock.json: File khóa mô hình chứa tên model thắng cuộc,
+      Rank-IC, dải ngày và digest băm của prediction bank.
+==============================================================================
+"""
 import argparse
 from pathlib import Path
 import sys

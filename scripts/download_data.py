@@ -1,20 +1,28 @@
 #!/usr/bin/env python3
 """
-scripts/download_data.py
-CLI script tải dữ liệu OHLCV tự động từ Yahoo Finance.
+==============================================================================
+TÊN SCRIPT: scripts/download_data.py
+MỤC ĐÍCH:
+    CLI script tải dữ liệu nến lịch sử OHLCV (Open, High, Low, Close, Volume)
+    tự động từ Yahoo Finance cho vũ trụ cổ phiếu và lưu dưới dạng Parquet.
 
-FILE NÀY ĐỂ LÀM GÌ?
-- Đây là một script dòng lệnh (Command Line Interface - CLI) độc lập.
-- Nó gọi đến các hàm xử lý dữ liệu lõi trong thư mục `src/data/` để kéo 
-  dữ liệu giá cổ phiếu (Mở cửa, Đóng cửa, Đỉnh, Đáy, Khối lượng) về máy.
-
-- Chạy file này để không phải mỏi tay tải từng file.
-
-Ticket: DATA-002 (P0)
-Usage:
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Tải toàn bộ 24 cổ phiếu và chỉ số SPY theo cấu hình mặc định (2015 -> 2024):
     python scripts/download_data.py
+
+    # 2. Tải tùy chỉnh theo mã cổ phiếu cụ thể:
     python scripts/download_data.py --tickers AAPL,MSFT,NVDA --format parquet
+
+    # 3. Tải theo dải ngày cụ thể:
     python scripts/download_data.py --start-date 2020-01-01 --end-date 2024-12-31
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Kết nối Internet
+    - configs/core/assets.yaml (Chứa danh sách mã cổ phiếu và ngày bắt đầu/kết thúc)
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - data/raw/<TICKER>.parquet (24 file nến cổ phiếu và SPY.parquet)
+==============================================================================
 """
 
 import argparse

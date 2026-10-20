@@ -1,4 +1,32 @@
-"""Compare Ridge/momentum/reversal using matched 1/N, bounded tilts and costs."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/compare_signal_allocators.py
+MỤC ĐÍCH:
+    So sánh các chiến lược phân bổ danh mục dựa trên tín hiệu từ Prediction Bank:
+    Ridge Regression Allocator vs Momentum Allocator vs Mean-Reversion Allocator vs 1/N.
+    Áp dụng cùng giả định chi phí giao dịch, độ lệch cận biên (bounded tilts)
+    và đo lường Sharpe, Drawdown, Turnover và Chi phí thực tế.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. So sánh bằng Prediction Bank đã có sẵn:
+    python scripts/compare_signal_allocators.py --prediction-bank models/runs/prediction_bank/
+
+    # 2. Tự động xây dựng bank và so sánh luôn:
+    python scripts/compare_signal_allocators.py --output-dir models/runs/signal_allocation_run1/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Ngân hàng dự báo (models/runs/prediction_bank/)
+    - configs/research/signal_allocation.yaml
+    - configs/core/quant_research_protocol.yaml, configs/core/env.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/signal_allocation_<timestamp>/comparison/
+        + metrics_by_fold.csv: Bảng Sharpe, Return, Turnover theo từng fold
+        + daily_returns.csv: Lợi nhuận hàng ngày của từng chiến lược
+        + paired_comparisons.csv: Kiểm định chênh lệch so với baseline 1/N
+==============================================================================
+"""
 from __future__ import annotations
 
 import argparse

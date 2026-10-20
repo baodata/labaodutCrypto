@@ -1,4 +1,34 @@
-"""Compare GP/convex controls on development OOF/inner; outer requires opt-in."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/compare_gp_allocators.py
+MỤC ĐÍCH:
+    Huấn luyện và so sánh bộ phân bổ danh mục tiến hóa bằng Lập trình Di truyền
+    (Genetic Programming - GP Symbolic Expressions) với mô hình Convex tối ưu
+    và baseline 1/N trên các fold out-of-fold (OOF).
+    
+    BƯỚC TIẾP THEO: Sau khi chạy xong, dùng scripts/audit_gp_run.py để hậu kiểm toán
+    tính toàn vẹn mã băm và trích xuất chỉ số tín hiệu.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy so sánh GP trên tất cả các fold:
+    python scripts/compare_gp_allocators.py --predictor-lock models/runs/predictor_lock.json
+
+    # 2. Chạy riêng một fold cụ thể:
+    python scripts/compare_gp_allocators.py \\
+        --predictor-lock models/runs/predictor_lock.json \\
+        --fold development_2021
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - models/runs/predictor_lock.json (Mô hình dự báo đã khóa)
+    - configs/research/gp_allocator.yaml, configs/core/env.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/gp_research_<timestamp>/
+        + cases/<fold>/<seed>/: metrics.json, daily_returns.csv, decisions.jsonl
+        + manifest.json: Lưu mã băm dữ liệu, mã nguồn và runtime
+==============================================================================
+"""
 from pathlib import Path
 import argparse
 import sys

@@ -1,4 +1,29 @@
-"""Fit a deterministic PPO actor to convex targets on train OOF only."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/train_convex_imitation.py
+MỤC ĐÍCH:
+    Huấn luyện mạng PPO Actor học bắt chước (Imitation Learning / Behavioral Cloning)
+    theo các mục tiêu phân bổ tỷ trọng tối ưu sinh ra từ bộ giải Convex
+    trên các fold Train out-of-fold (OOF).
+    Giúp khởi tạo trọng số mạng Actor tốt hơn trước khi bước vào huấn luyện RL đầy đủ.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/train_convex_imitation.py \\
+        --predictor-lock models/runs/predictor_lock.json \\
+        --imitation-config configs/research/convex_imitation.yaml
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - models/runs/predictor_lock.json
+    - configs/research/convex_imitation.yaml
+    - configs/core/assets.yaml, configs/core/env.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/convex_imitation_<timestamp>/
+        + actor_checkpoint.pt: Trọng số mô hình Actor đã học bắt chước
+        + imitation_metrics.csv: Loss hàm mục tiêu qua từng epoch
+==============================================================================
+"""
 import argparse
 from pathlib import Path
 import sys

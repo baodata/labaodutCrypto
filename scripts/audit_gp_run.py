@@ -1,8 +1,27 @@
-"""Read completed GP artifacts; export provenance/accounting and signal readout.
-
-Does not refit or select models, alter the run, or evaluate a new portfolio.
-Writes a new audit directory. Outcome access is offline reporting only.
+#!/usr/bin/env python3
 """
+==============================================================================
+TÊN SCRIPT: scripts/audit_gp_run.py
+MỤC ĐÍCH:
+    Hậu kiểm toán (Post-audit) một lượt chạy Genetic Programming (compare_gp_allocators)
+    đã hoàn tất. Kiểm tra chữ ký số SHA-256 của toàn bộ code, config, data để đảm bảo
+    tính toàn vẹn (provenance integrity), kiểm tra hạch toán chi phí và xuất bảng
+    tín hiệu (signal readout) mà không thay đổi bất kỳ kết quả gốc nào.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/audit_gp_run.py --run-dir models/runs/gp_research_.../
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Thư mục run của GP đã hoàn thành (manifest.json có status="completed")
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - <run-dir>/audits/readout_<timestamp>/
+        + audit_source.json: Chứng thư xác thực toàn vẹn mã nguồn
+        + signal_readout.csv: Giá trị tín hiệu trung bình, độ biến động của các rule GP
+        + accounting_audit.csv: Kiểm toán phí giao dịch và drift tiền mặt
+==============================================================================
+"""
+
 from pathlib import Path
 import argparse
 import json

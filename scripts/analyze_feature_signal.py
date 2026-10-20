@@ -1,4 +1,32 @@
-"""Measure feature rank-IC and a train-fitted linear portfolio on validation only."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/analyze_feature_signal.py
+MỤC ĐÍCH:
+    Đo lường hệ số tương quan hạng (Rank-IC), t-statistic và p-value của 20 đặc trưng
+    kỹ thuật trong FeaturePipeline để đánh giá sức mạnh dự báo sinh lời.
+    Đồng thời huấn luyện một danh mục tuyến tính Ridge Regression đơn giản trên tập Train
+    và đánh giá hiệu quả (Sharpe, Drawdown) độc quyền trên tập Validation (causal split).
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy phân tích Rank-IC và đánh giá mô hình tuyến tính mặc định:
+    python scripts/analyze_feature_signal.py
+
+    # 2. Chạy với giao thức nghiên cứu định lượng (Research Protocol):
+    python scripts/analyze_feature_signal.py \\
+        --research-protocol configs/core/quant_research_protocol.yaml \\
+        --output-dir experiments/signal_research/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Dữ liệu nến thô trong: data/raw/*.parquet
+    - configs/core/env.yaml, configs/core/model.yaml
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - experiments/feature_rank_ic.csv: Bảng Rank-IC của toàn bộ 20 đặc trưng
+    - experiments/linear_signal_validation.csv: Kết quả backtest mô hình tuyến tính
+    - experiments/linear_signal_coefficients.csv: Hệ số hồi quy của các đặc trưng
+==============================================================================
+"""
 
 from __future__ import annotations
 

@@ -1,7 +1,32 @@
-"""Download official alpha inputs with provenance; never manufacture PIT releases.
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/download_alpha_sources.py
+MỤC ĐÍCH:
+    Tải tự động các nguồn dữ liệu vĩ mô và alpha từ các nguồn chính thống bên ngoài:
+        - Cboe: Chỉ số biến động ngụ ý VIX và VIX3M (kỳ hạn 3 tháng)
+        - Kenneth French Data Library: Bộ 3 nhân tố Fama-French hàng ngày (FF3)
+        - FRED (St. Louis Fed): Chuỗi VIXCLS và VXVCLS
+        - Federal Reserve: Lịch trình các thông cáo thường niên FOMC
+    Lưu trữ kèm dấu vân tay SHA-256 (provenance metadata).
 
-Current Cboe/French files are current vintages. Fed annual announcements provide
-dated schedule evidence, but cannot establish full earnings/calendar coverage.
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Tải tất cả các chuỗi alpha về thư mục mặc định:
+    python scripts/download_alpha_sources.py
+
+    # 2. Tải và xuất ra thư mục chỉ định:
+    python scripts/download_alpha_sources.py --output-dir data/external_alpha/
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Kết nối Internet
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/alpha_sources_<timestamp>/ (hoặc thư mục chỉ định)
+        + macro_volatility.csv: VIX và VIX3M theo ngày
+        + ff3_daily.csv: Nhân tố Mkt-RF, SMB, HML, RF
+        + fomc_events.csv: Ngày họp FOMC
+        + manifest.json: Toàn bộ URL nguồn và mã băm SHA-256
+==============================================================================
 """
 from __future__ import annotations
 

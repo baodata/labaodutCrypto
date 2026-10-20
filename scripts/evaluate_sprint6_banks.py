@@ -1,8 +1,28 @@
-"""Export Sprint 6 bank diagnostics, volatility forecasts and execution stress.
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/evaluate_sprint6_banks.py
+MỤC ĐÍCH:
+    Kiểm thử chẩn đoán (diagnostics) và stress-test các ma trận hiệp phương sai
+    biến động rủi ro (Covariance Banks: Sample vs EWMA vs Ledoit-Wolf) của Sprint 6.
+    Đánh giá độ ổn định trị riêng (eigenvalue stability), condition number và
+    sức chống chịu của danh mục dưới các kịch bản sốc thanh khoản và biến động cao.
 
-Uses development validation only, with predetermined stress grid. This is a
-research report generator, not a model/hyperparameter selector. Fixed equal
-weights are compared under the same execution controller and cost assumptions.
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/evaluate_sprint6_banks.py \\
+        --quant-config configs/core/quant.yaml \\
+        --evaluation-scope validation
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - configs/core/quant.yaml, configs/core/env.yaml
+    - data/raw/*.parquet
+    - scikit-learn (phục vụ ước lượng Ledoit-Wolf)
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/sprint6_banks_<timestamp>/
+        + covariance_diagnostics.csv: Chỉ số chẩn đoán ma trận hiệp phương sai
+        + graph_diagnostics.csv: Chẩn đoán tính liên thông và mật độ cạnh đồ thị
+==============================================================================
 """
 from pathlib import Path
 import copy

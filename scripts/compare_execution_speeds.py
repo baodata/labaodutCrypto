@@ -1,9 +1,30 @@
-"""Replay identical causal convex target tapes under fixed execution scenarios.
-
-Only train OOF and inner are evaluated. The shadow convex allocator keeps the
-old fixed-alpha assumptions; its targets are frozen before replay, rather than
-silently reoptimizing a different portfolio for every execution controller.
+#!/usr/bin/env python3
 """
+==============================================================================
+TÊN SCRIPT: scripts/compare_execution_speeds.py
+MỤC ĐÍCH:
+    Mô phỏng thực thi lệnh tái cân bằng danh mục (execution controller) dưới các
+    kịch bản tốc độ khác nhau (Immediate khớp ngay vs TWAP rải lệnh vs Trend-aware).
+    Đo lường tác động của trượt giá (market impact), chi phí giao dịch và drift tiền mặt
+    đối với tỷ suất Sharpe trên chuỗi tỷ trọng danh mục cố định (frozen target tape).
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    python scripts/compare_execution_speeds.py \\
+        --predictor-lock models/runs/predictor_lock.json
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - models/runs/predictor_lock.json
+    - configs/research/execution_speed_research.yaml
+    - configs/core/env.yaml, data/raw/*.parquet
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/execution_speed_<timestamp>/
+        + execution_comparison.csv: Bảng so sánh Sharpe, chi phí giữa các cơ chế
+        + daily_returns.csv: Lợi nhuận ròng hàng ngày sau trừ phí
+        + *_plans.csv: Chi tiết kế hoạch giải ngân và khớp lệnh từng phiên
+==============================================================================
+"""
+
 from pathlib import Path
 import argparse
 import copy

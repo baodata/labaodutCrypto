@@ -1,4 +1,34 @@
-"""QNT-026/027/029 data readiness and predictor ablations, train OOF/inner only."""
+#!/usr/bin/env python3
+"""
+==============================================================================
+TÊN SCRIPT: scripts/research_alpha_features.py
+MỤC ĐÍCH:
+    Nghiên cứu thực nghiệm (ablation) xem việc tích hợp các nhóm nhân tố bên ngoài
+    (Macro Volatility: VIX/VIX3M, Fama-French 3-Factor, Trend Efficiency) vào
+    dữ liệu đặc trưng có làm tăng hiệu năng Rank-IC và Sharpe của mô hình dự báo
+    trên các fold train out-of-fold (OOF) hay không.
+
+HƯỚNG DẪN CHẠY (CLI USAGE):
+    # 1. Chạy nghiên cứu kiểm tra dữ liệu sẵn sàng (data readiness check):
+    python scripts/research_alpha_features.py
+
+    # 2. Chạy toàn bộ ablation với cấu hình nhân tố ngoài:
+    python scripts/research_alpha_features.py \\
+        --alpha-config configs/research/external_alpha.yaml \\
+        --run-ablation
+
+ĐẦU VÀO CẦN THIẾT (PREREQUISITES):
+    - Dữ liệu nến thô trong: data/raw/*.parquet
+    - configs/research/external_alpha.yaml, configs/research/prediction_bank.yaml
+    - Dữ liệu alpha đã tải từ download_alpha_sources.py (nếu kiểm tra alpha ngoài)
+
+ĐẦU RA SINH RA (OUTPUT ARTIFACTS):
+    - models/runs/alpha_feature_research_<timestamp>/
+        + rank_ic_by_fold.csv: So sánh Rank-IC khi có/không có alpha ngoài
+        + feature_contribution_summary.csv: Đóng góp của từng nhóm nhân tố
+        + inner_metrics.csv, inner_daily_returns.csv
+==============================================================================
+"""
 from __future__ import annotations
 
 import argparse
