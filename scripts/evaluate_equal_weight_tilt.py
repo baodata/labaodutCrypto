@@ -147,7 +147,7 @@ def allocation_diagnostics(result, rebalance_every: int) -> dict[str, float | in
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
-    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
+    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/core/env.yaml")
     parser.add_argument("--train-end", default=TemporalSplitter.DEFAULT_TRAIN_END)
     parser.add_argument("--val-start", default=TemporalSplitter.DEFAULT_VAL_START)
     parser.add_argument("--val-end", default=TemporalSplitter.DEFAULT_VAL_END)
@@ -301,7 +301,7 @@ def main() -> None:
         "sharpe_convention": FinancialMetrics.SHARPE_CONVENTION,
         "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + [Path(__file__)], PROJECT_ROOT),
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
-        "config_hashes": file_hashes([args.env_config, PROJECT_ROOT / "configs/assets.yaml"], PROJECT_ROOT),
+        "config_hashes": file_hashes([args.env_config, PROJECT_ROOT / "configs/core/assets.yaml"], PROJECT_ROOT),
     })
     print("Exploratory validation sweep: RSI/momentum long-only tilt around 1/N")
     print(f"Validation: {split.val.dates[0]} to {split.val.dates[-1]}; assets={len(tickers)}")

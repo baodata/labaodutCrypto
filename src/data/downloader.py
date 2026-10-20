@@ -241,7 +241,7 @@ def download_market_data(
     output_dir: Union[Path, str] = "data/raw",
     save_format: str = "parquet",
     include_benchmark: bool = True,
-    config_path: str = "configs/assets.yaml",
+    config_path: str = "configs/core/assets.yaml",
 ) -> Dict[str, bool]:
     """
     API hàm cấp cao phục vụ toàn bộ pipeline:

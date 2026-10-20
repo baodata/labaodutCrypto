@@ -36,7 +36,7 @@ class TradingEnv(gym.Env):
         self,
         market_tensor: MarketDataTensor,
         open_prices: np.ndarray,
-        config_path: str = "configs/env.yaml",
+        config_path: str = "configs/core/env.yaml",
         reward_beta: float | None = None,
         reward_scaling: float | None = None,
         reward_baseline: str = "none",
@@ -64,7 +64,11 @@ class TradingEnv(gym.Env):
         """
         super(TradingEnv, self).__init__()
         
-        config_key = str(Path(config_path).resolve())
+        path_obj = Path(config_path)
+        if not path_obj.exists():
+            from src.utils.config import resolve_config_path
+            path_obj = resolve_config_path(config_path)
+        config_key = str(path_obj.resolve())
         if environment_config is None:
             stat = Path(config_key).stat()
             self.config = dict(_load_environment_config(config_key, stat.st_mtime_ns, stat.st_size))

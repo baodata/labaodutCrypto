@@ -132,7 +132,7 @@ def prepare_data(args: argparse.Namespace, reward_beta: float):
     val_end = args.val_end
     test_start = args.test_start
 
-    assets_config_path = getattr(args, "assets_config", PROJECT_ROOT / "configs/assets.yaml")
+    assets_config_path = getattr(args, "assets_config", PROJECT_ROOT / "configs/core/assets.yaml")
     if Path(assets_config_path).exists():
         assets_cfg = AssetsConfig(str(assets_config_path))
         cfg_splits = assets_cfg.get_split_dates()

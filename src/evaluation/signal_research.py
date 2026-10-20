@@ -101,7 +101,7 @@ def run_signal_research(protocol_path, raw_dir, env_config, output_dir=None, mod
                         assets_config=None):
     protocol, digest = load_protocol(protocol_path)
     raw_dir, env_config = Path(raw_dir), Path(env_config)
-    assets_config = Path(assets_config or ROOT / "configs/assets.yaml")
+    assets_config = Path(assets_config or ROOT / "configs/core/assets.yaml")
     output = Path(output_dir) if output_dir else new_run_directory(ROOT / "models/runs", "sprint5_signal")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output đã có artifact; chọn thư mục mới.")

@@ -111,10 +111,10 @@ def audit(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--run-dir', type=Path, required=True)
-    parser.add_argument('--allocation-config', type=Path, default=ROOT/'configs/signal_allocation_neural.yaml')
+    parser.add_argument('--allocation-config', type=Path, default=ROOT/'configs/test/signal_allocation_neural.yaml')
     parser.add_argument('--raw-dir', type=Path, default=ROOT/'data/raw')
-    parser.add_argument('--assets-config', type=Path, default=ROOT/'configs/assets.yaml')
-    parser.add_argument('--env-config', type=Path, default=ROOT/'configs/env.yaml')
+    parser.add_argument('--assets-config', type=Path, default=ROOT/'configs/core/assets.yaml')
+    parser.add_argument('--env-config', type=Path, default=ROOT/'configs/core/env.yaml')
     with threadpool_limits(limits=1):
         audit(parser.parse_args())
 

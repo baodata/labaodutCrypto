@@ -96,7 +96,7 @@ class TemporalSplitter:
             )
 
     @classmethod
-    def from_config(cls, config_path: str = "configs/assets.yaml") -> "TemporalSplitter":
+    def from_config(cls, config_path: str = "configs/core/assets.yaml") -> "TemporalSplitter":
         """Khởi tạo TemporalSplitter đọc mốc ngày trực tiếp từ assets.yaml."""
         return cls(config_path=config_path)
 

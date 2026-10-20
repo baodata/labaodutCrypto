@@ -1,4 +1,7 @@
 # Fixed research specification. No parameter search or test access.
+
+# Cấu hình cho GP Allocator (Gaussian Process Allocator) - một phương pháp tối ưu hóa danh mục đầu tư dựa trên mô hình Gaussian Process.
+
 version: gp-research-v1
 methods: [matched_1n, convex, aim_fixed, aim_gp, gp_constrained, gp_mpc, gp_zero_forecast]
 risk_aversion: 10.0

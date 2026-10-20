@@ -26,8 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--processed-output", type=Path, default=PROJECT_ROOT / "data/processed/features.parquet"
     )
-    parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/model.yaml")
-    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
+    parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/core/model.yaml")
+    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/core/env.yaml")
     parser.add_argument("--research-protocol", type=Path, default=None,
                         help="Protocol định lượng đóng băng; chỉ dùng development validation.")
     parser.add_argument("--protocol-fold", default=None, help="Fold PPO; mặc định fold cuối protocol.")
@@ -40,8 +40,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--assets-config",
         type=Path,
-        default=PROJECT_ROOT / "configs/assets.yaml",
-        help="Đường dẫn file cấu hình vũ trụ cổ phiếu và phân chia dữ liệu (mặc định: configs/assets.yaml).",
+        default=PROJECT_ROOT / "configs/core/assets.yaml",
+        help="Đường dẫn file cấu hình vũ trụ cổ phiếu và phân chia dữ liệu (mặc định: configs/core/assets.yaml).",
     )
     parser.add_argument(
         "--train-end",

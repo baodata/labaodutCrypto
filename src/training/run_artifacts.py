@@ -58,7 +58,7 @@ def configure_run_artifacts(args, kind="ppo"):
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
         "config_hashes": file_hashes([
             args.model_config, args.env_config, args.training_config,
-            Path(getattr(args, "assets_config", PROJECT_ROOT / "configs/assets.yaml")),
+            Path(getattr(args, "assets_config", PROJECT_ROOT / "configs/core/assets.yaml")),
         ], PROJECT_ROOT),
     }
     if getattr(args, "research_protocol", None) is not None:

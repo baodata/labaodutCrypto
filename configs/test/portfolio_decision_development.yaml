@@ -1,4 +1,7 @@
 # Learning-curve pilot: same optimizer, promotion gate and epoch budget; one seed.
+
+# Cấu hình cho Portfolio Decision Development (PDD) - một phương pháp học tăng cường để ra quyết định đầu tư dựa trên danh mục đầu tư.
+
 version: portfolio-decision-v1
 seeds: [7]
 methods: [convex, ppo, sector_marl, hmarl]

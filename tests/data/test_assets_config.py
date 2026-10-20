@@ -7,9 +7,9 @@ class TestAssetsConfig(unittest.TestCase):
     """Kiểm thử tiêu chuẩn nghiệm thu cho Ticket DATA-001 (Chọn vũ trụ cổ phiếu)."""
 
     def setUp(self):
-        self.config_path = get_project_root() / "configs/assets.yaml"
-        self.assertTrue(self.config_path.exists(), "File configs/assets.yaml chưa được tạo!")
-        self.assets_config = AssetsConfig("configs/assets.yaml")
+        self.config_path = get_project_root() / "configs/core/assets.yaml"
+        self.assertTrue(self.config_path.exists(), "File configs/core/assets.yaml chưa được tạo!")
+        self.assets_config = AssetsConfig("configs/core/assets.yaml")
 
     def test_yaml_syntax_and_structure(self):
         """Kiểm tra cú pháp YAML hợp lệ và có các khối chính."""

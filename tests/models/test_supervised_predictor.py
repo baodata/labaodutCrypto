@@ -125,11 +125,11 @@ def test_checkpoint_reload_and_bank_hash_include_neural_weights(tmp_path):
 
 def test_neural_profile_preserves_allocation_settings_and_statistical_features():
     from src.evaluation.signal_allocation import load_allocation_config
-    base = load_allocation_config("configs/signal_allocation.yaml")
-    neural = load_allocation_config("configs/signal_allocation_neural.yaml")
+    base = load_allocation_config("configs/research/signal_allocation.yaml")
+    neural = load_allocation_config("configs/test/signal_allocation_neural.yaml")
     assert {k:v for k,v in base.items() if k != "models"} == {k:v for k,v in neural.items() if k != "models"}
-    base_prediction = load_prediction_config("configs/prediction_bank.yaml")
-    neural_prediction = load_prediction_config("configs/prediction_bank_neural.yaml")
+    base_prediction = load_prediction_config("configs/research/prediction_bank.yaml")
+    neural_prediction = load_prediction_config("configs/test/prediction_bank_neural.yaml")
     assert base_prediction["features"] == neural_prediction["features"]
     assert base_prediction["baselines"] == neural_prediction["baselines"]
 

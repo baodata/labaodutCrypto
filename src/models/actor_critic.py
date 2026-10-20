@@ -893,7 +893,7 @@ class GNNActorCritic(nn.Module):
         knn_k: int = 5,
         corr_threshold: float = 0.5,
         portfolio_context_dim: int = 0,
-        config_path: str = "configs/assets.yaml",
+        config_path: str = "configs/core/assets.yaml",
     ):
         super().__init__()
         gnn_type = gnn_type.lower()
@@ -1115,7 +1115,7 @@ def build_actor_critic(
     dirichlet_kappa: float | None = None,
     portfolio_context_dim: int = 0,
     tickers: list[str] | None = None,
-    config_path: str = "configs/assets.yaml",
+    config_path: str = "configs/core/assets.yaml",
 ) -> nn.Module:
     """Create an actor-critic from serializable architecture metadata."""
     encoder = encoder.lower()

@@ -67,7 +67,7 @@ def build_dynamic_graph_sequence(
     threshold: float = 0.5,
     graph_mode: Literal["threshold", "knn", "dynamic_threshold"] = "threshold",
     top_k: int = 5,
-    sector_config_path: str = "configs/assets.yaml",
+    sector_config_path: str = "configs/core/assets.yaml",
     covariance_bank=None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build causal, date-aligned multi-relation graph tensors.

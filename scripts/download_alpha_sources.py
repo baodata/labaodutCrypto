@@ -211,7 +211,7 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--offline", action="store_true", help="Normalize already downloaded official files in output-dir/raw.")
     parser.add_argument("--retry-failed", action="store_true", help="Retry missing sources in an existing download snapshot; keep successful originals.")
-    parser.add_argument("--assets-config", type=Path, default=ROOT / "configs/assets.yaml")
+    parser.add_argument("--assets-config", type=Path, default=ROOT / "configs/core/assets.yaml")
     parser.add_argument("--vix-source", choices=["cboe", "fred", "yahoo"], default="cboe",
                         help="Explicit source: Cboe, FRED VIXCLS/VXVCLS, or Yahoo ^VIX/^VIX3M (2014-2022).")
     args = parser.parse_args(argv)
@@ -259,7 +259,7 @@ def main(argv=None):
     atomic_json(output / "manifest.json", manifest)
     try:
         statuses = materialize(output, acquisition)
-        with (ROOT / "configs/alpha_features.yaml").open(encoding="utf-8") as stream:
+        with (ROOT / "configs/research/alpha_features.yaml").open(encoding="utf-8") as stream:
             config = yaml.safe_load(stream)
         config["vix"]["path"] = str(output / "normalized/macro_volatility.csv")
         config["fama_french"]["path"] = str(output / "normalized/ff3_daily.csv")

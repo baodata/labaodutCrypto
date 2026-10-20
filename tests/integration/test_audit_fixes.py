@@ -225,7 +225,7 @@ def test_rank_ic_execution_labels_use_next_open_and_purge_the_boundary():
 
 @pytest.mark.parametrize("field,value", [("rebalance_every_sessions", 0), ("initial_action_alpha", float("nan")), ("rsi_orientation", "unknown")])
 def test_frozen_gate_rejects_invalid_parameters(field, value):
-    with open("configs/tilt_robustness_gate.yaml", encoding="utf-8") as stream:
+    with open("configs/core/tilt_robustness_gate.yaml", encoding="utf-8") as stream:
         gate = yaml.safe_load(stream)
     gate["candidate"][field] = value
     with pytest.raises(ValueError):

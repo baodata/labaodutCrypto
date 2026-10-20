@@ -69,7 +69,7 @@ class FeaturePipeline:
         volume_window: int = 20,
         price_col: str = "close",
         volume_col: str = "volume",
-        assets_config_path: str = "configs/assets.yaml",
+        assets_config_path: str = "configs/core/assets.yaml",
     ) -> None:
         """Khởi tạo FeaturePipeline với các tham số cấu hình."""
         self.assets_config_path = assets_config_path

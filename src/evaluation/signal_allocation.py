@@ -29,7 +29,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_allocation_config(path):
-    with Path(path).open(encoding="utf-8") as stream:
+    from src.utils.config import resolve_config_path
+    resolved_path = resolve_config_path(path)
+    with Path(resolved_path).open(encoding="utf-8") as stream:
         config = yaml.safe_load(stream)
     expected = {"version", "models", "horizons", "tilt_fraction", "risk_aversion",
                 "cost_multiplier", "risk", "execution"}

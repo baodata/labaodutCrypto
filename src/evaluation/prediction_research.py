@@ -29,7 +29,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def load_prediction_config(path) -> dict:
-    with Path(path).open(encoding="utf-8") as stream:
+    from src.utils.config import resolve_config_path
+    resolved_path = resolve_config_path(path)
+    with Path(resolved_path).open(encoding="utf-8") as stream:
         config = yaml.safe_load(stream)
     expected = {"version", "model", "ridge_alpha", "features", "horizons",
                 "min_train_sessions", "retrain_every_sessions"}
@@ -103,7 +105,7 @@ def validate_neural_settings(settings):
 
 
 def build_ridge_prediction_bank(tensor, labels: ExecutableLabelPanel, protocol: dict, config: dict,
-                                *, artifact_dir=None, assets_config=ROOT / "configs/assets.yaml",
+                                *, artifact_dir=None, assets_config=ROOT / "configs/core/assets.yaml",
                                 development_only=False):
     """Build a reusable bank in memory; all label endpoints are purged by split.
 

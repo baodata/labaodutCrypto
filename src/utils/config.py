@@ -19,12 +19,31 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+def resolve_config_path(file_path: Path | str | None) -> Path:
+    """Tìm và trả về đường dẫn file cấu hình, hỗ trợ fallback giữa configs/ và các thư mục con."""
+    if file_path is None:
+        raise ValueError("file_path không được là None.")
+    path = Path(file_path)
+    root = get_project_root()
+    if path.is_absolute() and path.exists():
+        return path
+    rel_root = root / path
+    if rel_root.exists():
+        return rel_root
+
+    # Kiểm tra trong các thư mục con: core, research, test
+    filename = path.name
+    for sub in ("core", "research", "test"):
+        sub_candidate = root / "configs" / sub / filename
+        if sub_candidate.exists():
+            return sub_candidate
+
+    return rel_root if not path.is_absolute() else path
+
+
 def load_yaml(file_path: Path | str) -> Dict[str, Any]:
     """Đọc file cấu hình YAML và trả về dict."""
-    path = Path(file_path)
-    if not path.is_absolute():
-        path = get_project_root() / path
-
+    path = resolve_config_path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"Không tìm thấy file cấu hình tại: {path}")
 
@@ -36,7 +55,7 @@ def load_yaml(file_path: Path | str) -> Dict[str, Any]:
 class AssetsConfig:
     """Class tiện ích quản lý thông tin vũ trụ cổ phiếu từ assets.yaml."""
 
-    def __init__(self, config_path: str = "configs/assets.yaml"):
+    def __init__(self, config_path: str = "configs/core/assets.yaml"):
         self.raw_config = load_yaml(config_path)
         self.assets = self.raw_config.get("assets", [])
         self.sectors = self.raw_config.get("sectors", {})

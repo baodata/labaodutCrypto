@@ -117,7 +117,7 @@ def test_split_on_real_processed_dataset():
 
 def test_split_from_config():
     """Kiểm tra TemporalSplitter.from_config() đọc chính xác từ assets.yaml."""
-    splitter = TemporalSplitter.from_config("configs/assets.yaml")
+    splitter = TemporalSplitter.from_config("configs/core/assets.yaml")
     assert splitter.train_end < splitter.val_start <= splitter.val_end < splitter.test_start
 
 

@@ -1,4 +1,7 @@
 # Capacity/optimization diagnostic; fixed budget, no inner checkpoint selection.
+
+# Cấu hình cho Convex Imitation Learning (CIL) - một phương pháp học tăng cường dựa trên mô phỏng hành vi của chuyên gia (expert behavior).
+
 version: convex-imitation-v1
 fold: development_2021
 seed: 7

@@ -29,7 +29,7 @@ class MultiRelationGraphBuilder:
         tickers: list[str],
         rolling_corr_df: pd.DataFrame | None = None,
         threshold: float = 0.5,
-        sector_config_path: str = "configs/assets.yaml",
+        sector_config_path: str = "configs/core/assets.yaml",
         config_path: str | None = None,
         graph_mode: Literal["threshold", "knn", "dynamic_threshold"] = "threshold",
         top_k: int = 5,

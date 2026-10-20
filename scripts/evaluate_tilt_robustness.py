@@ -91,8 +91,8 @@ def validate_gate(gate: dict) -> None:
 
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--gate-config", type=Path, default=PROJECT_ROOT / "configs/tilt_robustness_gate.yaml")
-    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
+    parser.add_argument("--gate-config", type=Path, default=PROJECT_ROOT / "configs/core/tilt_robustness_gate.yaml")
+    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/core/env.yaml")
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "experiments")
     args = parser.parse_args(argv)
@@ -129,7 +129,7 @@ def main(argv=None) -> None:
         "feature_parameters": FeaturePipeline().parameters,
         "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "scripts").glob("*.py")), PROJECT_ROOT),
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
-        "config_hashes": file_hashes([gate_path, env_path, PROJECT_ROOT / "configs/assets.yaml"], PROJECT_ROOT),
+        "config_hashes": file_hashes([gate_path, env_path, PROJECT_ROOT / "configs/core/assets.yaml"], PROJECT_ROOT),
         "status": "running",
     }
     atomic_json(output_dir / "tilt_robustness_manifest.json", manifest)

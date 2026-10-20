@@ -1,0 +1,34 @@
+# Strict by default: current-vintage files cannot establish historical availability.
+
+# cái này là file cấu hình cho các tính năng alpha (alpha features)
+# bao gồm:
+# 1 . VIX (Volatility Index) - chỉ số biến động thị trường
+# đo mức độ biến động của thị trường chứng khoán, thường được coi là fear index.
+# đóng góp vào việc đánh giá rủi ro và xác định chiến lược giao dịch.
+
+# 2. Fama-French 3 Factors (FF3) - các yếu tố rủi ro theo mô hình Fama-French 3 yếu tố
+# 2.1 Market Risk Premium (MKT) - phần bù rủi ro thị trường
+# 2.2 Size Factor (SMB) - phần bù rủi ro theo quy mô công ty (Small Minus Big)
+# 2.3 Value Factor (HML) - phần bù rủi ro theo giá trị (High Minus Low)
+
+# được sử dụng để phân tích hiệu suất của các danh mục đầu tư và xác định các yếu tố ảnh hưởng đến lợi nhuận.
+
+# 3. Blackout Events - các sự kiện đặc biệt có thể ảnh hưởng đến thị trường (ví dụ: FED meeting, CPI release, etc.)
+# được sử dụng để xác định các khoảng thời gian mà dữ liệu thị trường có thể bị ảnh hưởng bởi các sự kiện này, từ đó điều chỉnh chiến lược, quản lý rủi ro.
+
+version: external-alpha-v1
+strict_pit: true
+vix:
+  path: data/external/pit/macro_volatility.csv
+  max_age_days: 7
+fama_french:
+  path: data/external/pit/ff3_daily.csv
+  window: 60
+  residual_window: 20
+  max_age_days: 90
+  ridge: 0.00000001
+blackout:
+  events_path: data/external/pit/events.csv
+  coverage_path: data/external/pit/event_coverage.csv
+  pre_sessions: 2
+  post_sessions: 1

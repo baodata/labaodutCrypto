@@ -44,8 +44,8 @@ LINEAR_FEATURES = ("xs_rank_ret_20d", "mom_12_1", "excess_ret_20d")
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
-    parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/model.yaml")
-    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/env.yaml")
+    parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/core/model.yaml")
+    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/core/env.yaml")
     parser.add_argument("--train-end", default=TemporalSplitter.DEFAULT_TRAIN_END)
     parser.add_argument("--val-start", default=TemporalSplitter.DEFAULT_VAL_START)
     parser.add_argument("--val-end", default=TemporalSplitter.DEFAULT_VAL_END)
@@ -269,7 +269,7 @@ def main() -> None:
         "label_endpoints_purged_at_split_boundaries": True,
         "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + [Path(__file__)], PROJECT_ROOT),
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
-        "config_hashes": file_hashes([args.env_config, args.model_config, PROJECT_ROOT / "configs/assets.yaml"], PROJECT_ROOT),
+        "config_hashes": file_hashes([args.env_config, args.model_config, PROJECT_ROOT / "configs/core/assets.yaml"], PROJECT_ROOT),
     })
 
     print("Rank-IC (daily cross-sectional Spearman; naive t-stat ignores serial dependence):")

@@ -1,4 +1,8 @@
 # Predeclared scenarios, not tuned on inner results. No outer/test evaluation.
+
+# Cấu hình nghiên cứu tốc độ thực thi (execution speed research) cho môi trường giao dịch.
+# Định nghĩa các biến thể khác nhau để kiểm tra hiệu suất, độ nhạy của các tham số trong quá trình học tăng cường.
+
 version: execution-speed-research-v1
 fold: development_2021
 common:

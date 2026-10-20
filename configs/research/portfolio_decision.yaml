@@ -1,4 +1,7 @@
 # Allocation-only comparison. Predictor is selected and locked separately.
+
+# Cấu hình cho Portfolio Decision (PD) - một phương pháp học tăng cường để ra quyết định đầu tư dựa trên danh mục đầu tư.
+
 version: portfolio-decision-v1
 seeds: [7, 17, 27, 37, 47]
 methods: [convex, ppo, sector_marl, hmarl]

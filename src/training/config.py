@@ -11,7 +11,7 @@ from typing import Any
 import yaml
 
 
-DEFAULT_TRAINING_CONFIG = Path(__file__).resolve().parents[2] / "configs/training.yaml"
+DEFAULT_TRAINING_CONFIG = Path(__file__).resolve().parents[2] / "configs/core/training.yaml"
 
 # (YAML key, Namespace attribute, value type, fallback). Architecture and loss
 # hyperparameters retain their existing model.yaml/CLI resolution.
@@ -88,7 +88,11 @@ def resolve_training_config(args: argparse.Namespace) -> dict[str, Any]:
     apply_research_protocol(args)
     if hasattr(args, "_training_config_inputs"):
         return args._training_config_inputs
-    args.training_config = Path(getattr(args, "training_config", DEFAULT_TRAINING_CONFIG))
+    raw_training_config = Path(getattr(args, "training_config", DEFAULT_TRAINING_CONFIG))
+    if not raw_training_config.exists():
+        from src.utils.config import resolve_config_path
+        raw_training_config = resolve_config_path(raw_training_config)
+    args.training_config = raw_training_config
     with args.training_config.open(encoding="utf-8") as stream:
         configured = yaml.safe_load(stream)
     if configured is None:

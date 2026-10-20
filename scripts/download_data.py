@@ -40,8 +40,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--config",
         type=str,
-        default="configs/assets.yaml",
-        help="Đường dẫn file cấu hình vũ trụ cổ phiếu (mặc định: configs/assets.yaml)",
+        default="configs/core/assets.yaml",
+        help="Đường dẫn file cấu hình vũ trụ cổ phiếu (mặc định: configs/core/assets.yaml)",
     )
     parser.add_argument(
         "--tickers",

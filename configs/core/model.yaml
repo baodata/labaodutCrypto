@@ -1,15 +1,13 @@
-# configs/model.yaml
 # Cấu hình Kiến trúc Học Sâu (Deep Learning Architectures)
-# Gồm Mạng GNN (Thành viên B) và Tác tử RL (Thành viên A & B)
 
 gnn:
   # Cấu hình Mạng Nơ-ron Đồ thị (Bộ não Low-Level)
   architecture: "GAT"            # Chọn "GCN" (Cơ bản) hoặc "GAT" (Chú ý - Mốc B)
-  in_channels: 20                # Hiện có 20 feature; model lấy kích thước thật từ tensor
+  # in_channels: tự động trích xuất từ số features của market_tensor (không cần khai báo)
   hidden_channels: 64            # Số lượng nơ-ron ở lớp ẩn
   out_channels: 32               # Số chiều của Vector Nhúng đầu ra [N, 32]
   heads: 4                       # Số lượng "con mắt" Attention (Chỉ dùng cho GAT)
-  dropout: 0.2                   # Tham số encoder; policy PPO dùng dropout=0 để giữ log-prob nhất quán
+  dropout: 0.0                   # Dropout cho encoder (policy PPO dùng 0.0 để giữ log-prob nhất quán)
   correlation_window: 60         # Số phiên close-to-close dùng cho graph tại mỗi ngày t
   threshold_corr: 0.5            # Ngưỡng tạo cạnh Tương quan động
   graph_mode: "knn"              # Giữ độ thưa ổn định giữa các trạng thái thị trường

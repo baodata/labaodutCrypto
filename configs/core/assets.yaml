@@ -5,7 +5,6 @@
 #
 # FILE NÀY ĐỂ LÀM GÌ?
 # - Định nghĩa vũ trụ tài sản (assets) dùng trong môi trường giao dịch.
-# - Tránh hard-code danh sách mã, nhóm ngành, benchmark trong mã nguồn Python.
 # - Là nguồn duy nhất (single source of truth) để tạo dataset huấn luyện,
 #   đánh giá chiến lược, và chia nhóm agent cho MARL.
 # Các module khác (downloader, features, graph, env, agents) đọc file này.
@@ -16,10 +15,6 @@
 #   3. Có lịch sử giao dịch liên tục từ trước năm 2015 đến nay
 #      (tránh rủi ro thiếu dữ liệu / IPO muộn).
 #   4. Phân bổ trên 5 nhóm ngành (sectors) phục vụ Multi-Agent RL.
-# Tổng số tài sản: 24 cổ phiếu thuộc 5 nhóm ngành + benchmark SPY.
-# CẢNH BÁO NGHIÊN CỨU: đây là universe cố định được chọn ở hiện tại, không phải
-# universe point-in-time. Dùng danh sách này ngược về 2015 có survivorship/selection
-# bias; cần constituent snapshots lịch sử và dữ liệu delisted để ước lượng thị trường.
 # ==============================================================================
 
 version: "1.0"
@@ -39,9 +34,6 @@ date_range:
   end_date: "2025-12-31"
 
   # Cấu hình phân chia chuỗi thời gian (Temporal Split):
-  # Train:      start_date -> train_end (2015-01-01 -> 2019-12-31: 5 năm)
-  # Validation: val_start  -> val_end   (2020-01-01 -> 2022-12-31: 3 năm)
-  # Test (OOS): test_start -> end_date   (2023-01-01 -> 2025-12-31: 3 năm)
   train_end: "2022-12-31"
   val_start: "2023-01-01"
   val_end: "2024-12-31"

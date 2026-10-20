@@ -10,7 +10,7 @@ class MultiAgentTradingEnv:
     """
 
     def __init__(self, global_env: TradingEnv, agent_groups_config: dict, tickers: list[str],
-                 assets_config_path: str = "configs/assets.yaml", reward_mode: str = "shared"):
+                 assets_config_path: str = "configs/core/assets.yaml", reward_mode: str = "shared"):
         """
         Khởi tạo môi trường Multi-Agent.
         """

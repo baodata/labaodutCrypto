@@ -7,7 +7,7 @@ import torch
 from typing import Tuple
 from src.utils.config import AssetsConfig
 
-def generate_sector_edges(tickers: list[str], config_path: str = "configs/assets.yaml") -> Tuple[torch.Tensor, torch.Tensor]:
+def generate_sector_edges(tickers: list[str], config_path: str = "configs/core/assets.yaml") -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Tạo mạng lưới liên kết tĩnh dựa trên ngành nghề (Sector).
     Hai cổ phiếu cùng ngành sẽ được nối với nhau bằng trọng số 1.0.

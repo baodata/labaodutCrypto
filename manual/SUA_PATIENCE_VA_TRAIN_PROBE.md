@@ -58,7 +58,7 @@ Pilot: seed 7, fold `development_2021`, cả PPO/sector MARL/H-MARL, tối đa 2
 ```bash
 python scripts/compare_portfolio_decisions.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
-  --decision-config configs/portfolio_decision_development.yaml \
+  --decision-config configs/test/portfolio_decision_development.yaml \
   --development-only \
   --fold development_2021
 ```
