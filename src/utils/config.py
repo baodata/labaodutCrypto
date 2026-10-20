@@ -19,10 +19,15 @@ def get_project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def resolve_config_path(file_path: Path | str | None) -> Path:
+ALIASES: Dict[str, str] = {
+    "prediction_bank_alpha.yaml": "prediction_bank.yaml",
+}
+
+
+def resolve_config_path(file_path: Path | str | None) -> Path | None:
     """Tìm và trả về đường dẫn file cấu hình, hỗ trợ fallback giữa configs/ và các thư mục con."""
     if file_path is None:
-        raise ValueError("file_path không được là None.")
+        return None
     path = Path(file_path)
     root = get_project_root()
     if path.is_absolute() and path.exists():
@@ -32,7 +37,7 @@ def resolve_config_path(file_path: Path | str | None) -> Path:
         return rel_root
 
     # Kiểm tra trong các thư mục con: core, research, test
-    filename = path.name
+    filename = ALIASES.get(path.name, path.name)
     for sub in ("core", "research", "test"):
         sub_candidate = root / "configs" / sub / filename
         if sub_candidate.exists():
@@ -44,7 +49,7 @@ def resolve_config_path(file_path: Path | str | None) -> Path:
 def load_yaml(file_path: Path | str) -> Dict[str, Any]:
     """Đọc file cấu hình YAML và trả về dict."""
     path = resolve_config_path(file_path)
-    if not path.exists():
+    if path is None or not path.exists():
         raise FileNotFoundError(f"Không tìm thấy file cấu hình tại: {path}")
 
     with open(path, "r", encoding="utf-8") as f:

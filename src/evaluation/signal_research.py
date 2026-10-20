@@ -99,9 +99,14 @@ def _targets(scores, scale, tilt, cash):
 
 def run_signal_research(protocol_path, raw_dir, env_config, output_dir=None, model_config=None,
                         assets_config=None):
+    from src.utils.config import resolve_config_path
+    protocol_path = resolve_config_path(protocol_path)
     protocol, digest = load_protocol(protocol_path)
-    raw_dir, env_config = Path(raw_dir), Path(env_config)
-    assets_config = Path(assets_config or ROOT / "configs/core/assets.yaml")
+    raw_dir = Path(raw_dir)
+    env_config = resolve_config_path(env_config)
+    assets_config = resolve_config_path(assets_config or ROOT / "configs/core/assets.yaml")
+    if model_config:
+        model_config = resolve_config_path(model_config)
     output = Path(output_dir) if output_dir else new_run_directory(ROOT / "models/runs", "sprint5_signal")
     if output.exists() and any(output.iterdir()):
         raise ValueError("Output đã có artifact; chọn thư mục mới.")

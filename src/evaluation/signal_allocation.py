@@ -66,6 +66,10 @@ def _holm_adjust(p_values):
 
 def compare_signal_allocators(bank_dir, raw_dir, assets_config, env_config, allocation_config, output_dir=None,
                               *, development_only=False):
+    from src.utils.config import resolve_config_path
+    assets_config = resolve_config_path(assets_config)
+    env_config = resolve_config_path(env_config)
+    allocation_config = resolve_config_path(allocation_config)
     bank = PredictionBank.load(bank_dir)
     config = load_allocation_config(allocation_config)
     if file_hashes(Path(raw_dir).glob("*.parquet"), ROOT) != bank.metadata["data_hashes"]:

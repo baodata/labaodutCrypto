@@ -96,13 +96,14 @@ def main(argv=None) -> None:
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
     parser.add_argument("--output-dir", type=Path, default=PROJECT_ROOT / "experiments")
     args = parser.parse_args(argv)
-    gate_path = args.gate_config
+    from src.utils.config import resolve_config_path
+    gate_path = resolve_config_path(args.gate_config)
     with gate_path.open("r", encoding="utf-8") as stream:
         gate = yaml.safe_load(stream)
     validate_gate(gate)
     candidate = gate["candidate"]
     acceptance = gate["acceptance_gate"]
-    env_path = args.env_config
+    env_path = resolve_config_path(args.env_config)
     with env_path.open("r", encoding="utf-8") as stream:
         env_config = yaml.safe_load(stream)["environment"]
 

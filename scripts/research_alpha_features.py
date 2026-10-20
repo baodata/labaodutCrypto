@@ -105,6 +105,13 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--run-ablation", action="store_true", help="Fit predictors and backtest inner after data readiness; default only builds input banks.")
     args = parser.parse_args(argv)
+    from src.utils.config import resolve_config_path
+    args.alpha_config = resolve_config_path(args.alpha_config)
+    args.prediction_config = resolve_config_path(args.prediction_config)
+    args.allocation_config = resolve_config_path(args.allocation_config)
+    args.research_protocol = resolve_config_path(args.research_protocol)
+    args.assets_config = resolve_config_path(args.assets_config)
+    args.env_config = resolve_config_path(args.env_config)
     groups = [value.strip() for value in args.groups.split(",") if value.strip()]
     if not groups or len(set(groups)) != len(groups) or set(groups) - GROUPS:
         parser.error("Choose unique groups: vix,fama_french,blackout.")

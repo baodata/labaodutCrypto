@@ -73,6 +73,11 @@ def replay(data, episode, tape, execution, trend, *, matched):
 
 
 def run(args):
+    from src.utils.config import resolve_config_path
+    args.execution_config = resolve_config_path(args.execution_config)
+    args.allocation_config = resolve_config_path(args.allocation_config)
+    args.assets_config = resolve_config_path(args.assets_config)
+    args.env_config = resolve_config_path(args.env_config)
     settings = yaml.safe_load(args.execution_config.read_text())
     if (not isinstance(settings, dict) or set(settings) != {'version', 'fold', 'common', 'variants'}
             or settings['version'] != 'execution-speed-research-v1'

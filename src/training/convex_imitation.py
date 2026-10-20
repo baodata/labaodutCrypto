@@ -24,7 +24,8 @@ from src.utils.artifacts import atomic_csv, atomic_json, file_hashes, new_run_di
 
 
 def load_imitation_config(path):
-    settings = yaml.safe_load(Path(path).read_text())
+    from src.utils.config import resolve_config_path
+    settings = yaml.safe_load(resolve_config_path(path).read_text())
     integers = {"seed", "hidden_dim", "epochs", "batch_size", "evaluate_every", "cpu_threads",
                 "train_probe_windows", "train_probe_days"}
     scalars = {"action_std", "learning_rate", "max_grad_norm", "inverse_clip_epsilon"}
@@ -103,6 +104,11 @@ def fidelity(predicted, teacher, core, radius):
 
 
 def run_convex_imitation(lock_path, allocation_path, config_path, raw_dir, assets_path, env_path, output_dir=None):
+    from src.utils.config import resolve_config_path
+    config_path = resolve_config_path(config_path)
+    allocation_path = resolve_config_path(allocation_path)
+    assets_path = resolve_config_path(assets_path)
+    env_path = resolve_config_path(env_path)
     settings, allocation = load_imitation_config(config_path), load_allocation_config(allocation_path)
     lock, bank = load_predictor_lock(lock_path)
     selection = next((s for s in lock["selections"] if s["fold_id"] == settings["fold"]), None)

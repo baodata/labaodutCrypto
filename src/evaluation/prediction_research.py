@@ -287,6 +287,10 @@ def build_ridge_prediction_bank(tensor, labels: ExecutableLabelPanel, protocol: 
 def run_prediction_research(protocol_path, prediction_config, raw_dir, assets_config, output_dir=None,
                             *, development_only=False):
     """Materialize a new immutable development bank, without backtesting test."""
+    from src.utils.config import resolve_config_path
+    protocol_path = resolve_config_path(protocol_path)
+    prediction_config = resolve_config_path(prediction_config)
+    assets_config = resolve_config_path(assets_config)
     protocol, protocol_digest = load_protocol(protocol_path)
     config = load_prediction_config(prediction_config)
     output = Path(output_dir) if output_dir is not None else new_run_directory(ROOT / "models/runs", "prediction_bank")

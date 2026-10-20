@@ -84,13 +84,17 @@ def resolve_training_config(args: argparse.Namespace) -> dict[str, Any]:
     Resolution is idempotent so an ensemble can copy the resolved namespace
     without interpreting its YAML-derived values as fresh CLI overrides.
     """
+    from src.utils.config import resolve_config_path
+    for attr in ("env_config", "model_config", "assets_config", "training_config", "quant_config", "research_protocol"):
+        val = getattr(args, attr, None)
+        if val is not None:
+            setattr(args, attr, resolve_config_path(val))
     from src.evaluation.research_protocol import apply_research_protocol
     apply_research_protocol(args)
     if hasattr(args, "_training_config_inputs"):
         return args._training_config_inputs
     raw_training_config = Path(getattr(args, "training_config", DEFAULT_TRAINING_CONFIG))
     if not raw_training_config.exists():
-        from src.utils.config import resolve_config_path
         raw_training_config = resolve_config_path(raw_training_config)
     args.training_config = raw_training_config
     with args.training_config.open(encoding="utf-8") as stream:

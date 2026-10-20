@@ -14,6 +14,7 @@ from pathlib import Path
 import argparse
 
 from src.training.config import DEFAULT_TRAINING_CONFIG
+from src.utils.config import resolve_config_path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,25 +22,25 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--normalization-warmup", type=int, default=0, help="Warm-up causal bổ sung chung cho mọi nhánh ablation, không đổi ngày train giữa các nhánh.")
-    parser.add_argument("--quant-config", type=Path, default=None, help="Sprint 6 normalization/risk/execution/reward opt-in YAML.")
+    parser.add_argument("--quant-config", type=resolve_config_path, default=None, help="Sprint 6 normalization/risk/execution/reward opt-in YAML.")
     parser.add_argument("--raw-dir", type=Path, default=PROJECT_ROOT / "data/raw")
     parser.add_argument(
         "--processed-output", type=Path, default=PROJECT_ROOT / "data/processed/features.parquet"
     )
-    parser.add_argument("--model-config", type=Path, default=PROJECT_ROOT / "configs/core/model.yaml")
-    parser.add_argument("--env-config", type=Path, default=PROJECT_ROOT / "configs/core/env.yaml")
-    parser.add_argument("--research-protocol", type=Path, default=None,
+    parser.add_argument("--model-config", type=resolve_config_path, default=PROJECT_ROOT / "configs/core/model.yaml")
+    parser.add_argument("--env-config", type=resolve_config_path, default=PROJECT_ROOT / "configs/core/env.yaml")
+    parser.add_argument("--research-protocol", type=resolve_config_path, default=None,
                         help="Protocol định lượng đóng băng; chỉ dùng development validation.")
     parser.add_argument("--protocol-fold", default=None, help="Fold PPO; mặc định fold cuối protocol.")
     parser.add_argument("--evaluation-scope", choices=("validation", "test"), default=None,
                         help="Chỉ backtest validation hoặc test sau train.")
     parser.add_argument(
-        "--training-config", type=Path, default=DEFAULT_TRAINING_CONFIG,
+        "--training-config", type=resolve_config_path, default=DEFAULT_TRAINING_CONFIG,
         help="Cấu hình train/early stopping/checkpoint/evaluation; CLI ghi đè YAML.",
     )
     parser.add_argument(
         "--assets-config",
-        type=Path,
+        type=resolve_config_path,
         default=PROJECT_ROOT / "configs/core/assets.yaml",
         help="Đường dẫn file cấu hình vũ trụ cổ phiếu và phân chia dữ liệu (mặc định: configs/core/assets.yaml).",
     )

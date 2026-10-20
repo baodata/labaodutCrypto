@@ -20,7 +20,8 @@ GROUPS = {"vix", "fama_french", "blackout"}
 
 
 def load_alpha_config(path):
-    path = Path(path)
+    from src.utils.config import resolve_config_path
+    path = resolve_config_path(path)
     config = yaml.safe_load(path.read_text(encoding="utf-8"))
     if (not isinstance(config, dict) or set(config) != {"version", "strict_pit", *GROUPS}
             or config["version"] != "external-alpha-v1" or type(config["strict_pit"]) is not bool):

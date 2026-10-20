@@ -20,7 +20,8 @@ from src.utils.artifacts import atomic_json, atomic_csv, file_hashes, new_run_di
 
 
 def load_decision_config(path):
-    config = yaml.safe_load(Path(path).read_text())
+    from src.utils.config import resolve_config_path
+    config = yaml.safe_load(resolve_config_path(path).read_text())
     if (not isinstance(config, dict) or set(config) != {"version", "seeds", "methods", "training"}
             or config["version"] != "portfolio-decision-v1"):
         raise ValueError("Invalid portfolio decision configuration.")
@@ -105,6 +106,11 @@ def summarize_decisions(metrics, daily, protocol, horizon):
 
 def compare_portfolio_decisions(lock_path, allocation_path, decision_path, raw_dir, assets_path,
                                 env_path, output_dir=None, bank_dir=None, *, development_only=False, fold_id=None):
+    from src.utils.config import resolve_config_path
+    allocation_path = resolve_config_path(allocation_path)
+    decision_path = resolve_config_path(decision_path)
+    assets_path = resolve_config_path(assets_path)
+    env_path = resolve_config_path(env_path)
     lock, bank = load_predictor_lock(lock_path, bank_dir)
     allocation, config = load_allocation_config(allocation_path), load_decision_config(decision_path)
     if fold_id is not None and not development_only:

@@ -7,9 +7,11 @@ import math
 import pandas as pd
 import yaml
 
+from src.utils.config import resolve_config_path
+
 
 def load_protocol(path):
-    path = Path(path)
+    path = resolve_config_path(path)
     data = path.read_bytes()
     protocol = yaml.safe_load(data)
     if not isinstance(protocol, dict) or protocol.get("evaluation_scope") != "validation":

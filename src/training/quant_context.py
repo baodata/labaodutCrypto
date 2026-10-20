@@ -19,9 +19,11 @@ def validate_quant_dependencies(config):
 
 
 def load_quant_config(args):
-    path = getattr(args, 'quant_config', None)
+    path = args if isinstance(args, (str, Path)) else getattr(args, 'quant_config', None)
     if path is None:
         return {}
+    from src.utils.config import resolve_config_path
+    path = resolve_config_path(path)
     with Path(path).open(encoding='utf-8') as stream:
         config = yaml.safe_load(stream)
     if not isinstance(config, dict):

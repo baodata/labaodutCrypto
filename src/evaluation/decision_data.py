@@ -32,9 +32,11 @@ class ForecastEpisode:
 
 class DecisionData:
     def __init__(self, bank, lock, allocation, raw_dir, assets_path, env_path, output):
+        from src.utils.config import resolve_config_path
         self.bank, self.lock, self.allocation = bank, lock, allocation
         self.protocol = bank.metadata["protocol"]
-        self.env_path = Path(env_path)
+        self.env_path = resolve_config_path(env_path)
+        assets_path = resolve_config_path(assets_path)
         if file_hashes(Path(raw_dir).glob("*.parquet"), ROOT) != bank.metadata["data_hashes"]:
             raise ValueError("Data snapshot differs from the locked prediction bank.")
         for key, value in file_hashes([Path(assets_path)], ROOT).items():

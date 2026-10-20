@@ -26,7 +26,8 @@ from src.utils.data_types import MarketDataTensor
 
 
 def load_gp_config(path):
-    config = yaml.safe_load(Path(path).read_text())
+    from src.utils.config import resolve_config_path
+    config = yaml.safe_load(resolve_config_path(path).read_text())
     expected = {'version', 'methods', 'risk_aversion', 'discount_factor', 'tilt_fraction',
                 'mpc_horizon', 'calibration', 'cost', 'execution', 'solver'}
     sections = dict(calibration={'minimum_samples', 'ridge', 'max_persistence', 'covariance_method', 'jitter', 'oof_refit_sessions'},
@@ -232,6 +233,11 @@ def gp_gate_report(metrics, daily, protocol):
 
 
 def compare_gp_allocators(args):
+    from src.utils.config import resolve_config_path
+    args.gp_config = resolve_config_path(args.gp_config)
+    args.allocation_config = resolve_config_path(args.allocation_config)
+    args.env_config = resolve_config_path(args.env_config)
+    args.assets_config = resolve_config_path(args.assets_config)
     config, allocation = load_gp_config(args.gp_config), load_allocation_config(args.allocation_config)
     if args.fold and args.evaluate_development_outer:
         raise ValueError('Outer gate requires the whole declared fold family, not a handpicked fold.')
