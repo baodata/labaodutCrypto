@@ -546,7 +546,7 @@ class DynamicGraphActorCritic(PolicyDiagnostics, nn.Module):
             batch_first=True,
             dropout=0.0,
         )
-        self.asset_pool_scorez = nn.Linear(hidden_dim, 1)
+        self.asset_pool_score = nn.Linear(hidden_dim, 1)
         self.critic_pool_score = nn.Linear(hidden_dim, 1)
         global_input_dim = hidden_dim + n_assets + 1 + self.portfolio_context_dim
         self.actor_global_trunk = nn.Sequential(

@@ -68,3 +68,10 @@ logs/
 *.pth
 *.onnx
 
+# Binaries & CLI tools
+lazygit
+
+# Temporary & Lock files
+.~lock.*#
+
+
