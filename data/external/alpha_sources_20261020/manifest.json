@@ -1,11 +1,21 @@
 {
   "artifact_hashes": {
+    "acquisition.json": "d952b8959ed23a37c18a3925c73750f460eb3779f150ba0f938811fa99444be4",
+    "alpha_features_downloaded.yaml": "a2f5566a1f85504b050627ec4df1bfea0c6985c78396cd383584046482eb8e92",
+    "data_inventory.csv": "d73fe2ad883612ce1838cdd945269b33ffb2f578f4f7822640793a0aa5eb1a55",
+    "earnings_requirements.csv": "83397c0fedc2650922ec426760988c7497352015a1475337364434c78ce748c0",
     "normalized/event_coverage.csv": "972a2de57ca5c5a395d87435a53168733b99d95ece4b5bc6b2059e7503b2092d",
     "normalized/events.csv": "b755aeae7d200c2d70bc3da648f17be1a04c50fc7a4ca65930218f0d760479e5",
     "normalized/events.json": "5879e678f4d2472d3cbe1172ff707c8d5fac75a36e8e1f441c73f42ab7d34ab1",
     "normalized/ff3_daily.csv": "05b450761054727e0f70e16dc086e9409dec1ca326669ce464d0fc5009417542",
     "normalized/ff3_daily.json": "ffd934ae71d7ed08f6e85058a8ebfe79eea5c56e8ce1a9b8245d667863df627b",
+    "normalized/macro_dates_without_quotes.csv": "f62df7fd31a408d1f71f669c4ae0ee70c91c2b00f965b6e41da763f6f21789c3",
+    "normalized/macro_unpaired_dates.csv": "fc97f91456144e84745f19c8fe77b702ca792d54ccc051f21952a123f50e651f",
+    "normalized/macro_volatility.csv": "50af1192fad38112407e34ee9480243f836a5dd3b3992953a977e501b6e9e605",
+    "normalized/macro_volatility.json": "5a383bcec02c13d0592d6481bc1990f0de956155791c75eb7e7dc033e14ee2c1",
     "raw/F-F_Research_Data_Factors_daily_CSV.zip": "2f29e22546069914890a712680a6f81f3680ebc3543b52864484d209ca13a7db",
+    "raw/Yahoo_VIX.json": "162022bc827ada5d5da0833b98cd54afb7e497fb392101b532556858750bae9a",
+    "raw/Yahoo_VIX3M.json": "5d9224b822d772950ce444af11de945c337b3e7b77cfe05666ea9879ee28b09e",
     "raw/fomc_2015_20140605b.html": "d433bee53c0c022d305a89c0cfa6cf2d355719091fd9d67368dde75bb41ed3e9",
     "raw/fomc_2016_20150511a.html": "99280e2e020d33e999a5b5293aad7889bd498ea0a25026c323c1cfb3a7db9f91",
     "raw/fomc_2017_20160628a.html": "6656f4a4d965d0d34be555884ed88f75d40d22f06b0cdad42f1206895d69deaf",
@@ -18,9 +28,11 @@
   "data_root": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020",
   "inventory": [
     {
+      "first_date": "2014-01-02",
       "group": "macro_volatility",
-      "rows": 0,
-      "status": "download_failed",
+      "last_date": "2022-12-30",
+      "rows": 2266,
+      "status": "downloaded_current_vintage",
       "strict_history_ready": false
     },
     {
@@ -39,9 +51,9 @@
     }
   ],
   "no_historical_availability_invented": true,
-  "retrieved_sources": 9,
+  "retrieved_sources": 11,
   "source_hashes": {
-    "scripts/download_alpha_sources.py": "7aa58e4d37ab3e15eb83dc6adf818cbc17be3e2883286ef58dce7e3b5deb2fb7",
+    "scripts/download_alpha_sources.py": "f810a94cbc33154ac500220cbcca04309f0a51ddd0b063c1ee548c77b9e51abd",
     "scripts/import_alpha_sources.py": "9b2ac6bed3a53e6e52a764dc75edb93cdb58162cdd28002e89857421b3e63367"
   },
   "status": "downloaded_partial_not_training_ready",

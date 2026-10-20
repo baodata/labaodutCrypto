@@ -109,5 +109,53 @@
     "retrieved_at": "2026-10-20T03:39:08.992709+00:00",
     "source": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20210604a.htm",
     "status": "downloaded"
+  },
+  {
+    "error": "<urlopen error [Errno 104] Connection reset by peer>",
+    "name": "VIX_History.csv",
+    "source": "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX_History.csv",
+    "status": "failed"
+  },
+  {
+    "error": "<urlopen error [Errno 104] Connection reset by peer>",
+    "name": "VIX3M_History.csv",
+    "source": "https://cdn-api.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv",
+    "status": "failed"
+  },
+  {
+    "error": "The read operation timed out",
+    "name": "FRED_VXVCLS.csv",
+    "source": "https://fred.stlouisfed.org/graph/graph.csv?id=VXVCLS",
+    "status": "failed"
+  },
+  {
+    "error": "The read operation timed out",
+    "name": "FRED_VIXCLS.csv",
+    "source": "https://fred.stlouisfed.org/graph/graph.csv?id=VIXCLS",
+    "status": "failed"
+  },
+  {
+    "bytes": 239322,
+    "content_type": "application/json;charset=utf-8",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/Yahoo_VIX.json",
+    "final_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=1388534400&period2=1672531200&interval=1d",
+    "http_status": 200,
+    "last_modified": null,
+    "name": "Yahoo_VIX.json",
+    "retrieved_at": "2026-10-20T03:42:44.242487+00:00",
+    "source": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=1388534400&period2=1672531200&interval=1d",
+    "status": "downloaded"
+  },
+  {
+    "bytes": 236756,
+    "content_type": "application/json;charset=utf-8",
+    "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/Yahoo_VIX3M.json",
+    "final_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX3M?period1=1388534400&period2=1672531200&interval=1d",
+    "http_status": 200,
+    "last_modified": null,
+    "name": "Yahoo_VIX3M.json",
+    "retrieved_at": "2026-10-20T03:42:44.243067+00:00",
+    "source": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX3M?period1=1388534400&period2=1672531200&interval=1d",
+    "status": "downloaded"
   }
 ]

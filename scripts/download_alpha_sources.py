@@ -32,6 +32,14 @@ SERIES = {
     "VIX3M_History.csv": "https://cdn.cboe.com/api/global/us_indices/daily_prices/VIX3M_History.csv",
     "F-F_Research_Data_Factors_daily_CSV.zip": "https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/F-F_Research_Data_Factors_daily_CSV.zip",
 }
+FRED_SERIES = {
+    "FRED_VIXCLS.csv": "https://fred.stlouisfed.org/graph/graph.csv?id=VIXCLS",
+    "FRED_VXVCLS.csv": "https://fred.stlouisfed.org/graph/graph.csv?id=VXVCLS",
+}
+YAHOO_SERIES = {
+    "Yahoo_VIX.json": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=1388534400&period2=1672531200&interval=1d",
+    "Yahoo_VIX3M.json": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX3M?period1=1388534400&period2=1672531200&interval=1d",
+}
 FOMC = {
     2015: "20140605b", 2016: "20150511a", 2017: "20160628a", 2018: "20170511b",
     2019: "20180525a", 2020: "20190517a", 2021: "20200702a", 2022: "20210604a",
@@ -55,7 +63,7 @@ def fetch(url, destination):
         if not payload:
             raise ValueError(f"Empty official source: {url}")
         destination.write_bytes(payload)
-        return dict(source=url, file=str(destination), bytes=len(payload), status=response.status,
+        return dict(source=url, file=str(destination), bytes=len(payload), http_status=response.status,
             retrieved_at=datetime.now(timezone.utc).isoformat(),
             content_type=response.headers.get("Content-Type"),
             last_modified=response.headers.get("Last-Modified"), final_url=response.url)
@@ -88,6 +96,32 @@ def fomc_records(year, path, url):
     return result
 
 
+def fred_close(path, series, name):
+    frame = pd.read_csv(path)
+    date_column = "observation_date" if "observation_date" in frame else "DATE"
+    if date_column not in frame or series not in frame:
+        raise ValueError(f"Unexpected official FRED export schema: {path}")
+    result = pd.DataFrame({"date": pd.to_datetime(frame[date_column]),
+                           name: pd.to_numeric(frame[series], errors="coerce")})
+    if result.date.isna().any() or result.date.duplicated().any() or (result[name].dropna() <= 0).any():
+        raise ValueError("Invalid FRED daily index values/dates.")
+    return result
+
+
+def yahoo_close(path, symbol, name):
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload["chart"].get("error") or not payload["chart"].get("result"):
+        raise ValueError(f"Yahoo chart error: {path}")
+    result = payload["chart"]["result"][0]
+    if result["meta"]["symbol"] != symbol:
+        raise ValueError("Yahoo response ticker differs from requested volatility index.")
+    dates = pd.to_datetime(result["timestamp"], unit="s", utc=True).tz_convert("America/New_York").tz_localize(None).normalize()
+    frame = pd.DataFrame({"date": dates, name: result["indicators"]["quote"][0]["close"]})
+    if frame.date.duplicated().any() or (frame[name].dropna() <= 0).any():
+        raise ValueError("Invalid Yahoo volatility index dates/prices.")
+    return frame
+
+
 def materialize(output, acquisition):
     raw, normalized = output / "raw", output / "normalized"
     normalized.mkdir(parents=True, exist_ok=True)
@@ -111,17 +145,31 @@ def materialize(output, acquisition):
         statuses.append(dict(group=stem, status="downloaded_current_vintage", rows=len(frame),
             first_date=frame.date.iloc[0], last_date=frame.date.iloc[-1], strict_history_ready=False))
 
+    macro_names = None
     if {"VIX_History.csv", "VIX3M_History.csv"} <= set(sources):
         a, b = cboe_close(raw/"VIX_History.csv", "VIX"), cboe_close(raw/"VIX3M_History.csv", "VIX3M")
+        macro_names = ["VIX_History.csv", "VIX3M_History.csv"]
+    elif set(FRED_SERIES) <= set(sources):
+        a = fred_close(raw/"FRED_VIXCLS.csv", "VIXCLS", "vix")
+        b = fred_close(raw/"FRED_VXVCLS.csv", "VXVCLS", "vix3m")
+        macro_names = list(FRED_SERIES)
+    elif set(YAHOO_SERIES) <= set(sources):
+        a = yahoo_close(raw/"Yahoo_VIX.json", "^VIX", "vix")
+        b = yahoo_close(raw/"Yahoo_VIX3M.json", "^VIX3M", "vix3m")
+        macro_names = list(YAHOO_SERIES)
+    if macro_names:
         common = a.merge(b, on="date", how="outer", validate="one_to_one").sort_values("date")
-        first, last = max(a.date.min(), b.date.min()), min(a.date.max(), b.date.max())
+        first, last = max(a.dropna().date.min(), b.dropna().date.min()), min(a.dropna().date.max(), b.dropna().date.max())
         common = common.loc[common.date.between(first, last)]
+        no_quotes = common[["vix", "vix3m"]].isna().all(axis=1)
+        atomic_csv(common.loc[no_quotes], normalized / "macro_dates_without_quotes.csv", index=False)
+        common = common.loc[~no_quotes]
         # Keep and report gaps in paired source files; do not fabricate a price.
         missing = common[common.isna().any(axis=1)]
         atomic_csv(missing, normalized / "macro_unpaired_dates.csv", index=False)
         if not missing.empty:
             raise ValueError("Cboe series have interior unpaired observations; see macro_unpaired_dates.csv.")
-        save_series(common, "macro_volatility", "index_points", ["VIX_History.csv", "VIX3M_History.csv"])
+        save_series(common, "macro_volatility", "index_points", macro_names)
     else:
         statuses.append(dict(group="macro_volatility", status="download_failed", rows=0, strict_history_ready=False))
     if "F-F_Research_Data_Factors_daily_CSV.zip" in sources:
@@ -162,20 +210,38 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--offline", action="store_true", help="Normalize already downloaded official files in output-dir/raw.")
+    parser.add_argument("--retry-failed", action="store_true", help="Retry missing sources in an existing download snapshot; keep successful originals.")
     parser.add_argument("--assets-config", type=Path, default=ROOT / "configs/assets.yaml")
+    parser.add_argument("--vix-source", choices=["cboe", "fred", "yahoo"], default="cboe",
+                        help="Explicit source: Cboe, FRED VIXCLS/VXVCLS, or Yahoo ^VIX/^VIX3M (2014-2022).")
     args = parser.parse_args(argv)
+    if args.offline and args.retry_failed:
+        parser.error("Choose --offline or --retry-failed.")
+    if (args.offline or args.retry_failed) and args.output_dir is None:
+        parser.error("Resuming acquisition requires an explicit --output-dir.")
     output = (args.output_dir or new_run_directory(ROOT / "data/external", "alpha_sources")).resolve()
     if args.offline:
         acquisition = json.loads((output / "acquisition.json").read_text(encoding="utf-8"))
     else:
-        if output.exists() and any(output.iterdir()):
+        if output.exists() and any(output.iterdir()) and not args.retry_failed:
             raise ValueError("Download output exists; choose a fresh directory to retain source vintages.")
         raw = output / "raw"
         raw.mkdir(parents=True, exist_ok=True)
         requests = dict(SERIES)
+        if args.vix_source in {"fred", "yahoo"}:
+            requests.pop("VIX_History.csv")
+            requests.pop("VIX3M_History.csv")
+            requests.update(FRED_SERIES if args.vix_source == "fred" else YAHOO_SERIES)
         requests.update({f"fomc_{year}_{stamp}.html": f"https://www.federalreserve.gov/newsevents/pressreleases/monetary{stamp}.htm"
                          for year, stamp in FOMC.items()})
-        acquisition = []
+        acquisition = json.loads((output / "acquisition.json").read_text(encoding="utf-8")) if args.retry_failed else []
+        completed = {item["name"] for item in acquisition if item["status"] == "downloaded"}
+        requests = {name: url for name, url in requests.items() if name not in completed}
+        if args.retry_failed:
+            # Cboe now redirects its legacy cdn host to cdn-api. Try the official
+            # target directly when the legacy host resets the TLS connection.
+            requests = {name: url.replace("https://cdn.cboe.com/", "https://cdn-api.cboe.com/")
+                        for name, url in requests.items()}
         with ThreadPoolExecutor(max_workers=3) as executor:
             pending = {executor.submit(fetch, url, raw/name): (name, url) for name, url in requests.items()}
             for future in as_completed(pending):
@@ -207,7 +273,9 @@ def main(argv=None):
             for ticker in tickers]), output / "earnings_requirements.csv", index=False)
         manifest.update(status="downloaded_partial_not_training_ready", inventory=statuses,
             source_hashes=file_hashes([Path(__file__), ROOT / "scripts/import_alpha_sources.py"], ROOT),
-            artifact_hashes=file_hashes(list((output/"raw").glob("*")) + list((output/"normalized").glob("*")), output))
+            artifact_hashes=file_hashes(list((output/"raw").glob("*")) + list((output/"normalized").glob("*")) +
+                [output / "acquisition.json", output / "data_inventory.csv", output / "earnings_requirements.csv",
+                 output / "alpha_features_downloaded.yaml"], output))
     except BaseException as exc:
         manifest.update(status="failed", error=str(exc))
         atomic_json(output / "manifest.json", manifest)

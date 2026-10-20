@@ -1,0 +1,37 @@
+{
+  "availability": "current_vintage_research_only",
+  "availability_evidence": null,
+  "input_hashes": {
+    "raw/Yahoo_VIX.json": "162022bc827ada5d5da0833b98cd54afb7e497fb392101b532556858750bae9a",
+    "raw/Yahoo_VIX3M.json": "5d9224b822d772950ce444af11de945c337b3e7b77cfe05666ea9879ee28b09e"
+  },
+  "retrieved_at": "2026-10-20T03:42:44.243067+00:00",
+  "source_records": [
+    {
+      "bytes": 239322,
+      "content_type": "application/json;charset=utf-8",
+      "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/Yahoo_VIX.json",
+      "final_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=1388534400&period2=1672531200&interval=1d",
+      "http_status": 200,
+      "last_modified": null,
+      "name": "Yahoo_VIX.json",
+      "retrieved_at": "2026-10-20T03:42:44.242487+00:00",
+      "source": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX?period1=1388534400&period2=1672531200&interval=1d",
+      "status": "downloaded"
+    },
+    {
+      "bytes": 236756,
+      "content_type": "application/json;charset=utf-8",
+      "file": "/home/tuan/AI/AI_roject1/data/external/alpha_sources_20261020/raw/Yahoo_VIX3M.json",
+      "final_url": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX3M?period1=1388534400&period2=1672531200&interval=1d",
+      "http_status": 200,
+      "last_modified": null,
+      "name": "Yahoo_VIX3M.json",
+      "retrieved_at": "2026-10-20T03:42:44.243067+00:00",
+      "source": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX3M?period1=1388534400&period2=1672531200&interval=1d",
+      "status": "downloaded"
+    }
+  ],
+  "unit": "index_points",
+  "warning": "Current release downloaded now. No historical available_at/vintage reconstruction."
+}
