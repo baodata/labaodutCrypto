@@ -54,7 +54,7 @@ def configure_run_artifacts(args, kind="ppo"):
     else:
         run_dir = new_run_directory(PROJECT_ROOT / "models/runs", f"{kind}_{args.encoder}_seed{args.seed}")
     hashes = {
-        "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "scripts").glob("*.py")), PROJECT_ROOT),
+        "source_hashes": file_hashes(list((PROJECT_ROOT / "src").rglob("*.py")) + list((PROJECT_ROOT / "scripts").rglob("*.py")), PROJECT_ROOT),
         "data_hashes": file_hashes(args.raw_dir.glob("*.parquet"), PROJECT_ROOT),
         "config_hashes": file_hashes([
             args.model_config, args.env_config, args.training_config,

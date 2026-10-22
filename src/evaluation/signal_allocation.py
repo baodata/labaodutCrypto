@@ -92,7 +92,7 @@ def compare_signal_allocators(bank_dir, raw_dir, assets_config, env_config, allo
     manifest = dict(status="running", test_evaluated=False, selection_uses="fixed_configuration_no_search",
         prediction_bank=str(Path(bank_dir).resolve()), prediction_protocol_hash=bank.metadata["protocol_hash"],
         prediction_source_hashes=bank.metadata["source_hashes"], comparison_config=config,
-        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/compare_signal_allocators.py"], ROOT),
+        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/research/compare_signal_allocators.py"], ROOT),
         config_hashes=file_hashes([Path(env_config), Path(allocation_config), Path(assets_config)], ROOT),
         data_hashes=bank.metadata["data_hashes"], period_status=protocol["period_status"],
         objective="forecast_h_vs_tracking_risk_hSigma_and_Close_estimated_turnover_cost",

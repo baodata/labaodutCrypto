@@ -43,11 +43,11 @@ import urllib.request
 import pandas as pd
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.import_alpha_sources import cboe_close, french_daily
+from scripts.data.import_alpha_sources import cboe_close, french_daily
 from src.utils.artifacts import atomic_csv, atomic_json, file_hashes, new_run_directory
 from src.utils.config import AssetsConfig
 
@@ -297,7 +297,7 @@ def main(argv=None):
             required="announced_schedule_known_at_revisions_and_coverage_not_just_realized_earnings_date")
             for ticker in tickers]), output / "earnings_requirements.csv", index=False)
         manifest.update(status="downloaded_partial_not_training_ready", inventory=statuses,
-            source_hashes=file_hashes([Path(__file__), ROOT / "scripts/import_alpha_sources.py"], ROOT),
+            source_hashes=file_hashes([Path(__file__), ROOT / "scripts/data/import_alpha_sources.py"], ROOT),
             artifact_hashes=file_hashes(list((output/"raw").glob("*")) + list((output/"normalized").glob("*")) +
                 [output / "acquisition.json", output / "data_inventory.csv", output / "earnings_requirements.csv",
                  output / "alpha_features_downloaded.yaml"], output))

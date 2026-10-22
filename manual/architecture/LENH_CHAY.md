@@ -5,14 +5,14 @@
 Chuẩn bị banks/readiness (chưa train; thiếu dữ liệu ghi `needs_data`):
 
 ```bash
-python scripts/research_alpha_features.py
+python scripts/features/research_alpha_features.py
 ```
 
 Khi đã có lịch sử đầu vào đạt contract trong `configs/research/alpha_features.yaml`:
 
 ```bash
-python scripts/research_alpha_features.py --groups vix --run-ablation
-python scripts/research_alpha_features.py --groups vix,fama_french,blackout --run-ablation
+python scripts/features/research_alpha_features.py --groups vix --run-ablation
+python scripts/features/research_alpha_features.py --groups vix,fama_french,blackout --run-ablation
 ```
 
 Chỉ train OOF/inner, cùng allocator/cost. [Schema, nguồn và cách chuẩn bị dữ liệu](NANG_CAP_ALPHA_VIX_BLACKOUT_FF3.md). Chưa có dữ liệu PIT nên chưa có kết quả alpha mới.
@@ -20,7 +20,7 @@ Chỉ train OOF/inner, cùng allocator/cost. [Schema, nguồn và cách chuẩn 
 ## Thêm GRU/GNN-GRU predictor, giữ nguyên allocator
 
 ```bash
-python scripts/compare_signal_allocators.py \
+python scripts/research/compare_signal_allocators.py \
   --prediction-config configs/test/prediction_bank_neural.yaml \
   --allocation-config configs/test/signal_allocation_neural.yaml
 ```
@@ -30,7 +30,7 @@ python scripts/compare_signal_allocators.py \
 ## Ridge + momentum/mean-reversion so với matched 1/N và allocator chi phí
 
 ```bash
-python scripts/compare_signal_allocators.py
+python scripts/research/compare_signal_allocators.py
 ```
 
 Tạo prediction bank ba model và chạy đối chiếu inner/outer trên các fold phát triển, horizon 5/20 phiên. Kết quả: `models/runs/signal_allocation_*/comparison/outer_summary.csv`. [Cơ chế, phí, ràng buộc và cách đọc](RIDGE_MOMENTUM_VA_ALLOCATOR_CHI_PHI.md).
@@ -38,7 +38,7 @@ Tạo prediction bank ba model và chạy đối chiếu inner/outer trên các 
 ## Prediction bank và nhãn giao dịch — 19/10/2026
 
 ```bash
-python scripts/build_prediction_bank.py \
+python scripts/research/build_prediction_bank.py \
   --prediction-config configs/research/prediction_bank.yaml \
   --research-protocol configs/core/quant_research_protocol.yaml
 ```
@@ -98,11 +98,11 @@ Mỗi run lưu `training_config.json` và `resolved_training_config` trong manif
 
 ```bash
 # QNT-003: IC + inner-fit linear tilt, bốn outer development fold.
-python scripts/analyze_feature_signal.py \
+python scripts/features/analyze_feature_signal.py \
   --research-protocol configs/core/quant_research_protocol.yaml
 
 # QNT-002: PPO chọn checkpoint trên inner 2021, báo cáo outer 2022.
-python scripts/run_sprint5_backtest.py \
+python scripts/training/run_sprint5_backtest.py \
   --research-protocol configs/core/quant_research_protocol.yaml \
   --encoder gru --lookback 10 --hidden-dim 64 \
   --episodes-per-update 8 --ppo-iters 3 \
@@ -184,7 +184,7 @@ Sao chép mục này để ghi thêm các lần thử.
 ### GP temporary-cost: development OOF/inner
 
 ```bash
-python scripts/compare_gp_allocators.py \
+python scripts/research/compare_gp_allocators.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --gp-config configs/research/gp_allocator.yaml \
   --fold development_2021
@@ -195,7 +195,7 @@ Bỏ `--fold` để chạy bốn fold OOF/inner, vẫn không outer/test. Xem [c
 ### Đối chứng execution ER và mua/bán riêng
 
 ```bash
-python scripts/compare_execution_speeds.py \
+python scripts/research/compare_execution_speeds.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --execution-config configs/research/execution_speed_research.yaml
 ```
@@ -207,7 +207,7 @@ Không train lại predictor/actor; chỉ train OOF + inner, không outer/test. 
 Actor imitation convex targets: [phương pháp, kết quả và lệnh](BAT_CHUOC_CONVEX_TARGETS.md).
 
 ```bash
-python scripts/train_convex_imitation.py \
+python scripts/training/train_convex_imitation.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --imitation-config configs/research/convex_imitation.yaml
 ```
@@ -217,7 +217,7 @@ Learning curves sau khi sửa patience: [quy tắc và lệnh development-only](
 Xem [contract và cách đọc kết quả](LOCK_PREDICTOR_VA_SO_SANH_ALLOCATOR.md).
 
 ```bash
-python scripts/compare_portfolio_decisions.py \
+python scripts/research/compare_portfolio_decisions.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --allocation-config configs/test/signal_allocation_neural.yaml \
   --decision-config configs/research/portfolio_decision.yaml
@@ -228,7 +228,7 @@ Khóa có sẵn chọn bằng inner IC tại horizon 5; cùng 5 seed cho PPO, se
 Xem [phạm vi, cấu hình, lệnh bank/stress, ablation và sector PPO](TRIEN_KHAI_SPRINT_6.md#5-lệnh-triển-khai-thực-nghiệm). Các nhánh bật riêng từng cơ chế, validation-only; các lệnh mới chưa chạy nghiệm thu.
 
 ```bash
-python scripts/evaluate_sprint6_banks.py --quant-config configs/core/quant_sprint6.yaml --research-protocol configs/core/quant_research_protocol.yaml --evaluation-scope validation
-python scripts/run_sprint6_ablation.py --variants gru_control,control
+python scripts/training/evaluate_sprint6_banks.py --quant-config configs/core/quant_sprint6.yaml --research-protocol configs/core/quant_research_protocol.yaml --evaluation-scope validation
+python scripts/training/run_sprint6_ablation.py --variants gru_control,control
 python -m src.training.train_marl --encoder gru --seed 7 --quant-config configs/core/quant_sprint6.yaml --research-protocol configs/core/quant_research_protocol.yaml --evaluation-scope validation
 ```

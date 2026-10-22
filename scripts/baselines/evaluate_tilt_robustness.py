@@ -40,11 +40,11 @@ import numpy as np
 import pandas as pd
 import yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.evaluate_equal_weight_tilt import allocation_diagnostics, make_tilt_policy
+from scripts.baselines.evaluate_equal_weight_tilt import allocation_diagnostics, make_tilt_policy
 from src.env.cost import resolve_transaction_cost_components
 from src.evaluation.backtester import DeterministicBacktester
 from src.evaluation.metrics import FinancialMetrics

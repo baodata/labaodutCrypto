@@ -9,7 +9,7 @@
 | GP Bellman reference, constrained QP, MPC, numerical oracle | `src/evaluation/gp_allocator.py` |
 | Forecast-only adapter và snapshot/load | `src/models/gp_adapter.py` |
 | Causal refits, reporting, gates, resume | `src/evaluation/gp_research.py` |
-| Entry point | `scripts/compare_gp_allocators.py` |
+| Entry point | `scripts/research/compare_gp_allocators.py` |
 | Tham số scenario cố định | `configs/gp_allocator.yaml` |
 
 Reference là mô hình tuyến tính và temporary quadratic cost không constraints. Portfolio dùng **active NAV fractions với planning approximation**, có constraints và unconstrained terminal value; không tuyên bố exact constrained dynamic optimum. Persistent impact và RL warm-start không thuộc phiên bản này.
@@ -93,7 +93,7 @@ Backtest xuất NAV reconciliation từ asset/cash PnL, primal/objective gaps, c
 Pilot một fold, chỉ train OOF + inner:
 
 ```bash
-python scripts/compare_gp_allocators.py \
+python scripts/research/compare_gp_allocators.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --gp-config configs/gp_allocator.yaml \
   --fold development_2021
@@ -102,14 +102,14 @@ python scripts/compare_gp_allocators.py \
 Toàn bộ bốn fold, vẫn **không outer/test**:
 
 ```bash
-python scripts/compare_gp_allocators.py \
+python scripts/research/compare_gp_allocators.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json
 ```
 
 Full development walk-forward, có outer exploratory và gates, cần chọn rõ:
 
 ```bash
-python scripts/compare_gp_allocators.py \
+python scripts/research/compare_gp_allocators.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --evaluate-development-outer
 ```
@@ -119,7 +119,7 @@ Không hỗ trợ `--fold` cùng outer để tạo báo cáo gate từ fold ch�
 Resume cùng source/data/config/library/lock/scope:
 
 ```bash
-python scripts/compare_gp_allocators.py \
+python scripts/research/compare_gp_allocators.py \
   --predictor-lock models/runs/locked_predictor_h5_20261019/predictor_lock.json \
   --fold development_2021 \
   --resume models/runs/THU_MUC_GP_CAN_TIEP_TUC

@@ -26,8 +26,8 @@
 ├── tests/                  # Bộ kiểm thử tự động (pytest)
 ├── notebooks/              # Jupyter Notebooks phục vụ EDA và thử nghiệm
 ├── experiments/            # Lưu trữ log huấn luyện và checkpoints
-├── scripts/                # Các script chạy pipeline độc lập
-├── manual/                 # Tài liệu kế hoạch và phân công ticket
+├── scripts/                # Các script chạy pipeline độc lập (xem scripts/README.md)
+├── manual/                 # Tài liệu hệ thống, kiến trúc, nghiên cứu và phân công (xem manual/README.md)
 ├── requirements.txt        # Danh sách thư viện phụ thuộc
 ├── pyproject.toml          # Cấu hình package Python
 └── README.md
@@ -103,9 +103,9 @@ Một update đo trên dữ liệu thật với cấu hình này: cache 0,28 s, 
 
 ```bash
 python -m src.training.train_ppo --encoder gru --untrained-null-seeds 7,17,27,37,47,57,67,77,87,97
-python scripts/analyze_feature_signal.py
-python scripts/evaluate_equal_weight_tilt.py
-python scripts/evaluate_tilt_robustness.py
+python scripts/features/analyze_feature_signal.py
+python scripts/baselines/evaluate_equal_weight_tilt.py
+python scripts/baselines/evaluate_tilt_robustness.py
 ```
 
 Null hỗ trợ cả `mlp`, `gru`, `lstm`, `gnn` và chỉ đánh giá validation. Matched baseline dùng cùng `action_alpha`, cash mặc định `1/(N+1)` hoặc `--matched-cash-ratio`; Sharpe delta, selection excess và bootstrap đều dùng baseline này. P-value là kiểm định bootstrap một phía với phân phối null đã center; block mặc định 20 phiên, có thể chỉnh bằng `--bootstrap-block-size`.
@@ -114,7 +114,7 @@ Feature cần 252 phiên warm-up. Các phiên chưa đủ lịch sử bị loạ
 
 ## 5. Backtest và inference
 
-Quy ước giao dịch nằm trong [ENV_CONVENTIONS.md](manual/ENV_CONVENTIONS.md). Dùng `PortfolioOrder.hold()` để giữ số cổ phiếu và không tái cân bằng. API baseline độc lập yêu cầu `baseline.run(close_prices=...)`; nó dùng cùng TradingEnv với `run_strategy`, gồm T−1 bước.
+Quy ước giao dịch nằm trong [ENV_CONVENTIONS.md](manual/architecture/ENV_CONVENTIONS.md). Dùng `PortfolioOrder.hold()` để giữ số cổ phiếu và không tái cân bằng. API baseline độc lập yêu cầu `baseline.run(close_prices=...)`; nó dùng cùng TradingEnv với `run_strategy`, gồm T−1 bước.
 
 Inference từ checkpoint PPO hiện tại dùng `src.models.policy_adapter.CheckpointPolicy`, với đúng thứ tự ticker/feature và `market_history` `[L,N,F]`. Adapter dùng scaler nhúng; truyền `features_scaled=True` nếu history đã chuẩn hóa. Với GNN, cấp hai history `[L,3,N,N]` qua `relation_history_from_correlations`, dùng builder có tham số trùng `graph_config` trong checkpoint. `ObservationAdapter` và `GNN_ActorCritic` cũ là API snapshot legacy, không tương thích checkpoint PPO hiện tại.
 

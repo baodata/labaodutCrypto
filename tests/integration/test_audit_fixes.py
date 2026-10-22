@@ -4,9 +4,9 @@ import pytest
 import torch
 import yaml
 
-from scripts.evaluate_equal_weight_tilt import make_tilt_policy
-from scripts.evaluate_tilt_robustness import validate_gate
-from scripts.analyze_feature_signal import rank_ic_table
+from scripts.baselines.evaluate_equal_weight_tilt import make_tilt_policy
+from scripts.baselines.evaluate_tilt_robustness import validate_gate
+from scripts.features.analyze_feature_signal import rank_ic_table
 from src.data.split import TemporalSplitter
 from src.env.marl_env import MultiAgentTradingEnv
 from src.env.trading_env import TradingEnv

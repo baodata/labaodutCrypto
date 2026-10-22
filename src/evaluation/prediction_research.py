@@ -299,7 +299,7 @@ def run_prediction_research(protocol_path, prediction_config, raw_dir, assets_co
     output.mkdir(parents=True, exist_ok=True)
     manifest = dict(status="running", test_evaluated=False, protocol_hash=protocol_digest,
         period_status=protocol["period_status"], data_cutoff=protocol["development_end"],
-        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/build_prediction_bank.py"], ROOT),
+        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/research/build_prediction_bank.py"], ROOT),
         config_hashes=file_hashes([Path(protocol_path), Path(prediction_config), Path(assets_config)], ROOT),
         data_hashes=file_hashes(Path(raw_dir).glob("*.parquet"), ROOT))
     if development_only:

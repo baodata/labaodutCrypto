@@ -254,7 +254,7 @@ def compare_gp_allocators(args):
     if not args.resume and output.exists() and any(output.iterdir()):
         raise ValueError('GP output exists; choose a new directory or --resume.')
     output.mkdir(parents=True, exist_ok=True)
-    hashes = dict(source_hashes=file_hashes(list((ROOT/'src').rglob('*.py'))+[ROOT/'scripts/compare_gp_allocators.py'], ROOT),
+    hashes = dict(source_hashes=file_hashes(list((ROOT/'src').rglob('*.py'))+[ROOT/'scripts/research/compare_gp_allocators.py'], ROOT),
         config_hashes=file_hashes([args.gp_config, args.allocation_config, args.env_config, args.assets_config], ROOT),
         data_hashes=bank.metadata['data_hashes'],
         runtime={name: version(name) for name in ('numpy', 'scipy', 'pandas', 'scikit-learn', 'threadpoolctl')})

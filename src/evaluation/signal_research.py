@@ -115,7 +115,7 @@ def run_signal_research(protocol_path, raw_dir, env_config, output_dir=None, mod
         "status": "running", "protocol": protocol, "protocol_hash": digest,
         "test_evaluated": False, "data_cutoff": protocol["development_end"],
         "period_status": protocol["period_status"],
-        "source_hashes": file_hashes(list((ROOT / "src").rglob("*.py")) + list((ROOT / "scripts").glob("*.py")), ROOT),
+        "source_hashes": file_hashes(list((ROOT / "src").rglob("*.py")) + list((ROOT / "scripts").rglob("*.py")), ROOT),
         "data_hashes": file_hashes(raw_dir.glob("*.parquet"), ROOT),
         "config_hashes": file_hashes([Path(protocol_path), env_config, assets_config] +
                                       ([Path(model_config)] if model_config else []), ROOT),

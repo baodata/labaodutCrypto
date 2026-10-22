@@ -133,7 +133,7 @@ def run_convex_imitation(lock_path, allocation_path, config_path, raw_dir, asset
         loss="MSE_of_stock_targets_divided_by_core_times_tilt_squared_exact_execution_mapping",
         state_preprocessing="original_raw_decision_state_no_new_normalizer", critic_trained=False,
         teacher_state_distribution="continuous_train_teacher_rollout_plus_fixed_train_windows",
-        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/train_convex_imitation.py"], ROOT),
+        source_hashes=file_hashes(list((ROOT / "src").rglob("*.py")) + [ROOT / "scripts/training/train_convex_imitation.py"], ROOT),
         config_hashes=file_hashes([Path(config_path), Path(allocation_path), Path(assets_path), Path(env_path)], ROOT),
         data_hashes=bank.metadata["data_hashes"])
     atomic_json(output / "manifest.json", manifest)

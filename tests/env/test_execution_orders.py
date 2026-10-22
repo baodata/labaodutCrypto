@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.evaluate_equal_weight_tilt import make_tilt_policy
+from scripts.baselines.evaluate_equal_weight_tilt import make_tilt_policy
 from src.env.orders import PortfolioOrder
 from src.env.trading_env import TradingEnv
 from src.evaluation.backtester import DeterministicBacktester

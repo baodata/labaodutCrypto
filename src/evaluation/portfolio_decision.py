@@ -139,7 +139,7 @@ def compare_portfolio_decisions(lock_path, allocation_path, decision_path, raw_d
         period_status=bank.metadata["protocol"]["period_status"],
         caveat="Development outer results were explored previously; this is not a fresh holdout.",
         source_hashes=file_hashes(list((ROOT / "src").rglob("*.py"))+
-            [ROOT / "scripts/compare_portfolio_decisions.py"], ROOT),
+            [ROOT / "scripts/research/compare_portfolio_decisions.py"], ROOT),
         config_hashes=file_hashes([Path(allocation_path), Path(decision_path), Path(assets_path), Path(env_path)], ROOT),
         data_hashes=bank.metadata["data_hashes"])
     atomic_json(output / "manifest.json", manifest)
