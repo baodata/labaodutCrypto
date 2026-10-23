@@ -1,4 +1,13 @@
-"""Script to inspect the loaded market data and train/val/test splits."""
+#!/usr/bin/env python3
+"""test output for market data inspection."""
+
+from pathlib import Path
+import sys
+
+# thêm thư mục gốc dự án vào sys.path để chạy ở đâu cũng import được
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.data.loader import load_config, load_market_data
 
@@ -11,6 +20,7 @@ def main():
     cfg = load_config("configs/assets.yaml")
     print(f"\n1. Cấu hình:")
     print(f"   - Benchmark: {cfg.get('benchmark')}")
+    print(f"   - Khoảng thời gian: {cfg.get('start_date')} -> {cfg.get('end_date')}")
     print(f"   - Số nhóm ngành (Sectors): {len(cfg.get('sectors', {}))}")
     for sec, tickers in cfg.get("sectors", {}).items():
         print(f"     + {sec:<12} ({len(tickers)} mã): {', '.join(tickers)}")
@@ -28,7 +38,7 @@ def main():
         end = str(split_tensor.dates[-1])[:10]
         print(f"   - [{name.upper():<5}] : {split_tensor.T:>4} ngày ({start} -> {end})")
 
-    # Sample price check
+    # Mẫu giá đóng cửa phiên cuối cùng
     close_prices = full_data.get_feature("close")
     print(f"\n4. Mẫu giá Close phiên cuối ({str(full_data.dates[-1])[:10]}):")
     for i in range(min(6, full_data.N)):

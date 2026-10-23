@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""CLI script to download historical OHLCV data from Yahoo Finance.
-
-Usage:
+"""
+tải dữ liệu OHLCV (Open, High, Low, Close, Volume)
     python scripts/data/download_data.py
     python scripts/data/download_data.py --tickers AAPL,MSFT,NVDA
     python scripts/data/download_data.py --start-date 2020-01-01 --end-date 2025-12-31
@@ -14,7 +13,7 @@ from pathlib import Path
 import sys
 import pandas as pd
 
-# Add project root to sys.path
+# thêm thư mục gốc dự án vào sys.path để chạy ở đâu cũng import được
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -25,42 +24,42 @@ from src.data.loader import get_all_tickers, load_config
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download historical OHLCV market data into data/raw/ as Parquet files."
+        description="Tải dữ liệu thị trường OHLCV lịch sử và lưu vào data/raw/ dạng file Parquet."
     )
     parser.add_argument(
         "--config",
         type=str,
         default="configs/assets.yaml",
-        help="Path to assets configuration YAML (default: configs/assets.yaml)",
+        help="Đường dẫn file cấu hình tài sản (mặc định: configs/assets.yaml)",
     )
     parser.add_argument(
         "--tickers",
         type=str,
         default=None,
-        help="Comma-separated ticker symbols (e.g. AAPL,MSFT,NVDA). If omitted, loads from config.",
+        help="Danh sách mã cổ phiếu phân cách bằng dấu phẩy (ví dụ: AAPL,MSFT,NVDA). Nếu bỏ trống sẽ lấy từ config.",
     )
     parser.add_argument(
         "--start-date",
         type=str,
-        default="2015-01-01",
-        help="Start date in YYYY-MM-DD format (default: 2015-01-01)",
+        default=None,
+        help="Ngày bắt đầu định dạng YYYY-MM-DD (mặc định: lấy từ configs/assets.yaml)",
     )
     parser.add_argument(
         "--end-date",
         type=str,
-        default="2025-12-31",
-        help="End date in YYYY-MM-DD format (default: 2025-12-31)",
+        default=None,
+        help="Ngày kết thúc định dạng YYYY-MM-DD (mặc định: lấy từ configs/assets.yaml)",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default="data/raw",
-        help="Target directory to save Parquet files (default: data/raw)",
+        help="Thư mục lưu file Parquet (mặc định: data/raw)",
     )
     parser.add_argument(
         "--no-benchmark",
         action="store_true",
-        help="Skip downloading benchmark ticker (SPY)",
+        help="Bỏ qua không tải chỉ số benchmark (SPY)",
     )
     return parser.parse_args()
 
@@ -68,32 +67,38 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # 1. Resolve output directory
+    # 1. Đọc cấu hình
+    try:
+        cfg = load_config(args.config)
+    except Exception as e:
+        print(f"[LỖI] Không thể đọc cấu hình từ {args.config}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # 2. Xác định ngày bắt đầu và kết thúc (ưu tiên tham số CLI, nếu không có thì lấy từ config)
+    start_date = args.start_date or cfg.get("start_date", "2015-01-01")
+    end_date = args.end_date or cfg.get("end_date", "2025-12-31")
+
+    # 3. Tạo thư mục lưu dữ liệu
     output_path = Path(args.output_dir)
     if not output_path.is_absolute():
         output_path = PROJECT_ROOT / output_path
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # 2. Determine tickers to download
+    # 4. Xác định danh sách mã cổ phiếu cần tải
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     else:
-        try:
-            cfg = load_config(args.config)
-            tickers = get_all_tickers(cfg)
-            if not args.no_benchmark:
-                bm = cfg.get("benchmark", "SPY")
-                if bm and bm not in tickers:
-                    tickers.append(bm)
-        except Exception as e:
-            print(f"[LỖI] Không thể đọc cấu hình từ {args.config}: {e}", file=sys.stderr)
-            sys.exit(1)
+        tickers = get_all_tickers(cfg)
+        if not args.no_benchmark:
+            bm = cfg.get("benchmark", "SPY")
+            if bm and bm not in tickers:
+                tickers.append(bm)
 
     print("=" * 70)
     print("QUY TRÌNH TẢI DỮ LIỆU THỊ TRƯỜNG (YAHOO FINANCE -> PARQUET)")
     print("=" * 70)
     print(f" • Số lượng tài sản  : {len(tickers)} ({', '.join(tickers[:6])}{'...' if len(tickers) > 6 else ''})")
-    print(f" • Khoảng thời gian  : {args.start_date} -> {args.end_date}")
+    print(f" • Khoảng thời gian  : {start_date} -> {end_date}")
     print(f" • Thư mục lưu trữ   : {output_path}")
     print("-" * 70)
 
@@ -106,8 +111,8 @@ def main() -> None:
     for ticker in tickers:
         df = download_ticker(
             ticker=ticker,
-            start_date=args.start_date,
-            end_date=args.end_date,
+            start_date=start_date,
+            end_date=end_date,
             max_retries=3,
         )
 
