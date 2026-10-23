@@ -1,0 +1,57 @@
+# Cấu hình danh mục tài sản và phân chia dữ liệu
+raw_data_dir: "data/raw"
+
+benchmark: "SPY"
+
+# 24 Cổ phiếu lớn phân theo các nhóm ngành chính
+sectors:
+  Technology:
+    - "AAPL"
+    - "AMD"
+    - "AMZN"
+    - "GOOGL"
+    - "META"
+    - "MSFT"
+    - "NVDA"
+    - "TSLA"
+  Financials:
+    - "BAC"
+    - "GS"
+    - "JPM"
+    - "MS"
+    - "WFC"
+  Healthcare:
+    - "ABBV"
+    - "JNJ"
+    - "LLY"
+    - "PFE"
+    - "UNH"
+  Energy:
+    - "COP"
+    - "CVX"
+    - "XOM"
+  Consumer:
+    - "KO"
+    - "PG"
+    - "WMT"
+
+# Các trường dữ liệu nến thô cần lấy
+features:
+  - "open"
+  - "high"
+  - "low"
+  - "close"
+  - "adj_close"
+  - "volume"
+
+# Phân chia thời gian kiểm thử (Chronological splits)
+splits:
+  train:
+    start_date: "2015-01-01"
+    end_date: "2021-12-31"
+  val:
+    start_date: "2022-01-01"
+    end_date: "2023-12-31"
+  test:
+    start_date: "2024-01-01"
+    end_date: "2025-12-31"
