@@ -67,3 +67,10 @@ runs/
 *.pth
 *.onnx
 
+
+# Logs
+logs/*
+!logs/.gitkeep
+models/*
+!models/.gitkeep
+
