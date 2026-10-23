@@ -67,24 +67,24 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # 1. Đọc cấu hình
+    # Đọc cấu hình
     try:
         cfg = load_config(args.config)
     except Exception as e:
         print(f"[LỖI] Không thể đọc cấu hình từ {args.config}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # 2. Xác định ngày bắt đầu và kết thúc (ưu tiên tham số CLI, nếu không có thì lấy từ config)
+    # Ngày bắt đầu và kết thúc (ưu tiên tham số CLI, nếu không có thì lấy từ config)
     start_date = args.start_date or cfg.get("start_date", "2015-01-01")
     end_date = args.end_date or cfg.get("end_date", "2025-12-31")
 
-    # 3. Tạo thư mục lưu dữ liệu
+    # Tạo thư mục lưu dữ liệu
     output_path = Path(args.output_dir)
     if not output_path.is_absolute():
         output_path = PROJECT_ROOT / output_path
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # 4. Xác định danh sách mã cổ phiếu cần tải
+    # Xác định danh sách mã cổ phiếu cần tải
     if args.tickers:
         tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
     else:
@@ -133,7 +133,7 @@ def main() -> None:
         print("[CẢNH BÁO] Có một số mã không tải được dữ liệu!", file=sys.stderr)
         sys.exit(1)
     else:
-        print("✅ Hoàn tất tải toàn bộ dữ liệu.")
+        print("Hoàn tất tải dữ liệu.")
         sys.exit(0)
 
 
