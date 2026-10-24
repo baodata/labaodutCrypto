@@ -1,4 +1,4 @@
-"""Data loader and alignment pipeline for raw market parquet files."""
+# cái này để load dữ liệu từ file parquet đã tải về, validate và trả về dạng tensor
 
 from __future__ import annotations
 
